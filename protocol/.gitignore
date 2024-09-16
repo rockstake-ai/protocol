@@ -4,6 +4,3 @@
 /incremental/
 /debug/
 /.vscode/
-
-echo "/../core/" >> .gitignore
-echo "/../dapp/" >> .gitignore
