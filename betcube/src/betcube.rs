@@ -6,7 +6,6 @@ pub mod p2p;
 pub mod events;
 pub mod p2e;
 pub mod errors;
-pub mod place_bet;
 pub mod betslip_nft;
 
 multiversx_sc::imports!();
@@ -15,6 +14,7 @@ multiversx_sc::derive_imports!();
 pub trait BetCube:
 storage::StorageModule
 + events::EventsModule
++ betslip_nft::BetslipNftModule
 + p2e::P2EModule
 + p2p::P2PModule{
     #[upgrade]
