@@ -5,9 +5,8 @@ use crate::{constants::{NFT_AMOUNT, ROYALTIES_MAX},storage::{self, BetParticipan
 
 #[multiversx_sc::module]
 pub trait P2PModule: storage::StorageModule     
-    + crate::events::EventsModule
-{
-    
+    + crate::events::EventsModule{
+
     #[endpoint(createP2PBet)]
     #[payable("*")]
     fn create_p2p_bet(

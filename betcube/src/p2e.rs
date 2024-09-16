@@ -49,7 +49,7 @@ pub trait P2EModule: storage::StorageModule
 
         self.send().direct_esdt(
             &recipient,
-            self.stream_nft_token().get_token_id_ref(),
+            self.betslip_nft_token().get_token_id_ref(),
             betslip_nft_nonce,
             &BigUint::from(1u64),
         );
