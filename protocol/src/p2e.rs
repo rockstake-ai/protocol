@@ -54,14 +54,14 @@ pub trait P2EModule: storage::StorageModule
             &BigUint::from(1u64),
         );
 
-        self.place_bet_event(
-            &caller,
-            &bets,
-            &total_odd,
-            &stake,
-            &payout,
-            &token_identifier,
-        );
+        // self.place_bet_event(
+        //     &caller,
+        //     &bets,
+        //     &total_odd,
+        //     &stake,
+        //     &payout,
+        //     &token_identifier,
+        // );
 
         betslip_id
     }
