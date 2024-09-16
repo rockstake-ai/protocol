@@ -1,0 +1,6 @@
+/protocol/
+/target/
+**/*.lock
+/incremental/
+/debug/
+/.vscode/
