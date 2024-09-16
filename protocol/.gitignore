@@ -4,3 +4,10 @@
 /incremental/
 /debug/
 /.vscode/
+
+echo "/../core/" >> .gitignore
+echo "/../dapp/" >> .gitignore
+echo "/../flutter/" >> .gitignore
+echo "/../fulltimegodev/" >> .gitignore
+echo "/../goxchange/" >> .gitignore
+echo "/../prometheus/" >> .gitignore
