@@ -1,0 +1,1 @@
+multiversx_sc::storage::mappers::SingleValueMapper<<Self as ContractBase>::Api, multiversx_sc::types::EgldOrEsdtTokenIdentifier<<Self as ContractBase>::Api>>
