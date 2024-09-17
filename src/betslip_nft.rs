@@ -53,13 +53,13 @@ pub trait BetslipNftModule:
 
         let attributes = BetslipAttributes {
             creator: betslip.creator.clone(),
-            bets: betslip.bets,
-            total_odd: betslip.total_odd,
-            stake: betslip.stake,
-            payout: betslip.payout,
+            bets: betslip.bets.clone(),
+            total_odd: betslip.total_odd.clone(),
+            stake: betslip.stake.clone(),
+            payout: betslip.payout.clone(),
             payment_token: betslip.payment_token.clone(),
             payment_nonce: betslip.payment_nonce,
-            status: betslip.status,
+            status: betslip.status.clone(),
             is_paid: false,
         };
         let mut serialized_attributes = ManagedBuffer::new();

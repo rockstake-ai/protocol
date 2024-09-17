@@ -1,6 +1,9 @@
 /protocol/
 /target/
+/output/
 **/*.lock
 /incremental/
 /debug/
 /.vscode/
+/wasm/
+meta_transaction_wallet.pem

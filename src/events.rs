@@ -8,6 +8,7 @@ pub trait EventsModule {
     fn place_bet_event(
         &self,
         #[indexed] creator: &ManagedAddress,
+        #[indexed] betslip_token_identifier: &TokenIdentifier,
         #[indexed] bets: &ManagedVec<Bet<Self::Api>>,
         #[indexed] total_odd: &BigUint,
         #[indexed] stake: &BigUint,
@@ -15,7 +16,6 @@ pub trait EventsModule {
         #[indexed] payment_token: &EgldOrEsdtTokenIdentifier,
         #[indexed] payment_nonce: u64,
         #[indexed] status: &Status,
-        #[indexed] betslip_token_identifier: &TokenIdentifier,
     );
 
     #[event("event_create_p2p_bet")]
