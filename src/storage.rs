@@ -1,3 +1,5 @@
+use multiversx_sc::codec::{EncodeErrorHandler, TopEncodeMulti, TopEncodeMultiOutput};
+
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -11,11 +13,11 @@ pub enum Status {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M:ManagedTypeApi>{
-    pub event: BigUint<M>, //1231312 -> Real Madrid vs Barcelona
-    pub option: BigUint<M>, //21 - Total Goals
-    pub value: BigUint<M>, //5 - Over 2.5
+    pub event: u64, //1231312 -> Real Madrid vs Barcelona
+    pub option: u64, //21 - Total Goals
+    pub value: u64, //5 - Over 2.5
     pub odd: BigUint<M>, //2.15
-    pub status: Status //pending
+    // pub status: Status //pending
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -27,7 +29,7 @@ pub struct Betslip<M:ManagedTypeApi>{
     pub payout: BigUint<M>, //stake * total_odd
     pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
     pub payment_nonce: u64,
-    pub status: Status, //Status
+    // pub status: Status, //Status
     pub nft_nonce: u64,
 }
 
@@ -40,7 +42,7 @@ pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub payout: BigUint<M>, //stake * total_odd
     pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
     pub payment_nonce: u64,
-    pub status: Status, //Status
+    // pub status: Status, //Status
     pub is_paid: bool,
 }
 

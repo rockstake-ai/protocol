@@ -15,7 +15,7 @@ pub trait EventsModule {
         #[indexed] payout: &BigUint,
         #[indexed] payment_token: &EgldOrEsdtTokenIdentifier,
         #[indexed] payment_nonce: u64,
-        #[indexed] status: &Status,
+        // #[indexed] status: &Status,
     );
 
     #[event("event_create_p2p_bet")]

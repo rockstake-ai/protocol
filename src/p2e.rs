@@ -33,7 +33,7 @@ pub trait P2EModule: storage::StorageModule
             payout: payout.clone(),
             payment_token: token_identifier.clone(),
             payment_nonce: token_nonce,
-            status: storage::Status::InProgress,
+            // status: storage::Status::InProgress,
             nft_nonce: betslip_id,
         };
         let betslip_nft_nonce = self.mint_betslip_nft(&betslip);
@@ -56,7 +56,7 @@ pub trait P2EModule: storage::StorageModule
             &payout,
             &token_identifier,
             token_nonce,
-            &betslip.status,
+            // &betslip.status,
         );
     
         betslip_id

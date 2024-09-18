@@ -59,7 +59,7 @@ pub trait BetslipNftModule:
             payout: betslip.payout.clone(),
             payment_token: betslip.payment_token.clone(),
             payment_nonce: betslip.payment_nonce,
-            status: betslip.status.clone(),
+            // status: betslip.status.clone(),
             is_paid: false,
         };
         let mut serialized_attributes = ManagedBuffer::new();
