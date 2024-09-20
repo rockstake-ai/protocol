@@ -1,6 +1,5 @@
 
-use crate::{constants::NFT_AMOUNT, errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, Betslip, BetslipAttributes}};
-
+use crate::{constants::NFT_AMOUNT, errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, BetGroup, Betslip, BetslipAttributes}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -9,9 +8,16 @@ multiversx_sc::derive_imports!();
 pub trait P2EModule: storage::StorageModule 
     + crate::events::EventsModule 
     + crate::betslip_nft::BetslipNftModule{
+    
+    #[payable("*")]
+    #[endpoint(placeBet2)]
+    fn place_bet2(&self, bets: ManagedVec<ManagedBuffer<Self::Api>>) -> u64 {
+        return 1;
+    }
+
     #[payable("*")]
     #[endpoint(placeBet)]
-    fn place_bet(&self, bets: ManagedVec<Bet<Self::Api>>) -> u64 {
+    fn place_bet(&self, bets: ManagedVec<BetGroup<Self::Api>>) -> u64 {
         let caller = self.blockchain().get_caller();
        
         let (token_identifier, token_nonce, token_amount) =
@@ -63,10 +69,13 @@ pub trait P2EModule: storage::StorageModule
     }
     
 
-    fn calculate_total_odd(self,bets: &ManagedVec<Bet<Self::Api>>) -> BigUint {
+    fn calculate_total_odd(self,bets: &ManagedVec<BetGroup<Self::Api>>) -> BigUint {
        let mut total_odd = BigUint::from(1u64);
-       for bet in bets.iter(){
-            total_odd *= bet.odd;
+       for betGroup in bets.iter(){
+            for bet in betGroup.bets.iter(){
+                total_odd *= bet.odd;
+
+            }
        }
        total_odd
     }

@@ -1,7 +1,8 @@
-use multiversx_sc::codec::{EncodeErrorHandler, TopEncodeMulti, TopEncodeMultiOutput};
+use multiversx_sc::codec::{DecodeErrorHandler, DefaultErrorHandler, EncodeErrorHandler, TopDecodeMultiInput, TopEncodeMulti, TopEncodeMultiOutput};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
+
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
 pub enum Status {
@@ -13,17 +14,22 @@ pub enum Status {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M:ManagedTypeApi>{
-    pub event: u64, //1231312 -> Real Madrid vs Barcelona
-    pub option: u64, //21 - Total Goals
-    pub value: u64, //5 - Over 2.5
+    pub event: BigUint<M>, //1231312 -> Real Madrid vs Barcelona
+    pub option: BigUint<M>, //21 - Total Goals
+    pub value: BigUint<M>, //5 - Over 2.5
     pub odd: BigUint<M>, //2.15
     // pub status: Status //pending
+}
+
+#[derive(TypeAbi,TopEncode, NestedDecode, NestedEncode,TopDecode,Clone, ManagedVecItem)]
+pub struct BetGroup<M: ManagedTypeApi> {
+    pub bets: ManagedVec<M, Bet<M>>,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct Betslip<M:ManagedTypeApi>{
     pub creator: ManagedAddress<M>,
-    pub bets: ManagedVec<M, Bet<M>>, //Bet
+    pub bets: ManagedVec<M, BetGroup<M>>, //Bet
     pub total_odd: BigUint<M>, //132.55
     pub stake: BigUint<M>, //123.55
     pub payout: BigUint<M>, //stake * total_odd
@@ -36,7 +42,7 @@ pub struct Betslip<M:ManagedTypeApi>{
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub creator: ManagedAddress<M>,
-    pub bets: ManagedVec<M, Bet<M>>, //Bet
+    pub bets: ManagedVec<M, BetGroup<M>>, //Bet
     pub total_odd: BigUint<M>, //132.55
     pub stake: BigUint<M>, //123.55
     pub payout: BigUint<M>, //stake * total_odd
@@ -46,8 +52,8 @@ pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub is_paid: bool,
 }
 
-pub type BetslipAttributesAsMultiValue<M> =
-MultiValue7<ManagedVec<M, Bet<M>>, BigUint<M>, BigUint<M>, BigUint<M>, EgldOrEsdtTokenIdentifier<M>, Status, bool>;
+pub type BetTuple<M> =
+MultiValue4<BigUint<M>, BigUint<M>, BigUint<M>, BigUint<M>>;
 
 //p2p - TODO()
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
