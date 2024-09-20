@@ -1,4 +1,4 @@
-use crate::storage::{BetGroup};
+use crate::storage::{Bet};
 
 multiversx_sc::imports!();
 
@@ -9,7 +9,7 @@ pub trait EventsModule {
         &self,
         #[indexed] creator: &ManagedAddress,
         #[indexed] betslip_token_identifier: &TokenIdentifier,
-        #[indexed] bets: &ManagedVec<BetGroup<Self::Api>>,
+        #[indexed] bets: &ManagedVec<Bet<Self::Api>>,
         #[indexed] total_odd: &BigUint,
         #[indexed] stake: &BigUint,
         #[indexed] payout: &BigUint,

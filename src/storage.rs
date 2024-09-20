@@ -1,8 +1,5 @@
-use multiversx_sc::codec::{DecodeErrorHandler, DefaultErrorHandler, EncodeErrorHandler, TopDecodeMultiInput, TopEncodeMulti, TopEncodeMultiOutput};
-
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
-
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
 pub enum Status {
@@ -21,15 +18,10 @@ pub struct Bet<M:ManagedTypeApi>{
     // pub status: Status //pending
 }
 
-#[derive(TypeAbi,TopEncode, NestedDecode, NestedEncode,TopDecode,Clone, ManagedVecItem)]
-pub struct BetGroup<M: ManagedTypeApi> {
-    pub bets: ManagedVec<M, Bet<M>>,
-}
-
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct Betslip<M:ManagedTypeApi>{
     pub creator: ManagedAddress<M>,
-    pub bets: ManagedVec<M, BetGroup<M>>, //Bet
+    pub bets: ManagedVec<M, Bet<M>>, //Bet
     pub total_odd: BigUint<M>, //132.55
     pub stake: BigUint<M>, //123.55
     pub payout: BigUint<M>, //stake * total_odd
@@ -42,7 +34,7 @@ pub struct Betslip<M:ManagedTypeApi>{
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub creator: ManagedAddress<M>,
-    pub bets: ManagedVec<M, BetGroup<M>>, //Bet
+    pub bets: ManagedVec<M, Bet<M>>, //Bet
     pub total_odd: BigUint<M>, //132.55
     pub stake: BigUint<M>, //123.55
     pub payout: BigUint<M>, //stake * total_odd
