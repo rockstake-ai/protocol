@@ -6,7 +6,7 @@ pub enum Status {
     InProgress,
     Win,
     Lost,
-    Nul //odd 1
+    Nul //odd 122
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]

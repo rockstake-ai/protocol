@@ -8,12 +8,6 @@ multiversx_sc::derive_imports!();
 pub trait P2EModule: storage::StorageModule 
     + crate::events::EventsModule 
     + crate::betslip_nft::BetslipNftModule{
-    
-    #[payable("*")]
-    #[endpoint(placeBet2)]
-    fn place_bet2(&self, bets: ManagedVec<ManagedBuffer<Self::Api>>) -> u64 {
-        return 1;
-    }
 
     #[payable("*")]
     #[endpoint(placeBet)]
@@ -22,11 +16,16 @@ pub trait P2EModule: storage::StorageModule
        
         let (token_identifier, token_nonce, token_amount) =
             self.call_value().egld_or_single_esdt().into_tuple();
-    
+        sc_print!("Betslip Token Identifier: {}", token_identifier.clone());
+        sc_print!("Betslip Token Identifier: {}", token_nonce.clone());
+        sc_print!("Betslip Token Identifier: {}", token_amount.clone());
+
         require!(token_amount > 0, ERR_ZERO_DEPOSIT);
     
         let betslip_id = self.get_last_betslip_id() + 1;
-    
+
+        sc_print!("Betslip Id: {}",betslip_id.clone());
+
         let stake = token_amount.clone();
         let total_odd = self.calculate_total_odd(&bets);
         let payout = self.calculate_payout(&total_odd, &stake);
@@ -51,7 +50,7 @@ pub trait P2EModule: storage::StorageModule
             self.betslip_nft_token().get_token_id_ref(),
             betslip_nft_nonce,
             &BigUint::from(1u64),
-        );
+        ); 
     
         self.place_bet_event(
             &caller,

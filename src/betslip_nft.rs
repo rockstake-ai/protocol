@@ -17,7 +17,7 @@ pub trait BetslipNftModule:
     #[endpoint(issueToken)]
     fn issue_token(&self) {
         require!(self.betslip_nft_token().is_empty(), ERR_TOKEN_ALREADY_ISSUED);
-
+ 
         let issue_cost = self.call_value().egld_value().clone_value();
 
         let token_name = ManagedBuffer::new_from_bytes(TOKEN_NAME);
