@@ -91,31 +91,17 @@ pub trait StorageModule {
     }
 
     #[storage_mapper("betslipById")]
-    fn betslip_by_id(&self, stream_id: u64) -> SingleValueMapper<Betslip<Self::Api>>;
-
+    fn betslip_by_id(&self, betslip_id: u64) -> SingleValueMapper<Betslip<Self::Api>>;
     #[storage_mapper("betslipNftToken")]
     fn betslip_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
-
     #[storage_mapper("betslipNftBaseUri")]
     fn betslip_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
-
-    #[storage_mapper("uniqueHashes")]
-    fn used_hashes(&self, hash: &ManagedBuffer) -> SingleValueMapper<bool>;
-
-    #[storage_mapper("deposit")]
-    fn deposit(&self, address: &ManagedAddress) -> SingleValueMapper<BigUint>;
+    
+    ////
 
     #[storage_mapper("p2pBets")]
     fn p2p_bets(&self, bet_id: &ManagedBuffer) -> SingleValueMapper<P2PBet<Self::Api>>;
-
     #[storage_mapper("activeBets")]
     fn active_bets(&self) -> MapMapper<ManagedBuffer, bool>;
-
-    #[view(getCrowdfundingTokenIdentifier)]
-    #[storage_mapper("tokenIdentifier")]
-    fn cf_token_identifier(&self) -> SingleValueMapper<EgldOrEsdtTokenIdentifier>;
-
-    #[storage_mapper("ticket_counter")]
-    fn ticket_counter(&self) -> SingleValueMapper<u64>;
 }
 

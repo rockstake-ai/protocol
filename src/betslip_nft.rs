@@ -23,14 +23,21 @@ pub trait BetslipNftModule:
         let token_name = ManagedBuffer::new_from_bytes(TOKEN_NAME);
         let token_ticker = ManagedBuffer::new_from_bytes(TOKEN_TICKER);
 
-        self.betslip_nft_token().issue_and_set_all_roles(
-            EsdtTokenType::NonFungible,
-            issue_cost,
-            token_name,
-            token_ticker,
-            18,
-            None,
-        );
+        self.betslip_nft_token().issue_and_set_all_roles(EsdtTokenType::NonFungible, issue_cost, token_name, token_ticker, 0, Some(self.callbacks().issue_callback()));
+
+    }
+
+    #[callback]
+    fn issue_callback(
+        &self,
+        #[call_result] result: ManagedAsyncCallResult<TokenIdentifier>,
+    ) {
+        match result {
+            ManagedAsyncCallResult::Ok(token_id) => {
+                    self.betslip_nft_token().set_token_id(token_id);
+            }
+            ManagedAsyncCallResult::Err(_) => { }
+        }
     }
 
     fn mint_betslip_nft(&self, betslip: &Betslip<Self::Api>) -> u64 {

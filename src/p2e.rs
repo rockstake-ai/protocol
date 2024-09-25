@@ -16,15 +16,10 @@ pub trait P2EModule: storage::StorageModule
        
         let (token_identifier, token_nonce, token_amount) =
             self.call_value().egld_or_single_esdt().into_tuple();
-        sc_print!("Betslip Token Identifier: {}", token_identifier.clone());
-        sc_print!("Betslip Token Identifier: {}", token_nonce.clone());
-        sc_print!("Betslip Token Identifier: {}", token_amount.clone());
 
         require!(token_amount > 0, ERR_ZERO_DEPOSIT);
     
         let betslip_id = self.get_last_betslip_id() + 1;
-
-        sc_print!("Betslip Id: {}",betslip_id.clone());
 
         let stake = token_amount.clone();
         let total_odd = self.calculate_total_odd(&bets);
