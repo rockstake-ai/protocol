@@ -18,6 +18,14 @@ pub trait EventsModule {
         // #[indexed] status: &Status,
     );
 
+    #[event("claimFromBetslip")]
+    fn claim_from_betslip_event(
+        &self,
+        #[indexed] betslip_id: u64,
+        #[indexed] payout: &BigUint,
+        #[indexed] recipient: &ManagedAddress,
+    );
+
     #[event("event_create_p2p_bet")]
     fn event_create_p2p_bet(
         &self,

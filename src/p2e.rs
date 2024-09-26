@@ -98,6 +98,26 @@ pub trait P2EModule: storage::StorageModule
     }
 
 
+    // #[payable("*")]
+    // #[endpoint(payout)]
+    // fn payout(&self, token_identifier: TokenIdentifier, nft_nonce: ManagedBuffer){
+    //     let num = BigUint::from_bytes_be_buffer(&nft_nonce).to_u64().unwrap();
+    //     let betslip_attributes = self
+    //     .token_manager()
+    //     .get_token_attributes::<BetslipAttributes<Self::Api>>(num);
+    //     require!(betslip_attributes.is_paid != true, "Ticket was already paid!");
+    //     let new_attributes = BetslipAttributes {
+    //         is_paid: true,
+    //         ..betslip_attributes
+    //     };
+    //     self.send()
+    //         .nft_update_attributes(&token_identifier, num, &new_attributes);
+    //     let caller = self.blockchain().get_caller();
+    //     self.send()
+    //         .direct_egld(&caller, &new_attributes.payout);
+    // }
+
+
     #[payable("*")]
     #[endpoint(payoutMeta)]
     fn payout_meta(&self, nft: TokenIdentifier, nft_nonce: ManagedBuffer, token: TokenIdentifier){

@@ -7,6 +7,7 @@ pub mod events;
 pub mod p2e;
 pub mod errors;
 pub mod betslip_nft;
+pub mod payout;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();

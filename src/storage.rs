@@ -1,3 +1,5 @@
+use crate::errors::ERR_INVALID_STREAM;
+
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -44,9 +46,6 @@ pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub is_paid: bool,
 }
 
-pub type BetTuple<M> =
-MultiValue4<BigUint<M>, BigUint<M>, BigUint<M>, BigUint<M>>;
-
 //p2p - TODO()
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct BetParticipant<M: ManagedTypeApi> {
@@ -82,6 +81,13 @@ pub trait StorageModule {
     #[view]
     #[storage_mapper("ticker")]
     fn token_manager(&self) -> NonFungibleTokenMapper<Self::Api>;
+
+    #[view(getBetslipData)]
+    fn get_betslip(&self, betslip_id: u64) -> Betslip<Self::Api> {
+        let betslip_mapper = self.betslip_by_id(betslip_id);
+        require!(!betslip_mapper.is_empty(), ERR_INVALID_STREAM);
+        betslip_mapper.get()
+    }
 
     fn get_last_betslip_id(&self) -> u64 {
         self.blockchain().get_current_esdt_nft_nonce(

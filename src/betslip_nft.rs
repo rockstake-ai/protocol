@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, storage::{Betslip, BetslipAttributes}};
+use crate::{errors::{ERR_INVALID_ROLE, ERR_SEND_ONE_STREAM_NFT, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, storage::{Betslip, BetslipAttributes}};
 
 multiversx_sc::imports!();
 
@@ -89,6 +89,35 @@ pub trait BetslipNftModule:
 
         nonce
     }
+
+    fn require_valid_betslip_nft(
+        &self,
+        betslip_id: u64,
+    ) -> Betslip<Self::Api> {
+
+        let caller = self.blockchain().get_caller();
+        let payments = self.call_value().all_esdt_transfers().clone_value();
+        let betslip = self.get_betslip(betslip_id);
+
+        if payments.len() == 0 {
+            require!(caller == betslip.creator, "Invalid role");
+        } else {
+            require!(payments.len() == 1, "Invalid");
+            let payment = payments.get(0);
+            require!(
+                self.betslip_nft_token().get_token_id() == payment.token_identifier,
+                "Invalid"
+            );
+            require!(betslip.nft_nonce == payment.token_nonce, "Invalid");        }
+
+        // if required_role_opt.is_some() {
+        //     let required_role = required_role_opt.into_option().unwrap();
+        //     require!(required_role == stream_role, ERR_INVALID_ROLE);
+        // }
+
+        betslip
+    }
+
 
     fn u64_to_ascii(&self, number: u64) -> ManagedBuffer {
         let mut reversed_digits = ManagedVec::<Self::Api, u8>::new();
