@@ -108,16 +108,10 @@ pub trait BetslipNftModule:
                 self.betslip_nft_token().get_token_id() == payment.token_identifier,
                 "Invalid"
             );
-            require!(betslip.nft_nonce == payment.token_nonce, "Invalid");        }
-
-        // if required_role_opt.is_some() {
-        //     let required_role = required_role_opt.into_option().unwrap();
-        //     require!(required_role == stream_role, ERR_INVALID_ROLE);
-        // }
-
+            require!(betslip.nft_nonce == payment.token_nonce, "Invalid");        
+        }
         betslip
     }
-
 
     fn u64_to_ascii(&self, number: u64) -> ManagedBuffer {
         let mut reversed_digits = ManagedVec::<Self::Api, u8>::new();

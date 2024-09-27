@@ -3,21 +3,54 @@ use crate::errors::ERR_INVALID_STREAM;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
+
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
 pub enum Status {
     InProgress,
+    Matched,
+    Unmatched,
     Win,
     Lost,
-    Nul //odd 122
+    Canceled,
+}
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
+pub enum BetType {
+    Back,
+    Lay
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
-pub struct Bet<M:ManagedTypeApi>{
-    pub event: BigUint<M>, //1231312 -> Real Madrid vs Barcelona
-    pub option: BigUint<M>, //21 - Total Goals
-    pub value: BigUint<M>, //5 - Over 2.5
-    pub odd: BigUint<M>, //2.15
-    // pub status: Status //pending
+pub struct Bet<M: ManagedTypeApi> {
+    pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
+    pub option: BigUint<M>,     // ID-ul selecției (ex: 1 = First Team Win)
+    pub value: BigUint<M>,      // Suma pariată
+    pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
+    pub bet_type: BetType,      // BACK sau LAY (adăugat)
+    pub status: Status,         // Starea pariului (InProgress, Matched, etc.)
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+pub struct Selection<M: ManagedTypeApi> {
+    pub selection_id: BigUint<M>,              // ID-ul unic al selecției
+    pub description: ManagedBuffer<M>,         // Descrierea selecției (de ex. "Real Sociedad câștigă")
+    pub back_liquidity: BigUint<M>,            // Lichiditatea disponibilă pentru BACK pe această selecție
+    pub lay_liquidity: BigUint<M>,             // Lichiditatea disponibilă pentru LAY pe această selecție
+    pub best_back_odds: BigUint<M>,            // Cele mai bune cote pentru BACK
+    pub best_lay_odds: BigUint<M>,             // Cele mai bune cote pentru LAY
+}
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
+pub struct Market<M:ManagedTypeApi>{
+    pub market_id: BigUint<M>,              
+    pub event_id: BigUint<M>,                  
+    pub description: ManagedBuffer<M>,   
+    pub selections: ManagedVec<M,Selection<M>>,
+    pub back_liquidity: BigUint<M>,        
+    pub lay_liquidity: BigUint<M>,          
+    pub best_back_odds: BigUint<M>,         
+    pub best_lay_odds: BigUint<M>,          
+    pub bets: ManagedVec<M, Bet<M>>,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -46,36 +79,6 @@ pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub is_paid: bool,
 }
 
-//p2p - TODO()
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
-pub struct BetParticipant<M: ManagedTypeApi> {
-    pub address: ManagedAddress<M>,
-    pub option_chosen: ManagedBuffer<M>,
-    pub stake: BigUint<M>,
-    pub nft_id: Option<u64>,
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
-pub struct P2PBet<M: ManagedTypeApi> {
-    pub bet_id: ManagedBuffer<M>,
-    pub creator: ManagedAddress<M>,
-    pub event_details: ManagedBuffer<M>,
-    pub options: ManagedVec<M, ManagedBuffer<M>>,
-    pub odds: ManagedVec<M, BigUint<M>>,
-    pub total_pool: BigUint<M>,
-    pub participants: ManagedVec<M, BetParticipant<M>>,
-    pub is_active: bool,
-    pub result_declared: bool,
-    pub winning_option: ManagedBuffer<M>,
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
-pub struct ParticipationNFT<M: ManagedTypeApi> {
-    pub bet_id: ManagedBuffer<M>,
-    pub option_chosen: ManagedBuffer<M>,
-    pub stake: BigUint<M>,
-}
-
 #[multiversx_sc::module]
 pub trait StorageModule {
     #[view]
@@ -102,12 +105,8 @@ pub trait StorageModule {
     fn betslip_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
     #[storage_mapper("betslipNftBaseUri")]
     fn betslip_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
-    
-    ////
 
-    #[storage_mapper("p2pBets")]
-    fn p2p_bets(&self, bet_id: &ManagedBuffer) -> SingleValueMapper<P2PBet<Self::Api>>;
-    #[storage_mapper("activeBets")]
-    fn active_bets(&self) -> MapMapper<ManagedBuffer, bool>;
+    #[storage_mapper("markets")]
+    fn markets(&self, market_id: &BigUint) -> SingleValueMapper<Market<Self::Api>>;
 }
 

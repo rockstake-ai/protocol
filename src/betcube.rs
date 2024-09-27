@@ -2,12 +2,12 @@
 
 pub mod storage;
 pub mod constants;
-pub mod p2p;
 pub mod events;
-pub mod p2e;
+pub mod place_bet;
 pub mod errors;
 pub mod betslip_nft;
 pub mod payout;
+pub mod market_manager;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -16,8 +16,8 @@ pub trait BetCube:
 storage::StorageModule
 + events::EventsModule
 + betslip_nft::BetslipNftModule
-+ p2e::P2EModule
-+ p2p::P2PModule{
++ payout::PayoutModule
++ place_bet::PlaceBetModule{
     #[upgrade]
     fn upgrade(&self) {}
 

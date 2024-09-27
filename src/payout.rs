@@ -8,18 +8,11 @@ pub trait PayoutModule:
     + crate::events::EventsModule
     + crate::betslip_nft::BetslipNftModule {
    
-    #[view(payoutAmount)]
-    fn payout_amount(&self, betslip_id: u64) -> BigUint {
-        let betslip = self.get_betslip(betslip_id);
-        let mut payout_balance = BigUint::zero();
-        payout_balance.min(betslip.payout)
-    }
-
     #[view(balance)]
     fn balance(&self, betslip_id: u64) -> BigUint {
         let stream = self.get_betslip(betslip_id);
-        let streamed_amount = self.payout_amount(betslip_id);
-        streamed_amount - stream.payout
+        // let streamed_amount = self.payout_amount(betslip_id);
+        stream.payout
     }
 
     fn claim_from_betslip_internal(
