@@ -1,4 +1,4 @@
-use crate::storage::{self, BetType, Market, Selection};
+use crate::storage::{self, BetType, Market, Selection, Status};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -31,24 +31,19 @@ pub trait MarketManagerModule: storage::StorageModule{
     }
 
     #[only_owner]
-#[endpoint(closeMarket)]
-fn close_market(&self, market_id: BigUint, winning_selection_id: BigUint) {
-    // Obținem piața folosind market_id
-    let mut market = self.markets(&market_id).get();
-
-    // Parcurgem toate pariurile și actualizăm statusul lor
-    for bet in market.bets.iter() {
-        if bet.option == winning_selection_id {
+    #[endpoint(closeMarket)]
+    fn close_market(&self, market_id: BigUint, winning_selection_id: BigUint) {
+        let mut market = self.markets(&market_id).get();
+        for mut bet in market.bets.iter() {
+            if bet.option == winning_selection_id {
             // Pariul este câștigător
-            bet.status = Status::Win;
-        } else {
+                bet.status = Status::Win;
+            } else {
             // Pariul este pierzător
-            bet.status = Status::Lost;
+                bet.status = Status::Lost;
+            }
         }
+        self.markets(&market_id).set(&market);
     }
-
-    // Salvăm piața actualizată
-    self.markets(&market_id).set(&market);
-}
 
 }

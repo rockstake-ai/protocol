@@ -3,11 +3,12 @@
 pub mod storage;
 pub mod constants;
 pub mod events;
-pub mod place_bet;
+pub mod betting_manager;
 pub mod errors;
 pub mod betslip_nft;
 pub mod payout;
 pub mod market_manager;
+// pub mod fund_manager;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -17,7 +18,7 @@ storage::StorageModule
 + events::EventsModule
 + betslip_nft::BetslipNftModule
 + payout::PayoutModule
-+ place_bet::PlaceBetModule{
++ betting_manager::BettingManagerModule{
     #[upgrade]
     fn upgrade(&self) {}
 
