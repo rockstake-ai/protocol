@@ -8,7 +8,7 @@ pub mod errors;
 pub mod betslip_nft;
 pub mod payout;
 pub mod market_manager;
-// pub mod fund_manager;
+pub mod fund_manager;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
