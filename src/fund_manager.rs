@@ -31,7 +31,7 @@ pub trait FundManagerModule: storage::StorageModule{
             self.locked_funds(&winner_address).update(|current_locked| *current_locked -= bet.value.clone());
             }
         };
-        self.send().direct(&winner_address, &total_payout);
+        self.send().direct_egld(&winner_address, &total_payout);
 }
 
 }
