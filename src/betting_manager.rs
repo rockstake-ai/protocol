@@ -1,5 +1,5 @@
 
-use crate::{constants::NFT_AMOUNT, errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, Betslip, BetslipAttributes}};
+use crate::{constants::NFT_AMOUNT, errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, BetType, Betslip, BetslipAttributes, Status}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -78,33 +78,155 @@ pub trait BettingManagerModule: storage::StorageModule
         payout
     }
 
-    #[endpoint]
-    fn place_back_bet(
-        &self,
-        market_id: BigUint,
-        selection_id: BigUint,
-        amount: BigUint,
-        odds: BigUint
-    ) {
-        // Logica pentru plasarea unui pariu BACK
+    #[payable("EGLD")]
+#[endpoint(placeBackBet)]
+fn place_back_bet(
+    &self,
+    market_id: BigUint,
+    selection_id: BigUint,
+    odds: BigUint
+) {
+    let caller = self.blockchain().get_caller();  // Adresa utilizatorului care plasează pariul
+    let amount = self.call_value().egld_value();  // Suma trimisă împreună cu tranzacția
+    
+    // Verificăm dacă piața există
+    let mut market = self.markets(&market_id).get();
+    require!(market.is_some(), "Piața nu există");
+    let mut market = market.unwrap();
+
+    // Găsim selecția validă
+    let mut selection = market.selections.iter_mut().find(|s| s.selection_id == selection_id)
+        .expect("Selecția nu este validă pentru această piață");
+
+    // Adăugăm lichiditate pentru BACK și actualizăm cotele
+    selection.back_liquidity += amount;
+    if odds > selection.best_back_odds {
+        selection.best_back_odds = odds;
     }
 
+    // Creăm și stocăm pariul
+    let new_bet = Bet {
+        event: market_id.clone(),
+        option: selection_id.clone(),
+        value: amount.clone(),
+        odd: odds.clone(),
+        bet_type: BetType::Back,
+        status: Status::InProgress,
+    };
+    
+    market.bets.push(new_bet);
+    
+    // Actualizăm piața cu noile date
+    self.markets(&market_id).set(&market);
+
+    // Blocăm fondurile utilizatorului
+    self.locked_funds(&caller).update(|current_locked| *current_locked += amount);
+}
+
+
     // Funcție pentru a plasa pariuri LAY
-    #[endpoint]
+    #[payable("EGLD")]
+    #[endpoint(placeLayBet)]
     fn place_lay_bet(
         &self,
         market_id: BigUint,
         selection_id: BigUint,
-        amount: BigUint,
         odds: BigUint
     ) {
-        // Logica pentru plasarea unui pariu LAY
-    }
-
-    // Funcție pentru potrivirea pariurilor BACK și LAY
-    fn match_bets(&self, market_id: BigUint) {
+        let caller = self.blockchain().get_caller();  // Adresa utilizatorului care plasează pariul
+        let amount = self.call_value().egld_value();  // Suma trimisă împreună cu tranzacția
         
+        // Verificăm dacă piața există
+        let mut market = self.markets(&market_id).get();
+        // require!(market.is_some(), "Piața nu există");
+        let mut market = market.unwrap();
+    
+        // Găsim selecția validă
+        let mut selection = market.selections.iter_mut().find(|s| s.selection_id == selection_id)
+            .expect("Selecția nu este validă pentru această piață");
+    
+        // Adăugăm lichiditate pentru LAY și actualizăm cotele
+        selection.lay_liquidity += amount;
+        if odds > selection.best_lay_odds {
+            selection.best_lay_odds = odds;
+        }
+    
+        // Creăm și stocăm pariul
+        let new_bet = Bet {
+            event: market_id.clone(),
+            option: selection_id.clone(),
+            value: amount.clone(),
+            odd: odds.clone(),
+            bet_type: BetType::Lay,
+            status: Status::InProgress,
+        };
+        
+        market.bets.push(new_bet);
+    
+        // Actualizăm piața cu noile date
+        self.markets(&market_id).set(&market);
+    
+        // Blocăm fondurile utilizatorului
+        self.locked_funds(&caller).update(|current_locked| *current_locked += amount);
     }
+    
+
+    fn match_bets(&self, market_id: BigUint) {
+        // Obținem piața specificată de market_id
+        let mut market = self.markets(&market_id).get();
+    
+        // Parcurgem toate selecțiile pieței
+        for selection in market.selections.iter() {
+            // Obținem pariurile BACK și LAY
+            let mut unmatched_back_bets: Vec<&mut Bet<Self::Api>> = Vec::new();
+            let mut unmatched_lay_bets: Vec<&mut Bet<Self::Api>> = Vec::new();
+    
+            // Separăm pariurile în BACK și LAY
+            for bet in market.bets.iter() {
+                if bet.option == selection.selection_id && bet.status == Status::InProgress {
+                    match bet.bet_type {
+                        BetType::Back => unmatched_back_bets.push(bet),
+                        BetType::Lay => unmatched_lay_bets.push(bet),
+                    }
+                }
+            }
+    
+            // Potrivim pariurile BACK și LAY
+            for back_bet in unmatched_back_bets.iter_mut() {
+                for lay_bet in unmatched_lay_bets.iter_mut() {
+                    if back_bet.odd <= lay_bet.odd {
+                        // Determinăm suma care poate fi potrivită
+                        let match_amount = std::cmp::min(back_bet.value.clone(), lay_bet.value.clone());
+    
+                        // Actualizăm sumele rămase și statusul pariurilor
+                        back_bet.value -= match_amount.clone();
+                        lay_bet.value -= match_amount.clone();
+    
+                        if back_bet.value == BigUint::zero() {
+                            back_bet.status = Status::Matched;
+                        }
+    
+                        if lay_bet.value == BigUint::zero() {
+                            lay_bet.status = Status::Matched;
+                        }
+    
+                        // Actualizăm lichiditatea pentru selecția respectivă
+                        selection.back_liquidity -= match_amount.clone();
+                        selection.lay_liquidity -= match_amount.clone();
+    
+                        // Ieșim din bucla lay dacă pariul LAY a fost complet potrivit
+                        if lay_bet.value == BigUint::zero() {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    
+        // Salvăm piața actualizată
+        self.markets(&market_id).set(&market);
+    }
+    
 
     
 }
