@@ -11,9 +11,9 @@ pub trait FundManagerModule: storage::StorageModule{
         let caller = self.blockchain().get_caller();
         let payment_amount = self.call_value().egld_or_single_fungible_esdt();  // Obținem suma plătită în EGLD
         
-        // require!(payment_amount == amount, "Suma trimisă nu corespunde cu cea specificată");
+        require!(payment_amount.1 == amount, "Suma trimisă nu corespunde cu cea specificată");
     
-        self.locked_funds(&user).update(|current_locked| *current_locked += payment_amount);
+        self.locked_funds(&user).update(|current_locked| *current_locked += payment_amount.1);
     }
     
     #[only_owner]
@@ -23,7 +23,7 @@ pub trait FundManagerModule: storage::StorageModule{
         let mut total_payout = BigUint::zero();
 
         for bet in market.bets.iter() {
-            if bet.status == Status::Win && bet.user == winner_address {
+            if bet.status == Status::Win {
             let payout = bet.value.clone() * bet.odd.clone();  // câștig = suma pariată * cota
             total_payout += payout;
 
