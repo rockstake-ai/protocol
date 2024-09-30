@@ -24,6 +24,6 @@ storage::StorageModule
 
     #[init]
     fn init(&self) {
-       
+        self.market_counter().set(&BigUint::from(1u32));
     }
 }

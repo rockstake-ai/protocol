@@ -106,6 +106,8 @@ pub trait StorageModule {
     #[storage_mapper("betslipNftBaseUri")]
     fn betslip_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
 
+    #[storage_mapper("market_counter")]
+    fn market_counter(&self) -> SingleValueMapper<BigUint>;
     #[storage_mapper("markets")]
     fn markets(&self, market_id: &BigUint) -> SingleValueMapper<Market<Self::Api>>;
     #[storage_mapper("lockedFunds")]
