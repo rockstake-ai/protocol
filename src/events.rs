@@ -4,20 +4,6 @@ multiversx_sc::imports!();
 
 #[multiversx_sc::module]
 pub trait EventsModule {
-    #[event("placeBet")]
-    fn place_bet_event(
-        &self,
-        #[indexed] creator: &ManagedAddress,
-        #[indexed] betslip_token_identifier: &TokenIdentifier,
-        #[indexed] bets: &ManagedVec<Bet<Self::Api>>,
-        #[indexed] total_odd: &BigUint,
-        #[indexed] stake: &BigUint,
-        #[indexed] payout: &BigUint,
-        #[indexed] payment_token: &EgldOrEsdtTokenIdentifier,
-        #[indexed] payment_nonce: u64,
-        // #[indexed] status: &Status,
-    );
-
     #[event("bet_placed")]
     fn bet_placed_event(
         &self,
@@ -31,7 +17,7 @@ pub trait EventsModule {
         #[indexed] token_identifier: &TokenIdentifier,
         #[indexed] token_nonce: u64,
         #[indexed] matched_amount: &BigUint,
-        #[indexed] remaining_amount: &BigUint,
+        #[indexed] remaining_amount: &BigUint
     );
 
     #[event("claimFromBetslip")]

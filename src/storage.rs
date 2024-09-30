@@ -3,7 +3,6 @@ use crate::errors::ERR_INVALID_STREAM;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
 pub enum Status {
     InProgress,
@@ -23,7 +22,7 @@ pub enum BetType {
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M: ManagedTypeApi> {
     pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
-    pub option: BigUint<M>,     // ID-ul selecției (ex: 1 = First Team Win)
+    pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
     pub stake_amount: BigUint<M>,      // Suma pariată
     pub win_amount: BigUint<M>,      // Suma pariată
     pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
