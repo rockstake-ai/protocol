@@ -89,6 +89,8 @@ pub trait NftManagerModule:
         nonce
     }
     
+
+    //TODO() - refactor for Bet struct
     fn require_valid_betslip_nft(
         &self,
         betslip_id: u64,

@@ -22,14 +22,16 @@ pub trait EventsModule {
     fn bet_placed_event(
         &self,
         #[indexed] caller: &ManagedAddress,
-        #[indexed] bet_token_identifier: &TokenIdentifier,
+        #[indexed] betslip_token_id: &TokenIdentifier,
         #[indexed] market_id: &BigUint,
         #[indexed] selection_id: &BigUint,
-        #[indexed] amount: &BigUint,
+        #[indexed] total_amount: &BigUint,
         #[indexed] odds: &BigUint,
         #[indexed] bet_type: BetType,
-        #[indexed] payment_token: &EgldOrEsdtTokenIdentifier,
-        #[indexed] payment_nonce: u64,
+        #[indexed] token_identifier: &TokenIdentifier,
+        #[indexed] token_nonce: u64,
+        #[indexed] matched_amount: &BigUint,
+        #[indexed] remaining_amount: &BigUint,
     );
 
     #[event("claimFromBetslip")]

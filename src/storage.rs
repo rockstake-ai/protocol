@@ -98,22 +98,11 @@ pub struct BetAttributes<M:ManagedTypeApi>{
 
 #[multiversx_sc::module]
 pub trait StorageModule {
-    #[view]
-    #[storage_mapper("ticker")]
-    fn token_manager(&self) -> NonFungibleTokenMapper<Self::Api>;
-
     #[view(getBetslipData)]
     fn get_betslip(&self, betslip_id: u64) -> Betslip<Self::Api> {
         let betslip_mapper = self.betslip_by_id(betslip_id);
         require!(!betslip_mapper.is_empty(), ERR_INVALID_STREAM);
         betslip_mapper.get()
-    }
-
-    fn get_last_betslip_id(&self) -> u64 {
-        self.blockchain().get_current_esdt_nft_nonce(
-            &self.blockchain().get_sc_address(),
-            self.betslip_nft_token().get_token_id_ref(),
-        )
     }
 
     fn get_last_bet_id(&self) -> u64 {
@@ -123,21 +112,31 @@ pub trait StorageModule {
         )
     }
 
-    #[storage_mapper("betslipById")]
-    fn betslip_by_id(&self, betslip_id: u64) -> SingleValueMapper<Betslip<Self::Api>>;
-    #[storage_mapper("betslipNftToken")]
-    fn betslip_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
-    #[storage_mapper("betslipNftBaseUri")]
-    fn betslip_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
+    #[view(getMarketLiquidity)]
+    fn get_market_liquidity(&self, market_id: BigUint) -> (BigUint, BigUint) {
+        let market = self.markets(&market_id).get();
+        let mut total_back_liquidity = BigUint::zero();
+        let mut total_lay_liquidity = BigUint::zero();
 
-    //
+        for selection in market.selections.iter() {
+            total_back_liquidity += &selection.back_liquidity;
+            total_lay_liquidity += &selection.lay_liquidity;
+        }
+
+        (total_back_liquidity, total_lay_liquidity)
+    }
+
+    #[storage_mapper("createBet")]
+    fn create_bet(&self, market_id: BigUint, selection_id: BigUint, odds: BigUint, bet_type: BetType, 
+        stake_amount: BigUint, token_identifier: EgldOrEsdtTokenIdentifier, 
+        token_nonce: u64, bet_id: u64) -> SingleValueMapper<Bet<Self::Api>>;
+
     #[storage_mapper("betById")]
     fn bet_by_id(&self, bet_id: u64) -> SingleValueMapper<Bet<Self::Api>>;
     #[storage_mapper("betNftToken")]
     fn bet_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
     #[storage_mapper("betNftBaseUri")]
     fn bet_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
-    //
 
     #[storage_mapper("market_counter")]
     fn market_counter(&self) -> SingleValueMapper<BigUint>;
