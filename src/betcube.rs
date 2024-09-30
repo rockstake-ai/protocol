@@ -6,9 +6,8 @@ pub mod events;
 pub mod bet_manager;
 pub mod errors;
 pub mod nft_manager;
-pub mod payout;
-pub mod market_manager;
 pub mod fund_manager;
+pub mod market_manager;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -17,7 +16,7 @@ pub trait BetCube:
 storage::StorageModule
 + events::EventsModule
 + nft_manager::NftManagerModule
-+ payout::PayoutModule
++ fund_manager::FundManagerModule
 + bet_manager::BetManagerModule{
     #[upgrade]
     fn upgrade(&self) {}

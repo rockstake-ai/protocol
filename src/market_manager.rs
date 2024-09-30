@@ -1,10 +1,14 @@
-use crate::storage::{self, Bet, Market, Selection, Status};
+use crate::{storage::{Market, Selection, Status}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
 #[multiversx_sc::module]
-pub trait MarketManagerModule: storage::StorageModule{
+pub trait MarketManagerModule: 
+    crate::storage::StorageModule+
+    crate::events::EventsModule +
+    crate::fund_manager::FundManagerModule
+    + crate::nft_manager::NftManagerModule{
     
     #[only_owner]
     #[endpoint(createMarket)]
@@ -51,10 +55,10 @@ pub trait MarketManagerModule: storage::StorageModule{
         
         require!(current_timestamp >= market.close_timestamp, "Market is not yet closed");
 
-        for mut bet in market.bets.iter_mut() {
+        for mut bet in market.bets.iter() {
             match bet.status {
                 Status::Unmatched => {
-                    self.refund_unmatched_bet(&bet);
+                    self.refund_unmatched_bet(bet.nft_nonce);
                     bet.status = Status::Canceled;
                 },
                 Status::Matched => {
@@ -67,7 +71,6 @@ pub trait MarketManagerModule: storage::StorageModule{
                 _ => {}, // Alte statusuri rămân neschimbate
             }
         }
-        
         self.markets(&market_id).set(&market);
         self.market_closed_event(market_id, winning_selection_id);
     }
@@ -76,37 +79,31 @@ pub trait MarketManagerModule: storage::StorageModule{
     fn close_expired_markets(&self) {
         let current_timestamp = self.blockchain().get_block_timestamp();
         let mut closed_markets = ManagedVec::new();
-
+        
         let total_markets = self.market_counter().get();
-        for market_id in 1..=total_markets {
-            let market_id = BigUint::from(market_id);
+        
+        let zero = BigUint::zero();
+        let one = BigUint::from(1u32);
+        let mut market_id = one.clone();
+
+        while market_id <= total_markets {
             if !self.markets(&market_id).is_empty() {
                 let mut market = self.markets(&market_id).get();
                 if current_timestamp >= market.close_timestamp && !self.is_market_closed(&market) {
-                    for bet in market.bets.iter_mut() {
+                    for bet in market.bets.iter() {
                         if bet.status == Status::Unmatched {
-                            self.refund_unmatched_bet(bet);
+                            self.refund_unmatched_bet(bet.nft_nonce);
                             bet.status = Status::Canceled;
                         }
                     }
                     self.markets(&market_id).set(&market);
-                    closed_markets.push(market_id);
+                    closed_markets.push(market_id.clone());
                 }
             }
+            market_id += &one;
         }
-
+        
         self.expired_markets_closed_event(closed_markets);
-    }
-
-
-    //TODO - move to FundManager
-    fn refund_unmatched_bet(&self, bet: &Bet<Self::Api>) {
-        self.send().direct_esdt(
-            &bet.bettor,
-            &bet.payment_token,
-            bet.payment_nonce,
-            &bet.stake_amount,
-        );
     }
 
     fn is_market_closed(&self, market: &Market<Self::Api>) -> bool {

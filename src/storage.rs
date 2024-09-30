@@ -5,7 +5,6 @@ multiversx_sc::derive_imports!();
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
 pub enum Status {
-    InProgress,
     Matched,
     Unmatched,
     Win,
@@ -21,6 +20,7 @@ pub enum BetType {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M: ManagedTypeApi> {
+    pub bettor: ManagedAddress<M>,
     pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
     pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
     pub stake_amount: BigUint<M>,      // Suma pariată
@@ -58,35 +58,10 @@ pub struct Market<M:ManagedTypeApi>{
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
-pub struct Betslip<M:ManagedTypeApi>{
-    pub creator: ManagedAddress<M>,
-    pub bets: ManagedVec<M, Bet<M>>, //Bet
-    pub total_odd: BigUint<M>, //132.55
-    pub stake: BigUint<M>, //123.55
-    pub payout: BigUint<M>, //stake * total_odd
-    pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
-    pub payment_nonce: u64,
-    // pub status: Status, //Status
-    pub nft_nonce: u64,
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
-pub struct BetslipAttributes<M:ManagedTypeApi>{
-    pub creator: ManagedAddress<M>,
-    pub bets: ManagedVec<M, Bet<M>>, //Bet
-    pub total_odd: BigUint<M>, //132.55
-    pub stake: BigUint<M>, //123.55
-    pub payout: BigUint<M>, //stake * total_odd
-    pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
-    pub payment_nonce: u64,
-    // pub status: Status, //Status
-    pub is_paid: bool,
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct BetAttributes<M:ManagedTypeApi>{
+    pub bettor: ManagedAddress<M>,
     pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
-    pub option: BigUint<M>,     // ID-ul selecției (ex: 1 = First Team Win)
+    pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
     pub stake_amount: BigUint<M>,      // Suma pariată
     pub win_amount: BigUint<M>,      // Suma pariată
     pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
@@ -99,16 +74,16 @@ pub struct BetAttributes<M:ManagedTypeApi>{
 #[multiversx_sc::module]
 pub trait StorageModule {
     #[view(getBetslipData)]
-    fn get_betslip(&self, betslip_id: u64) -> Betslip<Self::Api> {
-        let betslip_mapper = self.betslip_by_id(betslip_id);
-        require!(!betslip_mapper.is_empty(), ERR_INVALID_STREAM);
-        betslip_mapper.get()
+    fn get_bet(&self, bet_id: u64) -> Bet<Self::Api> {
+        let bet_mapper = self.bet_by_id(bet_id);
+        require!(!bet_mapper.is_empty(), ERR_INVALID_STREAM);
+        bet_mapper.get()
     }
 
     fn get_last_bet_id(&self) -> u64 {
         self.blockchain().get_current_esdt_nft_nonce(
             &self.blockchain().get_sc_address(),
-            self.betslip_nft_token().get_token_id_ref(),
+            self.bet_nft_token().get_token_id_ref(),
         )
     }
 
@@ -123,6 +98,12 @@ pub trait StorageModule {
         
         current_timestamp < market.close_timestamp
     }
+
+    #[view(getMarketCounter)]
+    fn get_market_counter(&self) -> BigUint {
+        self.market_counter().get()
+    }
+
 
     #[storage_mapper("createBet")]
     fn create_bet(&self, market_id: BigUint, selection_id: BigUint, odds: BigUint, bet_type: BetType, 

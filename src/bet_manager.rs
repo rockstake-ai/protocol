@@ -1,4 +1,4 @@
-use crate::{errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, BetType, Betslip, Market, Selection, Status}};
+use crate::{storage::{self, Bet, BetType, Market, Selection, Status}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -20,17 +20,17 @@ pub trait BetManagerModule: storage::StorageModule
         let mut market = self.markets(&market_id).get();
 
         require!(current_timestamp < market.close_timestamp, "Market is closed");
-
         
-        let mut selection = market.selections.iter_mut()
+        let mut selection = market.selections.iter()
             .find(|s| s.selection_id == selection_id)
             .expect("Selection not found in this market");
         let (initial_status, matched_amount) = self.try_match_bet(&mut market, &selection, &bet_type, &odds, &token_amount);
 
         let remaining_amount = &token_amount - &matched_amount;
-        let win_amount = self.calculate_win_amount(bet_type, &token_amount, &odds);
+        let win_amount = self.calculate_win_amount(bet_type, token_amount, odds);
     
         let bet = Bet {
+            bettor: caller,
             event: market_id.clone(),
             selection: selection.clone(),
             stake_amount: token_amount.clone(),
@@ -48,7 +48,6 @@ pub trait BetManagerModule: storage::StorageModule
         self.bet_by_id(bet_id).set(&bet);
         market.bets.push(bet.clone());
     
-        // Actualizăm lichiditatea
         match bet_type {
             BetType::Back => {
                 selection.back_liquidity += &remaining_amount;
@@ -66,16 +65,15 @@ pub trait BetManagerModule: storage::StorageModule
     
         self.markets(&market_id).set(&market);
     
-        // Blocăm doar suma rămasă nepotrivită
         if remaining_amount > BigUint::zero() {
             self.locked_funds(&caller).update(|current_locked| *current_locked += &remaining_amount);
         }
     
-        self.send().direct_esdt(&caller, self.betslip_nft_token().get_token_id_ref(), bet_nft_nonce, &BigUint::from(1u64));
+        self.send().direct_esdt(&caller, self.bet_nft_token().get_token_id_ref(), bet_nft_nonce, &BigUint::from(1u64));
     
         self.bet_placed_event(
             &caller,
-            self.betslip_nft_token().get_token_id_ref(),
+            self.bet_nft_token().get_token_id_ref(),
             &market_id,
             &selection_id,
             &token_amount,
@@ -101,7 +99,7 @@ pub trait BetManagerModule: storage::StorageModule
         let mut matched_amount = BigUint::zero();
         let mut remaining_amount = amount.clone();
     
-        for existing_bet in market.bets.iter_mut() {
+        for existing_bet in market.bets.iter() {
             if existing_bet.selection.selection_id == selection.selection_id &&
                existing_bet.status == Status::Unmatched &&
                existing_bet.bet_type != *bet_type {
@@ -137,12 +135,14 @@ pub trait BetManagerModule: storage::StorageModule
         (status, matched_amount)
     }
 
-    fn calculate_win_amount(&self, bet_type: BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
+    fn calculate_win_amount(&self, bet_type: BetType, stake_amount: BigUint, odds: BigUint) -> BigUint {
         match bet_type {
+            // Pentru pariul Back: (stake_amount * (odds - 1)) ajustat pentru cotele multiplicate cu 1000
             BetType::Back => (stake_amount * (odds - BigUint::from(1000u32))) / BigUint::from(1000u32),
-            BetType::Lay => (stake_amount * (odds - BigUint::from(1000u32))) / BigUint::from(1000u32),
+            // Pentru pariul Lay: stake_amount / (odds - 1) ajustat pentru cotele multiplicate cu 1000
+            BetType::Lay => (stake_amount * BigUint::from(1000u32)) / (odds - BigUint::from(1000u32)),
         }
-    }        
-
+    }
+    
     
 }

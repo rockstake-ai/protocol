@@ -1,37 +1,74 @@
-use crate::storage::{self, Status};
-
+use crate::storage::{BetType, Status};
 multiversx_sc::imports!();
-multiversx_sc::derive_imports!();
 
 #[multiversx_sc::module]
-pub trait FundManagerModule: storage::StorageModule{
-    #[payable("*")]
-    #[endpoint(lockFunds)]
-    fn lock_funds(&self, user: ManagedAddress, amount: BigUint) {
-        let caller = self.blockchain().get_caller();
-        let payment_amount = self.call_value().egld_or_single_fungible_esdt();  // Obținem suma plătită în EGLD
-        
-        require!(payment_amount.1 == amount, "Suma trimisă nu corespunde cu cea specificată");
-    
-        self.locked_funds(&user).update(|current_locked| *current_locked += payment_amount.1);
-    }
-    
+pub trait FundManagerModule:
+    crate::storage::StorageModule
+    + crate::events::EventsModule
+    + crate::nft_manager::NftManagerModule {
+
     #[only_owner]
+    #[payable("*")]
     #[endpoint(distributeWinnings)]
-    fn distribute_winnings(&self, market_id: BigUint, winner_address: ManagedAddress) {
-        let market = self.markets(&market_id).get();  // Obținem piața respectivă
-        let mut total_payout = BigUint::zero();
-
-        for bet in market.bets.iter() {
-            if bet.status == Status::Win {
-            let payout = bet.value.clone() * bet.odd.clone();  // câștig = suma pariată * cota
-            total_payout += payout;
-
-            // Actualizăm fondurile blocate ale câștigătorului
-            self.locked_funds(&winner_address).update(|current_locked| *current_locked -= bet.value.clone());
-            }
+    fn distribute_winnings(
+        &self,
+        bet_id: u64,
+    ) {
+        let mut bet = self.require_valid_bet_nft(bet_id);
+        require!(bet.status == Status::Win, "Bet is not winning state");
+ 
+        let amount_to_distribute = match bet.bet_type {
+            BetType::Back => bet.win_amount.clone(),
+            BetType::Lay => {&bet.stake_amount - &bet.win_amount
+            },
         };
-        self.send().direct_egld(&winner_address, &total_payout);
-}
 
+        require!(amount_to_distribute > BigUint::zero(), "No winnings to distribute");
+
+        let payment = EgldOrEsdtTokenPayment::new(bet.payment_token, bet.payment_nonce, amount_to_distribute);
+
+        self.send().direct(
+            &bet.bettor,
+            &payment.token_identifier,
+            payment.token_nonce,
+            &payment.amount,
+        );
+    }
+
+    // #[only_owner]
+    // #[endpoint(refundUnmatchedBet)]
+    // fn refund_unmatched_bet(&self, bet_id: u64) {
+    //     let bet = self.bet_by_id(bet_id).get();
+    //     require!(bet.status == Status::Unmatched, "Bet is not unmatched");
+
+    //     let betslip = self.bet_by_id(bet.nft_nonce).get();
+    //     require!(betslip.status == Status::Unmatched, "Bet is not unmatched");
+
+    //     let payment = self.claim_from_betslip_internal(bet_id);
+    //     let caller = self.blockchain().get_caller();
+
+    //     self.send().direct(
+    //         &caller,
+    //         &payment.token_identifier,
+    //         payment.token_nonce,
+    //         &payment.amount,
+    //     );
+
+    //     let mut updated_bet = bet;
+    //     updated_bet.status = Status::Canceled;
+    //     self.bet_by_id(bet_id).set(&updated_bet);
+
+    //     let mut updated_betslip = betslip;
+    //     updated_betslip.status = Status::Canceled;
+    //     self.bet_by_id(bet.nft_nonce).set(&updated_betslip);
+
+    //     let mut nft_attributes: BetAttributes<Self::Api> = self
+    //         .bet_nft_token()
+    //         .get_token_attributes(betslip.nft_nonce);
+    //     nft_attributes.status = Status::Canceled;
+    //     self.bet_nft_token()
+    //         .nft_update_attributes(betslip.nft_nonce, &nft_attributes);
+
+    //     self.refund_unmatched_bet(bet_id, &bet.stake_amount, &betslip.bettor);
+    // }
 }
