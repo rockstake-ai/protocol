@@ -83,6 +83,19 @@ pub struct BetslipAttributes<M:ManagedTypeApi>{
     pub is_paid: bool,
 }
 
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
+pub struct BetAttributes<M:ManagedTypeApi>{
+    pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
+    pub option: BigUint<M>,     // ID-ul selecției (ex: 1 = First Team Win)
+    pub stake_amount: BigUint<M>,      // Suma pariată
+    pub win_amount: BigUint<M>,      // Suma pariată
+    pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
+    pub bet_type: BetType,      // BACK sau LAY (adăugat)
+    pub status: Status,         // Starea pariului (InProgress, Matched, etc.)
+    pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
+    pub payment_nonce: u64,
+}
+
 #[multiversx_sc::module]
 pub trait StorageModule {
     #[view]

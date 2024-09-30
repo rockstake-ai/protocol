@@ -22,6 +22,7 @@ pub trait EventsModule {
     fn bet_placed_event(
         &self,
         #[indexed] caller: &ManagedAddress,
+        #[indexed] bet_token_identifier: &TokenIdentifier,
         #[indexed] market_id: &BigUint,
         #[indexed] selection_id: &BigUint,
         #[indexed] amount: &BigUint,

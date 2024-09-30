@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_INVALID_ROLE, ERR_SEND_ONE_STREAM_NFT, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, storage::{Betslip, BetslipAttributes}};
+use crate::{errors::{ERR_INVALID_ROLE, ERR_SEND_ONE_STREAM_NFT, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, storage::{Bet, BetAttributes, Betslip, BetslipAttributes}};
 
 multiversx_sc::imports!();
 
@@ -8,7 +8,7 @@ const TOKEN_TICKER: &[u8] = b"BET";
 const NFT_ROYALTIES: u64 = 0_00;
 
 #[multiversx_sc::module]
-pub trait BetslipNftModule:
+pub trait NftManagerModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
 {
@@ -40,34 +40,34 @@ pub trait BetslipNftModule:
         }
     }
 
-    fn mint_betslip_nft(&self, betslip: &Betslip<Self::Api>) -> u64 {
+    fn mint_bet_nft(&self, bet: &Bet<Self::Api>) -> u64 {
         require!(!self.betslip_nft_token().is_empty(), ERR_TOKEN_NOT_ISSUED);
         let big_one = BigUint::from(1u64);
 
         let mut token_name = ManagedBuffer::new_from_bytes(b"BetCube Ticket #");
-        let betslip_id_buffer = self.u64_to_ascii(betslip.nft_nonce);
-        token_name.append(&betslip_id_buffer);
+        let bet_id_buffer = self.u64_to_ascii(bet.nft_nonce);
+        token_name.append(&bet_id_buffer);
 
         let mut uris = ManagedVec::new();
         let mut full_uri = self.betslip_nft_base_uri().get();
-        full_uri.append_bytes(b"/betslip/");
-        full_uri.append(&betslip_id_buffer);
+        full_uri.append_bytes(b"/bet/");
+        full_uri.append(&bet_id_buffer);
         full_uri.append_bytes(b"/nft");
 
         uris.push(full_uri);
 
         let royalties = BigUint::from(NFT_ROYALTIES);
 
-        let attributes = BetslipAttributes {
-            creator: betslip.creator.clone(),
-            bets: betslip.bets.clone(),
-            total_odd: betslip.total_odd.clone(),
-            stake: betslip.stake.clone(),
-            payout: betslip.payout.clone(),
-            payment_token: betslip.payment_token.clone(),
-            payment_nonce: betslip.payment_nonce,
-            // status: betslip.status.clone(),
-            is_paid: false,
+        let attributes = BetAttributes {
+            event: bet.event.clone(),
+            option: bet.option.clone(),
+            stake_amount: bet.stake_amount.clone(),
+            win_amount: bet.win_amount.clone(),
+            odd: bet.odd.clone(),
+            bet_type: bet.bet_type.clone(),
+            status: bet.status.clone(),
+            payment_token: bet.payment_token.clone(),
+            payment_nonce: bet.payment_nonce,
         };
         let mut serialized_attributes = ManagedBuffer::new();
         if let core::result::Result::Err(err) = attributes.top_encode(&mut serialized_attributes) {
@@ -86,11 +86,9 @@ pub trait BetslipNftModule:
             &attributes,
             &uris,
         );
-
         nonce
     }
     
-
     fn require_valid_betslip_nft(
         &self,
         betslip_id: u64,

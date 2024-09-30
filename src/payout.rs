@@ -6,7 +6,7 @@ multiversx_sc::imports!();
 pub trait PayoutModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
-    + crate::betslip_nft::BetslipNftModule {
+    + crate::nft_manager::BetslipNftModule {
    
     #[view(balance)]
     fn balance(&self, betslip_id: u64) -> BigUint {
