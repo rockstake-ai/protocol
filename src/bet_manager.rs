@@ -10,6 +10,7 @@ pub trait BetManagerModule: storage::StorageModule
     #[payable("*")]
     #[endpoint(placeBet)]
     fn place_bet(&self, market_id: BigUint, selection_id: BigUint, odds: BigUint, bet_type: BetType) -> u64 {
+        let current_timestamp = self.blockchain().get_block_timestamp();
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, token_amount) = self.call_value().egld_or_single_esdt().into_tuple();
     
@@ -17,6 +18,9 @@ pub trait BetManagerModule: storage::StorageModule
     
         require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
         let mut market = self.markets(&market_id).get();
+
+        require!(current_timestamp < market.close_timestamp, "Market is closed");
+
         
         let mut selection = market.selections.iter_mut()
             .find(|s| s.selection_id == selection_id)

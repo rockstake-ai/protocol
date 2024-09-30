@@ -20,6 +20,12 @@ pub trait EventsModule {
         #[indexed] remaining_amount: &BigUint
     );
 
+    #[event("market_closed")]
+    fn market_closed_event(&self, #[indexed] market_id: BigUint, #[indexed] winning_selection_id: BigUint);
+
+    #[event("expired_markets_closed")]
+    fn expired_markets_closed_event(&self, #[indexed] market_ids: ManagedVec<BigUint>);
+
     #[event("claimFromBetslip")]
     fn claim_from_betslip_event(
         &self,
@@ -28,27 +34,4 @@ pub trait EventsModule {
         #[indexed] recipient: &ManagedAddress,
     );
 
-    #[event("event_create_p2p_bet")]
-    fn event_create_p2p_bet(
-        &self,
-        #[indexed] bet_id: &ManagedBuffer,
-        #[indexed] creator: &ManagedAddress,
-        event_details: &ManagedBuffer,
-    );
-
-    #[event("event_join_p2p_bet")]
-    fn event_join_p2p_bet(
-        &self,
-        #[indexed] bet_id: &ManagedBuffer,
-        #[indexed] participant: &ManagedAddress,
-        #[indexed]option_chosen: &ManagedBuffer,
-        stake: &BigUint,
-    );
-
-    #[event("event_finalize_p2p_bet")]
-    fn event_finalize_p2p_bet(
-        &self,
-        #[indexed] bet_id: &ManagedBuffer,
-        winning_option: &ManagedBuffer,
-    );
 }

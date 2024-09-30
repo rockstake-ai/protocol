@@ -54,6 +54,7 @@ pub struct Market<M:ManagedTypeApi>{
     pub best_back_odds: BigUint<M>,         
     pub best_lay_odds: BigUint<M>,          
     pub bets: ManagedVec<M, Bet<M>>,
+    pub close_timestamp: u64, // Timestamp când piața se închide
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -111,18 +112,16 @@ pub trait StorageModule {
         )
     }
 
-    #[view(getMarketLiquidity)]
-    fn get_market_liquidity(&self, market_id: BigUint) -> (BigUint, BigUint) {
-        let market = self.markets(&market_id).get();
-        let mut total_back_liquidity = BigUint::zero();
-        let mut total_lay_liquidity = BigUint::zero();
-
-        for selection in market.selections.iter() {
-            total_back_liquidity += &selection.back_liquidity;
-            total_lay_liquidity += &selection.lay_liquidity;
+    #[view(isMarketOpen)]
+    fn is_market_open(&self, market_id: BigUint) -> bool {
+        if self.markets(&market_id).is_empty() {
+            return false;
         }
-
-        (total_back_liquidity, total_lay_liquidity)
+        
+        let market = self.markets(&market_id).get();
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        
+        current_timestamp < market.close_timestamp
     }
 
     #[storage_mapper("createBet")]
