@@ -89,6 +89,7 @@ pub trait BetslipNftModule:
 
         nonce
     }
+    
 
     fn require_valid_betslip_nft(
         &self,

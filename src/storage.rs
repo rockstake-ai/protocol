@@ -24,10 +24,14 @@ pub enum BetType {
 pub struct Bet<M: ManagedTypeApi> {
     pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
     pub option: BigUint<M>,     // ID-ul selecției (ex: 1 = First Team Win)
-    pub value: BigUint<M>,      // Suma pariată
+    pub stake_amount: BigUint<M>,      // Suma pariată
+    pub win_amount: BigUint<M>,      // Suma pariată
     pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
     pub bet_type: BetType,      // BACK sau LAY (adăugat)
     pub status: Status,         // Starea pariului (InProgress, Matched, etc.)
+    pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
+    pub payment_nonce: u64,
+    pub nft_nonce: u64,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
@@ -99,12 +103,28 @@ pub trait StorageModule {
         )
     }
 
+    fn get_last_bet_id(&self) -> u64 {
+        self.blockchain().get_current_esdt_nft_nonce(
+            &self.blockchain().get_sc_address(),
+            self.betslip_nft_token().get_token_id_ref(),
+        )
+    }
+
     #[storage_mapper("betslipById")]
     fn betslip_by_id(&self, betslip_id: u64) -> SingleValueMapper<Betslip<Self::Api>>;
     #[storage_mapper("betslipNftToken")]
     fn betslip_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
     #[storage_mapper("betslipNftBaseUri")]
     fn betslip_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
+
+    //
+    #[storage_mapper("betById")]
+    fn bet_by_id(&self, bet_id: u64) -> SingleValueMapper<Bet<Self::Api>>;
+    #[storage_mapper("betNftToken")]
+    fn bet_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
+    #[storage_mapper("betNftBaseUri")]
+    fn bet_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
+    //
 
     #[storage_mapper("market_counter")]
     fn market_counter(&self) -> SingleValueMapper<BigUint>;

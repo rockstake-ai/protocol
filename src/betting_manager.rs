@@ -1,5 +1,4 @@
-
-use crate::{constants::NFT_AMOUNT, errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, BetType, Betslip, BetslipAttributes, Status}};
+use crate::{errors::ERR_ZERO_DEPOSIT, storage::{self, Bet, BetType, Betslip, Status}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -11,7 +10,7 @@ pub trait BettingManagerModule: storage::StorageModule
 
     #[payable("*")]
     #[endpoint(placeBet)]
-    fn place_bet(&self, bets: ManagedVec<Bet<Self::Api>>) -> u64 {
+    fn place_bet2(&self, bets: ManagedVec<Bet<Self::Api>>) -> u64 {
         let caller = self.blockchain().get_caller();
        
         let (token_identifier, token_nonce, token_amount) =
@@ -78,98 +77,64 @@ pub trait BettingManagerModule: storage::StorageModule
         payout
     }
 
-    #[payable("EGLD")]
-#[endpoint(placeBackBet)]
-fn place_back_bet(
-    &self,
-    market_id: BigUint,
-    selection_id: BigUint,
-    odds: BigUint
-) {
-    let caller = self.blockchain().get_caller();  // Adresa utilizatorului care plasează pariul
-    let amount = self.call_value().egld_value();  // Suma trimisă împreună cu tranzacția
-    
-    // Verificăm dacă piața există
-    let mut market = self.markets(&market_id).get();
-    require!(market.is_some(), "Piața nu există");
-    let mut market = market.unwrap();
+    #[payable("*")]
+    #[endpoint(placeBet)]
+    fn place_bet(&self, market_id: BigUint, selection_id: BigUint, odds: BigUint, bet_type: BetType) -> u64 {
+        let caller = self.blockchain().get_caller();
+        let (token_identifier, token_nonce, token_amount) =
+        self.call_value().egld_or_single_esdt().into_tuple();
 
-    // Găsim selecția validă
-    let mut selection = market.selections.iter_mut().find(|s| s.selection_id == selection_id)
-        .expect("Selecția nu este validă pentru această piață");
+        let bet_id = self.get_last_bet_id() + 1;
 
-    // Adăugăm lichiditate pentru BACK și actualizăm cotele
-    selection.back_liquidity += amount;
-    if odds > selection.best_back_odds {
-        selection.best_back_odds = odds;
-    }
+        require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
+        let market = self.markets(&market_id).get();
 
-    // Creăm și stocăm pariul
-    let new_bet = Bet {
-        event: market_id.clone(),
-        option: selection_id.clone(),
-        value: amount.clone(),
-        odd: odds.clone(),
-        bet_type: BetType::Back,
-        status: Status::InProgress,
-    };
-    
-    market.bets.push(new_bet);
-    
-    // Actualizăm piața cu noile date
-    self.markets(&market_id).set(&market);
+        let mut selection = market.selections.iter().find(|s| s.selection_id == selection_id)
+            .expect("Selection is not valid for this specific market");
 
-    // Blocăm fondurile utilizatorului
-    self.locked_funds(&caller).update(|current_locked| *current_locked += amount);
-}
+        let win_amount = match bet_type{
+            BetType::Back => {
+                selection.back_liquidity += &token_amount;
+                if odds > selection.best_back_odds{
+                    selection.best_back_odds = odds.clone();
+                }
+                (token_amount.clone() * odds.clone()) / BigUint::from(1000u32) - token_amount.clone()
+            },
+            BetType::Lay => {
+                selection.lay_liquidity +=token_amount;
+                if odds < selection.best_lay_odds || selection.best_lay_odds == BigUint::zero(){
+                    selection.best_lay_odds = odds.clone();
+                }
+                token_amount.clone()
+            }
+        };
 
-
-    // Funcție pentru a plasa pariuri LAY
-    #[payable("EGLD")]
-    #[endpoint(placeLayBet)]
-    fn place_lay_bet(
-        &self,
-        market_id: BigUint,
-        selection_id: BigUint,
-        odds: BigUint
-    ) {
-        let caller = self.blockchain().get_caller();  // Adresa utilizatorului care plasează pariul
-        let amount = self.call_value().egld_value();  // Suma trimisă împreună cu tranzacția
-        
-        // Verificăm dacă piața există
-        let mut market = self.markets(&market_id).get();
-        // require!(market.is_some(), "Piața nu există");
-        let mut market = market.unwrap();
-    
-        // Găsim selecția validă
-        let mut selection = market.selections.iter_mut().find(|s| s.selection_id == selection_id)
-            .expect("Selecția nu este validă pentru această piață");
-    
-        // Adăugăm lichiditate pentru LAY și actualizăm cotele
-        selection.lay_liquidity += amount;
-        if odds > selection.best_lay_odds {
-            selection.best_lay_odds = odds;
-        }
-    
-        // Creăm și stocăm pariul
-        let new_bet = Bet {
+        let bet = Bet {
             event: market_id.clone(),
-            option: selection_id.clone(),
-            value: amount.clone(),
+            option: selection_id,
+            stake_amount: token_amount.clone(),
+            win_amount,
             odd: odds.clone(),
-            bet_type: BetType::Lay,
+            bet_type: bet_type.clone(),
             status: Status::InProgress,
+            payment_token: token_identifier.clone(),
+            payment_nonce: token_nonce,
+            nft_nonce: bet_id,
         };
         
-        market.bets.push(new_bet);
-    
-        // Actualizăm piața cu noile date
+        market.bets.push(bet);
+        
+        // Actualizăm piața cu noile date 
         self.markets(&market_id).set(&market);
-    
+
         // Blocăm fondurile utilizatorului
-        self.locked_funds(&caller).update(|current_locked| *current_locked += amount);
+        self.locked_funds(&caller).update(|current_locked| *current_locked += token_amount);
+
+        self.bet_placed_event(&caller, &market_id, &selection_id, &token_amount, &odds, bet_type, &token_identifier,token_nonce);
+
+        bet_id
     }
-    
+
 
     fn match_bets(&self, market_id: BigUint) {
         // Obținem piața specificată de market_id

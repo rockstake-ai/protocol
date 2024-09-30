@@ -1,4 +1,4 @@
-use crate::storage::{Bet};
+use crate::storage::{Bet, BetType};
 
 multiversx_sc::imports!();
 
@@ -16,6 +16,19 @@ pub trait EventsModule {
         #[indexed] payment_token: &EgldOrEsdtTokenIdentifier,
         #[indexed] payment_nonce: u64,
         // #[indexed] status: &Status,
+    );
+
+    #[event("bet_placed")]
+    fn bet_placed_event(
+        &self,
+        #[indexed] caller: &ManagedAddress,
+        #[indexed] market_id: &BigUint,
+        #[indexed] selection_id: &BigUint,
+        #[indexed] amount: &BigUint,
+        #[indexed] odds: &BigUint,
+        #[indexed] bet_type: BetType,
+        #[indexed] payment_token: &EgldOrEsdtTokenIdentifier,
+        #[indexed] payment_nonce: u64,
     );
 
     #[event("claimFromBetslip")]
