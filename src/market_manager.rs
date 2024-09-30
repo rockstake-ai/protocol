@@ -1,4 +1,4 @@
-use crate::{storage::{Market, Selection, Status}};
+use crate::storage::{Market, Selection, Status};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -48,33 +48,6 @@ pub trait MarketManagerModule:
     }
 
     #[only_owner]
-    #[endpoint(closeMarket)]
-    fn close_market(&self, market_id: BigUint, winning_selection_id: BigUint) {
-        let mut market = self.markets(&market_id).get();
-        let current_timestamp = self.blockchain().get_block_timestamp();
-        
-        require!(current_timestamp >= market.close_timestamp, "Market is not yet closed");
-
-        for mut bet in market.bets.iter() {
-            match bet.status {
-                Status::Unmatched => {
-                    self.refund_unmatched_bet(bet.nft_nonce);
-                    bet.status = Status::Canceled;
-                },
-                Status::Matched => {
-                    if bet.selection.selection_id == winning_selection_id {
-                        bet.status = Status::Win;
-                    } else {
-                        bet.status = Status::Lost;
-                    }
-                },
-                _ => {}, // Alte statusuri rămân neschimbate
-            }
-        }
-        self.markets(&market_id).set(&market);
-        self.market_closed_event(market_id, winning_selection_id);
-    }
-
     #[endpoint(closeExpiredMarkets)]
     fn close_expired_markets(&self) {
         let current_timestamp = self.blockchain().get_block_timestamp();
@@ -82,7 +55,6 @@ pub trait MarketManagerModule:
         
         let total_markets = self.market_counter().get();
         
-        let zero = BigUint::zero();
         let one = BigUint::from(1u32);
         let mut market_id = one.clone();
 
@@ -92,8 +64,7 @@ pub trait MarketManagerModule:
                 if current_timestamp >= market.close_timestamp && !self.is_market_closed(&market) {
                     for bet in market.bets.iter() {
                         if bet.status == Status::Unmatched {
-                            self.refund_unmatched_bet(bet.nft_nonce);
-                            bet.status = Status::Canceled;
+                            self.distribute_rewards(bet.nft_nonce);
                         }
                     }
                     self.markets(&market_id).set(&market);
@@ -111,6 +82,4 @@ pub trait MarketManagerModule:
             matches!(bet.status, Status::Win | Status::Lost | Status::Canceled)
         )
     }
-
-
 }

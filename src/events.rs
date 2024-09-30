@@ -1,4 +1,4 @@
-use crate::storage::{Bet, BetType};
+use crate::storage::BetType;
 
 multiversx_sc::imports!();
 
@@ -33,7 +33,7 @@ pub trait EventsModule {
         #[indexed] amount: &BigUint,
         #[indexed] bettor: &ManagedAddress,
     );
-    
+
     #[event("claimFromBetslip")]
     fn claim_from_betslip_event(
         &self,

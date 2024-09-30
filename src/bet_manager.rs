@@ -1,4 +1,4 @@
-use crate::{storage::{self, Bet, BetType, Market, Selection, Status}};
+use crate::storage::{self, Bet, BetType, Market, Status};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -6,7 +6,7 @@ multiversx_sc::derive_imports!();
 pub trait BetManagerModule: storage::StorageModule 
     + crate::events::EventsModule 
     + crate::nft_manager::NftManagerModule{
-    
+
     #[payable("*")]
     #[endpoint(placeBet)]
     fn place_bet(&self, market_id: BigUint, selection_id: BigUint, odds: BigUint, bet_type: BetType) -> u64 {
@@ -16,27 +16,29 @@ pub trait BetManagerModule: storage::StorageModule
     
         let bet_id = self.get_last_bet_id() + 1;
     
-        require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
         let mut market = self.markets(&market_id).get();
-
+        require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
         require!(current_timestamp < market.close_timestamp, "Market is closed");
-        
-        let mut selection = market.selections.iter()
-            .find(|s| s.selection_id == selection_id)
-            .expect("Selection not found in this market");
-        let (initial_status, matched_amount) = self.try_match_bet(&mut market, &selection, &bet_type, &odds, &token_amount);
-
-        let remaining_amount = &token_amount - &matched_amount;
-        let win_amount = self.calculate_win_amount(bet_type, token_amount, odds);
     
+        let selection_index = market.selections.iter()
+            .position(|s| &s.selection_id == &selection_id)
+            .expect("Selection not found in this market");
+    
+        // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
+        let (initial_status, matched_amount) = self.try_match_bet(&mut market, &selection_id, &bet_type, &odds, &token_amount);
+    
+        let remaining_amount = &token_amount - &matched_amount;
+        let win_amount = self.calculate_win_amount(&bet_type, &token_amount, &odds);
+    
+        let selection = market.selections.get(selection_index);
         let bet = Bet {
-            bettor: caller,
+            bettor: caller.clone(),
             event: market_id.clone(),
-            selection: selection.clone(),
+            selection: selection,
             stake_amount: token_amount.clone(),
             win_amount,
-            odd: odds,
-            bet_type,
+            odd: odds.clone(),
+            bet_type: bet_type.clone(), // Clonăm bet_type aici
             status: initial_status,
             payment_token: token_identifier.clone(),
             payment_nonce: token_nonce,
@@ -48,20 +50,23 @@ pub trait BetManagerModule: storage::StorageModule
         self.bet_by_id(bet_id).set(&bet);
         market.bets.push(bet.clone());
     
+        // Actualizăm selecția
+        let mut selection = market.selections.get(selection_index);
         match bet_type {
             BetType::Back => {
                 selection.back_liquidity += &remaining_amount;
                 if odds > selection.best_back_odds {
-                    selection.best_back_odds = odds;
+                    selection.best_back_odds = odds.clone();
                 }
             },
             BetType::Lay => {
                 selection.lay_liquidity += &remaining_amount;
                 if odds < selection.best_lay_odds || selection.best_lay_odds == BigUint::zero() {
-                    selection.best_lay_odds = odds;
+                    selection.best_lay_odds = odds.clone();
                 }
             }
         }
+        let _ = market.selections.set(selection_index, &selection);
     
         self.markets(&market_id).set(&market);
     
@@ -78,7 +83,7 @@ pub trait BetManagerModule: storage::StorageModule
             &selection_id,
             &token_amount,
             &odds,
-            bet_type,
+            bet_type, // Folosim bet_type aici fără referință sau clonare
             &token_identifier,
             token_nonce,
             &matched_amount,
@@ -91,7 +96,7 @@ pub trait BetManagerModule: storage::StorageModule
     fn try_match_bet(
         &self,
         market: &mut Market<Self::Api>,
-        selection: &Selection<Self::Api>,
+        selection_id: &BigUint,
         bet_type: &BetType,
         odds: &BigUint,
         amount: &BigUint
@@ -99,12 +104,13 @@ pub trait BetManagerModule: storage::StorageModule
         let mut matched_amount = BigUint::zero();
         let mut remaining_amount = amount.clone();
     
-        for existing_bet in market.bets.iter() {
-            if existing_bet.selection.selection_id == selection.selection_id &&
-               existing_bet.status == Status::Unmatched &&
-               existing_bet.bet_type != *bet_type {
-                if (*bet_type == BetType::Back && odds >= &existing_bet.odd) ||
-                   (*bet_type == BetType::Lay && odds <= &existing_bet.odd) {
+        for i in 0..market.bets.len() {
+            let mut existing_bet = market.bets.get(i);
+            if existing_bet.selection.selection_id == selection_id.clone() &&
+                existing_bet.status == Status::Unmatched &&
+                existing_bet.bet_type != bet_type.clone() {
+                if (bet_type.clone() == BetType::Back && odds >= &existing_bet.odd) ||
+                    (bet_type.clone() == BetType::Lay && odds <= &existing_bet.odd) {
                     let match_amount = if remaining_amount < existing_bet.stake_amount {
                         remaining_amount.clone()
                     } else {
@@ -118,6 +124,8 @@ pub trait BetManagerModule: storage::StorageModule
                     if existing_bet.stake_amount == BigUint::zero() {
                         existing_bet.status = Status::Matched;
                     }
+    
+                    let _ = market.bets.set(i, &existing_bet);
     
                     if remaining_amount == BigUint::zero() {
                         break;
@@ -135,14 +143,18 @@ pub trait BetManagerModule: storage::StorageModule
         (status, matched_amount)
     }
 
-    fn calculate_win_amount(&self, bet_type: BetType, stake_amount: BigUint, odds: BigUint) -> BigUint {
+    fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
+        let thousand = BigUint::from(1000u32);
         match bet_type {
-            // Pentru pariul Back: (stake_amount * (odds - 1)) ajustat pentru cotele multiplicate cu 1000
-            BetType::Back => (stake_amount * (odds - BigUint::from(1000u32))) / BigUint::from(1000u32),
-            // Pentru pariul Lay: stake_amount / (odds - 1) ajustat pentru cotele multiplicate cu 1000
-            BetType::Lay => (stake_amount * BigUint::from(1000u32)) / (odds - BigUint::from(1000u32)),
+            BetType::Back => {
+                // (stake_amount * (odds - 1000)) / 1000
+                (stake_amount * &(odds - &thousand)) / &thousand
+            },
+            BetType::Lay => {
+                // (stake_amount * 1000) / (odds - 1000)
+                (stake_amount * &thousand) / &(odds - &thousand)
+            },
         }
-    }
-    
-    
+    }    
+           
 }

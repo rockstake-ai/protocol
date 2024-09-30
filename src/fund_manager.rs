@@ -9,18 +9,21 @@ pub trait FundManagerModule:
 
     #[only_owner]
     #[payable("*")]
-    #[endpoint(distributeWinnings)]
-    fn distribute_winnings(
+    #[endpoint(distributeRewards)]
+    fn distribute_rewards(
         &self,
         bet_id: u64,
     ) {
         let mut bet = self.require_valid_bet_nft(bet_id);
         require!(bet.status == Status::Win, "Bet is not winning state");
  
-        let amount_to_distribute = match bet.bet_type {
-            BetType::Back => bet.win_amount.clone(),
-            BetType::Lay => {&bet.stake_amount - &bet.win_amount
+        let amount_to_distribute = match bet.status {
+            Status::Win => match bet.bet_type {
+                BetType::Back => bet.win_amount.clone(),
+                BetType::Lay => &bet.stake_amount - &bet.win_amount,
             },
+            Status::Unmatched => bet.stake_amount.clone(),
+            _ => sc_panic!("Bet is not in a state eligible for distribution"),
         };
 
         require!(amount_to_distribute > BigUint::zero(), "No winnings to distribute");
@@ -34,41 +37,4 @@ pub trait FundManagerModule:
             &payment.amount,
         );
     }
-
-    // #[only_owner]
-    // #[endpoint(refundUnmatchedBet)]
-    // fn refund_unmatched_bet(&self, bet_id: u64) {
-    //     let bet = self.bet_by_id(bet_id).get();
-    //     require!(bet.status == Status::Unmatched, "Bet is not unmatched");
-
-    //     let betslip = self.bet_by_id(bet.nft_nonce).get();
-    //     require!(betslip.status == Status::Unmatched, "Bet is not unmatched");
-
-    //     let payment = self.claim_from_betslip_internal(bet_id);
-    //     let caller = self.blockchain().get_caller();
-
-    //     self.send().direct(
-    //         &caller,
-    //         &payment.token_identifier,
-    //         payment.token_nonce,
-    //         &payment.amount,
-    //     );
-
-    //     let mut updated_bet = bet;
-    //     updated_bet.status = Status::Canceled;
-    //     self.bet_by_id(bet_id).set(&updated_bet);
-
-    //     let mut updated_betslip = betslip;
-    //     updated_betslip.status = Status::Canceled;
-    //     self.bet_by_id(bet.nft_nonce).set(&updated_betslip);
-
-    //     let mut nft_attributes: BetAttributes<Self::Api> = self
-    //         .bet_nft_token()
-    //         .get_token_attributes(betslip.nft_nonce);
-    //     nft_attributes.status = Status::Canceled;
-    //     self.bet_nft_token()
-    //         .nft_update_attributes(betslip.nft_nonce, &nft_attributes);
-
-    //     self.refund_unmatched_bet(bet_id, &bet.stake_amount, &betslip.bettor);
-    // }
 }
