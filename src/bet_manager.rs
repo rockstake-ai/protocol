@@ -27,16 +27,16 @@ pub trait BetManagerModule: storage::StorageModule
 
         let precision_factor = precision_factor::<Self::Api>();
         let odds_decimal = &odds / &precision_factor;
-        let best_lay_decimal = &selection.best_lay_odds / &precision_factor;
-        let best_back_decimal = &selection.best_back_odds / &precision_factor;
+        let mut best_lay_decimal = &selection.best_lay_odds / &precision_factor;
+        let mut best_back_decimal = &selection.best_back_odds / &precision_factor;
         
         match bet_type {
             BetType::Back => {
                 if best_lay_decimal == BigUint::zero() || odds_decimal <= best_lay_decimal {
                     if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
-                        selection.best_back_odds = odds.clone();
+                        best_back_decimal = odds.clone();
                     }
-                    selection.back_liquidity += &token_amount;
+                    best_back_decimal += &token_amount;
                 } else {
                     return sc_error!("Back odds must be less than or equal to the best Lay odds");
                 }
@@ -44,9 +44,9 @@ pub trait BetManagerModule: storage::StorageModule
             BetType::Lay => {
                 if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
                     if best_lay_decimal == BigUint::zero() || odds_decimal < best_lay_decimal {
-                        selection.best_lay_odds = odds.clone();
+                        best_lay_decimal = odds.clone();
                     }
-                    selection.lay_liquidity += &token_amount;
+                    best_lay_decimal += &token_amount;
                 } else {
                     return sc_error!("Lay odds must be greater than the best Back odds");
                 }

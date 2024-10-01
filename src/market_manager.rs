@@ -1,4 +1,4 @@
-use crate::storage::{Market, Selection, Status};
+use crate::{constants::precision_factor, storage::{BetType, Market, MarketStatus, Selection, SelectionStatus, Status}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -82,5 +82,59 @@ pub trait MarketManagerModule:
         market.bets.iter().all(|bet| 
             matches!(bet.status, Status::Win | Status::Lost | Status::Canceled)
         )
+    }
+
+    #[only_owner]
+    #[endpoint(checkMarketStatus)]
+    fn check_market_status(&self, market_id: u64) -> SCResult<MarketStatus<Self::Api>> {
+        require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
+        
+        let market = self.markets(&market_id).get();
+        let precision_factor = precision_factor::<Self::Api>();
+        
+        let mut selections_status = ManagedVec::new();
+        for selection in market.selections.iter() {
+            let back_bets = self.count_bets_by_type(&market, &selection.selection_id, &BetType::Back);
+            let lay_bets = self.count_bets_by_type(&market, &selection.selection_id, &BetType::Lay);
+            
+            selections_status.push(SelectionStatus {
+                selection_id: selection.selection_id,
+                description: selection.description.clone(),
+                best_back_odds: &selection.best_back_odds / &precision_factor,
+                best_lay_odds: &selection.best_lay_odds / &precision_factor,
+                back_liquidity: selection.back_liquidity.clone(),
+                lay_liquidity: selection.lay_liquidity.clone(),
+                back_bets,
+                lay_bets,
+            });
+        }
+        
+        let total_bets = market.bets.len();
+        let matched_bets = self.count_bets_by_status(&market, &Status::Matched);
+        let unmatched_bets = self.count_bets_by_status(&market, &Status::Unmatched);
+        
+        Ok(MarketStatus {
+            market_id: market.market_id,
+            description: market.description,
+            total_back_liquidity: market.back_liquidity,
+            total_lay_liquidity: market.lay_liquidity,
+            total_bets,
+            matched_bets,
+            unmatched_bets,
+            selections: selections_status,
+            close_timestamp: market.close_timestamp,
+        })
+    }
+
+    fn count_bets_by_type(&self, market: &Market<Self::Api>, selection_id: &u64, bet_type: &BetType) -> usize {
+        market.bets.iter()
+            .filter(|bet| bet.selection.selection_id == *selection_id && bet.bet_type == *bet_type)
+            .count()
+    }
+
+    fn count_bets_by_status(&self, market: &Market<Self::Api>, status: &Status) -> usize {
+        market.bets.iter()
+            .filter(|bet| bet.status == *status)
+            .count()
     }
 }

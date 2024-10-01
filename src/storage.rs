@@ -71,6 +71,31 @@ pub struct BetAttributes<M:ManagedTypeApi>{
     pub payment_nonce: u64,
 }
 
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct MarketStatus<M: ManagedTypeApi> {
+    pub market_id: u64,
+    pub description: ManagedBuffer<M>,
+    pub total_back_liquidity: BigUint<M>,
+    pub total_lay_liquidity: BigUint<M>,
+    pub total_bets: usize,
+    pub matched_bets: usize,
+    pub unmatched_bets: usize,
+    pub selections: ManagedVec<M, SelectionStatus<M>>,
+    pub close_timestamp: u64,
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct SelectionStatus<M: ManagedTypeApi> {
+    pub selection_id: u64,
+    pub description: ManagedBuffer<M>,
+    pub best_back_odds: BigUint<M>,
+    pub best_lay_odds: BigUint<M>,
+    pub back_liquidity: BigUint<M>,
+    pub lay_liquidity: BigUint<M>,
+    pub back_bets: usize,
+    pub lay_bets: usize,
+}
+
 #[multiversx_sc::module]
 pub trait StorageModule {
     #[view(getBetslipData)]
