@@ -7,3 +7,5 @@
 /.vscode/
 /wasm/
 meta_transaction_wallet.pem
+converted_wallet.pem
+test_wallet.json
