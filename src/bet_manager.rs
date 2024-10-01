@@ -1,4 +1,4 @@
-use crate::{constants::precision_factor, storage::{self, Bet, BetType, Market, Status}};
+use crate::{constants::precision_factor, storage::{self, Bet, BetType, Market, Selection, Status}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -34,9 +34,10 @@ pub trait BetManagerModule: storage::StorageModule
             BetType::Back => {
                 if best_lay_decimal == BigUint::zero() || odds_decimal <= best_lay_decimal {
                     if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
-                        best_back_decimal = odds.clone();
+                        selection.best_back_odds = odds.clone();
                     }
-                    best_back_decimal += &token_amount;
+                    selection.back_liquidity += &token_amount;
+                    market.back_liquidity += &token_amount;
                 } else {
                     return sc_error!("Back odds must be less than or equal to the best Lay odds");
                 }
@@ -44,16 +45,18 @@ pub trait BetManagerModule: storage::StorageModule
             BetType::Lay => {
                 if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
                     if best_lay_decimal == BigUint::zero() || odds_decimal < best_lay_decimal {
-                        best_lay_decimal = odds.clone();
+                        selection.best_lay_odds = odds.clone();
                     }
-                    best_lay_decimal += &token_amount;
+                    selection.lay_liquidity += &token_amount;
+                    market.lay_liquidity += &token_amount;
                 } else {
                     return sc_error!("Lay odds must be greater than the best Back odds");
                 }
             }
         }
+    
         // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
-        let (initial_status, matched_amount) = self.try_match_bet(&mut market, &selection_id, &bet_type, &odds, &token_amount);
+        let (initial_status, matched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &token_amount);
     
         let remaining_amount = &token_amount - &matched_amount;
         
@@ -103,10 +106,10 @@ pub trait BetManagerModule: storage::StorageModule
         Ok((bet_id, odds, token_amount))
     }
 
-    fn try_match_bet(
+    fn matching_bet(
         &self,
         market: &mut Market<Self::Api>,
-        selection_id: &u64,
+        selection: &mut Selection<Self::Api>,
         bet_type: &BetType,
         odds: &BigUint,
         amount: &BigUint
@@ -116,21 +119,28 @@ pub trait BetManagerModule: storage::StorageModule
     
         for i in 0..market.bets.len() {
             let mut existing_bet = market.bets.get(i);
-            if existing_bet.selection.selection_id == selection_id.clone() &&
+            if existing_bet.selection.selection_id == selection.selection_id &&
                 existing_bet.status == Status::Unmatched &&
-                existing_bet.bet_type != bet_type.clone() {
-                // Corectăm condițiile de potrivire pentru Back și Lay
+                existing_bet.bet_type != *bet_type {
                 if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
                    (bet_type == &BetType::Lay && odds >= &existing_bet.odd) {
-                    let match_amount = if remaining_amount < existing_bet.stake_amount {
-                        remaining_amount.clone()
-                    } else {
-                        existing_bet.stake_amount.clone()
-                    };
+                    let match_amount = remaining_amount.clone().min(existing_bet.stake_amount.clone());
     
                     matched_amount += &match_amount;
                     remaining_amount -= &match_amount;
                     existing_bet.stake_amount -= &match_amount;
+    
+                    // Ajustăm lichiditățile
+                    match bet_type {
+                        BetType::Back => {
+                            selection.lay_liquidity -= &match_amount;
+                            market.lay_liquidity -= &match_amount;
+                        },
+                        BetType::Lay => {
+                            selection.back_liquidity -= &match_amount;
+                            market.back_liquidity -= &match_amount;
+                        }
+                    }
     
                     if existing_bet.stake_amount == BigUint::zero() {
                         existing_bet.status = Status::Matched;
@@ -153,7 +163,6 @@ pub trait BetManagerModule: storage::StorageModule
     
         (status, matched_amount)
     }
-
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
         let precision_factor = precision_factor::<Self::Api>();
         let thousand = BigUint::from(1000u32);
