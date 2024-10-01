@@ -1,4 +1,4 @@
-use crate::storage::{self, Bet, BetType, Market, Status};
+use crate::{constants::precision_factor, storage::{self, Bet, BetType, Market, Status}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -25,14 +25,15 @@ pub trait BetManagerModule: storage::StorageModule
             .expect("Selection not found in this market");
         let mut selection = market.selections.get(selection_index);
 
+        let precision_factor = precision_factor::<Self::Api>();
+        let odds_decimal = &odds / &precision_factor;
+        let best_lay_decimal = &selection.best_lay_odds / &precision_factor;
+        let best_back_decimal = &selection.best_back_odds / &precision_factor;
+        
         match bet_type {
             BetType::Back => {
-                // Modificăm această condiție
-                sc_panic!("Selection Best_Lay_Odds: {}", selection.best_lay_odds);
-                sc_panic!("Odds {}", odds);
-                if selection.best_lay_odds == BigUint::zero() || odds <= selection.best_lay_odds {
-                    // Permite pariul Back
-                    if selection.best_back_odds == BigUint::zero() || odds > selection.best_back_odds {
+                if best_lay_decimal == BigUint::zero() || odds_decimal <= best_lay_decimal {
+                    if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
                         selection.best_back_odds = odds.clone();
                     }
                     selection.back_liquidity += &token_amount;
@@ -41,9 +42,8 @@ pub trait BetManagerModule: storage::StorageModule
                 }
             },
             BetType::Lay => {
-                if selection.best_back_odds == BigUint::zero() || odds > selection.best_back_odds {
-                    // Permite pariul Lay
-                    if selection.best_lay_odds == BigUint::zero() || odds < selection.best_lay_odds {
+                if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
+                    if best_lay_decimal == BigUint::zero() || odds_decimal < best_lay_decimal {
                         selection.best_lay_odds = odds.clone();
                     }
                     selection.lay_liquidity += &token_amount;
@@ -52,7 +52,6 @@ pub trait BetManagerModule: storage::StorageModule
                 }
             }
         }
-        
         // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
         let (initial_status, matched_amount) = self.try_match_bet(&mut market, &selection_id, &bet_type, &odds, &token_amount);
     
@@ -156,22 +155,29 @@ pub trait BetManagerModule: storage::StorageModule
     }
 
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
+        let precision_factor = precision_factor::<Self::Api>();
         let thousand = BigUint::from(1000u32);
         
+        // Ajustăm limitele pentru a ține cont de precizia înaltă
+        let min_odds = BigUint::from(1010u32) * &precision_factor / &thousand;
+        let max_odds = BigUint::from(1000000u32) * &precision_factor / &thousand;
+    
         // Verificăm dacă cotele sunt în intervalul valid
-        require!(odds >= &BigUint::from(1010u32) && odds <= &BigUint::from(1000000u32), 
-                 "Odds must be between 1.01 and 1000.000");
+        require!(
+            odds >= &min_odds && odds <= &max_odds,
+            "Odds must be between 1.01 and 1000.000"
+        );
     
         match bet_type {
             BetType::Back => {
-                // Formula: stake_amount * (odds - 1000) / 1000
-                stake_amount * &(odds - &thousand) / &thousand
+                // Formula: stake_amount * (odds - precision_factor) / precision_factor
+                stake_amount * &(odds - &precision_factor) / &precision_factor
             },
             BetType::Lay => {
-                // Formula: stake_amount * 1000 / (odds - 1000)
-                (stake_amount * &thousand) / (odds - &thousand)
+                // Formula: stake_amount * precision_factor / (odds - precision_factor)
+                (stake_amount * &precision_factor) / (odds - &precision_factor)
             },
         }
-    } 
+    }
            
 }
