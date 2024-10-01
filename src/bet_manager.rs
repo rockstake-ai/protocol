@@ -9,7 +9,7 @@ pub trait BetManagerModule: storage::StorageModule
 
     #[payable("*")]
     #[endpoint(placeBet)]
-    fn place_bet(&self, market_id: BigUint, selection_id: BigUint, odds: BigUint, bet_type: BetType) -> u64 {
+    fn place_bet(&self, market_id: u64, selection_id: u64, odds: BigUint, bet_type: BetType) -> u64 {
         let current_timestamp = self.blockchain().get_block_timestamp();
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, token_amount) = self.call_value().egld_or_single_esdt().into_tuple();
@@ -38,7 +38,7 @@ pub trait BetManagerModule: storage::StorageModule
             stake_amount: token_amount.clone(),
             win_amount,
             odd: odds.clone(),
-            bet_type: bet_type.clone(), // Clonăm bet_type aici
+            bet_type: bet_type.clone(),
             status: initial_status,
             payment_token: token_identifier.clone(),
             payment_nonce: token_nonce,
@@ -50,7 +50,6 @@ pub trait BetManagerModule: storage::StorageModule
         self.bet_by_id(bet_id).set(&bet);
         market.bets.push(bet.clone());
     
-        // Actualizăm selecția
         let mut selection = market.selections.get(selection_index);
         match bet_type {
             BetType::Back => {
@@ -67,7 +66,6 @@ pub trait BetManagerModule: storage::StorageModule
             }
         }
         let _ = market.selections.set(selection_index, &selection);
-    
         self.markets(&market_id).set(&market);
     
         if remaining_amount > BigUint::zero() {
@@ -75,7 +73,6 @@ pub trait BetManagerModule: storage::StorageModule
         }
     
         self.send().direct_esdt(&caller, self.bet_nft_token().get_token_id_ref(), bet_nft_nonce, &BigUint::from(1u64));
-    
         self.bet_placed_event(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
@@ -96,7 +93,7 @@ pub trait BetManagerModule: storage::StorageModule
     fn try_match_bet(
         &self,
         market: &mut Market<Self::Api>,
-        selection_id: &BigUint,
+        selection_id: &u64,
         bet_type: &BetType,
         odds: &BigUint,
         amount: &BigUint

@@ -21,7 +21,7 @@ pub enum BetType {
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
-    pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
+    pub event: u64,     // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
     pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
     pub stake_amount: BigUint<M>,      // Suma pariată
     pub win_amount: BigUint<M>,      // Suma pariată
@@ -35,7 +35,7 @@ pub struct Bet<M: ManagedTypeApi> {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Selection<M: ManagedTypeApi> {
-    pub selection_id: BigUint<M>,              // ID-ul unic al selecției
+    pub selection_id: u64,              // ID-ul unic al selecției
     pub description: ManagedBuffer<M>,         // Descrierea selecției (de ex. "Real Sociedad câștigă")
     pub back_liquidity: BigUint<M>,            // Lichiditatea disponibilă pentru BACK pe această selecție
     pub lay_liquidity: BigUint<M>,             // Lichiditatea disponibilă pentru LAY pe această selecție
@@ -45,8 +45,8 @@ pub struct Selection<M: ManagedTypeApi> {
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
 pub struct Market<M:ManagedTypeApi>{
-    pub market_id: BigUint<M>,              
-    pub event_id: BigUint<M>,                  
+    pub market_id: u64,              
+    pub event_id: u64,                  
     pub description: ManagedBuffer<M>,   
     pub selections: ManagedVec<M,Selection<M>>,
     pub back_liquidity: BigUint<M>,        
@@ -60,7 +60,7 @@ pub struct Market<M:ManagedTypeApi>{
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct BetAttributes<M:ManagedTypeApi>{
     pub bettor: ManagedAddress<M>,
-    pub event: BigUint<M>,      // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
+    pub event_id: u64,     // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
     pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
     pub stake_amount: BigUint<M>,      // Suma pariată
     pub win_amount: BigUint<M>,      // Suma pariată
@@ -88,7 +88,7 @@ pub trait StorageModule {
     }
 
     #[view(isMarketOpen)]
-    fn is_market_open(&self, market_id: BigUint) -> bool {
+    fn is_market_open(&self, market_id: u64) -> bool {
         if self.markets(&market_id).is_empty() {
             return false;
         }
@@ -100,7 +100,7 @@ pub trait StorageModule {
     }
 
     #[view(getMarketCounter)]
-    fn get_market_counter(&self) -> BigUint {
+    fn get_market_counter(&self) -> u64 {
         self.market_counter().get()
     }
 
@@ -118,9 +118,9 @@ pub trait StorageModule {
     fn bet_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
 
     #[storage_mapper("market_counter")]
-    fn market_counter(&self) -> SingleValueMapper<BigUint>;
+    fn market_counter(&self) -> SingleValueMapper<u64>;
     #[storage_mapper("markets")]
-    fn markets(&self, market_id: &BigUint) -> SingleValueMapper<Market<Self::Api>>;
+    fn markets(&self, market_id: &u64) -> SingleValueMapper<Market<Self::Api>>;
     #[storage_mapper("lockedFunds")]
     fn locked_funds(&self, user: &ManagedAddress) -> SingleValueMapper<BigUint<Self::Api>>;
 

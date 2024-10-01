@@ -17,12 +17,13 @@ storage::StorageModule
 + events::EventsModule
 + nft_manager::NftManagerModule
 + fund_manager::FundManagerModule
-+ bet_manager::BetManagerModule{
++ bet_manager::BetManagerModule
++ market_manager::MarketManagerModule{
     #[upgrade]
     fn upgrade(&self) {}
 
     #[init]
     fn init(&self) {
-        self.market_counter().set(&BigUint::from(1u32));
+        self.market_counter().set(1);
     }
 }

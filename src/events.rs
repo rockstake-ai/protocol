@@ -9,8 +9,8 @@ pub trait EventsModule {
         &self,
         #[indexed] caller: &ManagedAddress,
         #[indexed] betslip_token_id: &TokenIdentifier,
-        #[indexed] market_id: &BigUint,
-        #[indexed] selection_id: &BigUint,
+        #[indexed] market_id: &u64,
+        #[indexed] selection_id: &u64,
         #[indexed] total_amount: &BigUint,
         #[indexed] odds: &BigUint,
         #[indexed] bet_type: BetType,
@@ -24,7 +24,7 @@ pub trait EventsModule {
     fn market_closed_event(&self, #[indexed] market_id: BigUint, #[indexed] winning_selection_id: BigUint);
 
     #[event("expired_markets_closed")]
-    fn expired_markets_closed_event(&self, #[indexed] market_ids: ManagedVec<BigUint>);
+    fn expired_markets_closed_event(&self, #[indexed] market_ids: ManagedVec<u64>);
     
     #[event("refund_unmatched_bet")]
     fn refund_unmatched_bet_event(

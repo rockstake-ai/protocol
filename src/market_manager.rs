@@ -14,11 +14,11 @@ pub trait MarketManagerModule:
     #[endpoint(createMarket)]
     fn create_market(
         &self,
-        event_id: BigUint,
+        event_id: u64,
         description: ManagedBuffer,
         selections: ManagedVec<Selection<Self::Api>>,
         close_timestamp: u64
-    ) {
+    ) -> u64{
         let market_id = self.get_and_increment_market_counter();
         require!(self.markets(&market_id).is_empty(), "Market already exists");
         
@@ -38,11 +38,12 @@ pub trait MarketManagerModule:
             close_timestamp,
         };
         self.markets(&market_id).set(&market);
+        market_id
     }
 
-    fn get_and_increment_market_counter(&self) -> BigUint {
+    fn get_and_increment_market_counter(&self) -> u64 {
         let mut counter = self.market_counter().get();
-        counter += 1u32;
+        counter += 1;
         self.market_counter().set(&counter);
         counter
     }
@@ -55,7 +56,7 @@ pub trait MarketManagerModule:
         
         let total_markets = self.market_counter().get();
         
-        let one = BigUint::from(1u32);
+        let one = u64::from(1u32);
         let mut market_id = one.clone();
 
         while market_id <= total_markets {
