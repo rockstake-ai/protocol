@@ -20,6 +20,9 @@ pub trait EventsModule {
         #[indexed] remaining_amount: &BigUint
     );
 
+    #[event("debug")]
+    fn debug_event(&self, #[indexed] msg: ManagedBuffer, #[indexed] value: BigUint);
+
     #[event("market_closed")]
     fn market_closed_event(&self, #[indexed] market_id: BigUint, #[indexed] winning_selection_id: BigUint);
 

@@ -9,7 +9,7 @@ pub trait BetManagerModule: storage::StorageModule
 
     #[payable("*")]
     #[endpoint(placeBet)]
-    fn place_bet(&self, market_id: u64, selection_id: u64, odds: BigUint, bet_type: BetType) -> u64 {
+    fn place_bet(&self, market_id: u64, selection_id: u64, odds: BigUint, bet_type: BetType) -> SCResult<(u64, BigUint, BigUint)> {
         let current_timestamp = self.blockchain().get_block_timestamp();
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, token_amount) = self.call_value().egld_or_single_esdt().into_tuple();
@@ -23,18 +23,47 @@ pub trait BetManagerModule: storage::StorageModule
         let selection_index = market.selections.iter()
             .position(|s| &s.selection_id == &selection_id)
             .expect("Selection not found in this market");
-    
+        let mut selection = market.selections.get(selection_index);
+
+        match bet_type {
+            BetType::Back => {
+                // Modificăm această condiție
+                sc_panic!("Selection Best_Lay_Odds: {}", selection.best_lay_odds);
+                sc_panic!("Odds {}", odds);
+                if selection.best_lay_odds == BigUint::zero() || odds <= selection.best_lay_odds {
+                    // Permite pariul Back
+                    if selection.best_back_odds == BigUint::zero() || odds > selection.best_back_odds {
+                        selection.best_back_odds = odds.clone();
+                    }
+                    selection.back_liquidity += &token_amount;
+                } else {
+                    return sc_error!("Back odds must be less than or equal to the best Lay odds");
+                }
+            },
+            BetType::Lay => {
+                if selection.best_back_odds == BigUint::zero() || odds > selection.best_back_odds {
+                    // Permite pariul Lay
+                    if selection.best_lay_odds == BigUint::zero() || odds < selection.best_lay_odds {
+                        selection.best_lay_odds = odds.clone();
+                    }
+                    selection.lay_liquidity += &token_amount;
+                } else {
+                    return sc_error!("Lay odds must be greater than the best Back odds");
+                }
+            }
+        }
+        
         // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
         let (initial_status, matched_amount) = self.try_match_bet(&mut market, &selection_id, &bet_type, &odds, &token_amount);
     
         let remaining_amount = &token_amount - &matched_amount;
+        
         let win_amount = self.calculate_win_amount(&bet_type, &token_amount, &odds);
-    
-        let selection = market.selections.get(selection_index);
+        
         let bet = Bet {
             bettor: caller.clone(),
             event: market_id.clone(),
-            selection: selection,
+            selection: selection.clone(),
             stake_amount: token_amount.clone(),
             win_amount,
             odd: odds.clone(),
@@ -47,25 +76,9 @@ pub trait BetManagerModule: storage::StorageModule
         
     
         let bet_nft_nonce = self.mint_bet_nft(&bet);
-    
         self.bet_by_id(bet_id).set(&bet);
         market.bets.push(bet.clone());
-    
-        let mut selection = market.selections.get(selection_index);
-        match bet_type {
-            BetType::Back => {
-                selection.back_liquidity += &remaining_amount;
-                if odds > selection.best_back_odds {
-                    selection.best_back_odds = odds.clone();
-                }
-            },
-            BetType::Lay => {
-                selection.lay_liquidity += &remaining_amount;
-                if odds < selection.best_lay_odds || selection.best_lay_odds == BigUint::zero() {
-                    selection.best_lay_odds = odds.clone();
-                }
-            }
-        }
+
         let _ = market.selections.set(selection_index, &selection);
         self.markets(&market_id).set(&market);
     
@@ -88,7 +101,7 @@ pub trait BetManagerModule: storage::StorageModule
             &remaining_amount
         );
     
-        bet_id
+        Ok((bet_id, odds, token_amount))
     }
 
     fn try_match_bet(
@@ -107,8 +120,9 @@ pub trait BetManagerModule: storage::StorageModule
             if existing_bet.selection.selection_id == selection_id.clone() &&
                 existing_bet.status == Status::Unmatched &&
                 existing_bet.bet_type != bet_type.clone() {
-                if (bet_type.clone() == BetType::Back && odds >= &existing_bet.odd) ||
-                    (bet_type.clone() == BetType::Lay && odds <= &existing_bet.odd) {
+                // Corectăm condițiile de potrivire pentru Back și Lay
+                if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
+                   (bet_type == &BetType::Lay && odds >= &existing_bet.odd) {
                     let match_amount = if remaining_amount < existing_bet.stake_amount {
                         remaining_amount.clone()
                     } else {
