@@ -44,6 +44,7 @@ pub trait BetManagerModule: storage::StorageModule
             payment_nonce: token_nonce,
             nft_nonce: bet_id,
         };
+        
     
         let bet_nft_nonce = self.mint_bet_nft(&bet);
     
@@ -142,16 +143,21 @@ pub trait BetManagerModule: storage::StorageModule
 
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
         let thousand = BigUint::from(1000u32);
+        
+        // Verificăm dacă cotele sunt în intervalul valid
+        require!(odds >= &BigUint::from(1010u32) && odds <= &BigUint::from(1000000u32), 
+                 "Odds must be between 1.01 and 1000.000");
+    
         match bet_type {
             BetType::Back => {
-                // (stake_amount * (odds - 1000)) / 1000
-                (stake_amount * &(odds - &thousand)) / &thousand
+                // Formula: stake_amount * (odds - 1000) / 1000
+                stake_amount * &(odds - &thousand) / &thousand
             },
             BetType::Lay => {
-                // (stake_amount * 1000) / (odds - 1000)
-                (stake_amount * &thousand) / &(odds - &thousand)
+                // Formula: stake_amount * 1000 / (odds - 1000)
+                (stake_amount * &thousand) / (odds - &thousand)
             },
         }
-    }    
+    } 
            
 }
