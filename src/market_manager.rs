@@ -25,6 +25,22 @@ pub trait MarketManagerModule:
         let current_timestamp = self.blockchain().get_block_timestamp();
         require!(close_timestamp > current_timestamp, "Close timestamp must be in the future");
 
+        // for (index, selection) in selections.iter().enumerate() {
+        //     let back_liquidity_bytes = selection.back_liquidity.to_bytes_be();
+        //     let lay_liquidity_bytes = selection.lay_liquidity.to_bytes_be();
+        //     let best_back_odds_bytes = selection.best_back_odds.to_bytes_be();
+        //     let best_lay_odds_bytes = selection.best_lay_odds.to_bytes_be();
+    
+        //     sc_panic!("Selection {}: ID = {}, Back Liquidity = {}, Lay Liquidity = {}, Best Back Odds = {}, Best Lay Odds = {}",
+        //         index,
+        //         selection.selection_id,
+        //         selection.back_liquidity,
+        //         selection.lay_liquidity,
+        //         selection.best_back_odds,
+        //         selection.best_lay_odds
+        //     );
+        // }
+    
         let market = Market {
             market_id: market_id.clone(),
             event_id,

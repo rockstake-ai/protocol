@@ -28,33 +28,47 @@ pub trait BetManagerModule: storage::StorageModule
             .expect("Selection not found in this market");
         let mut selection = market.selections.get(selection_index);
 
-        // let best_lay_odds = &selection.best_lay_odds;
-        // let best_back_odds = &selection.best_back_odds;
+        let best_lay_odds = &selection.best_lay_odds;
+        let best_back_odds = &selection.best_back_odds;
 
-        // match bet_type {
-        //     BetType::Back => {
-        //         if best_lay_odds == &BigUint::zero() || &odds <= best_lay_odds {
-        //             if best_back_odds == &BigUint::zero() || &odds > best_back_odds {
-        //                 selection.best_back_odds = odds.clone();
-        //             }
-        //             selection.back_liquidity += &token_amount;
-        //             market.back_liquidity += &token_amount;
-        //         } else {
-        //             return sc_error!("Back odds must be less than or equal to the best Lay odds");
-        //         }
-        //     },
-        //     BetType::Lay => {
-        //         if best_back_odds == &BigUint::zero() || &odds >= best_back_odds {
-        //             if best_lay_odds == &BigUint::zero() || &odds < best_lay_odds {
-        //                 selection.best_lay_odds = odds.clone();
-        //             }
-        //             selection.lay_liquidity += &token_amount;
-        //             market.lay_liquidity += &token_amount;
-        //         } else {
-        //             return sc_error!("Lay odds must be greater than or equal to the best Back odds");
-        //         }
-        //     }
-        // }
+        let total_bets_matched = market.bets.iter().filter(|bet| bet.status == Status::Matched).count();
+        let total_bets_unmatched = market.bets.iter().filter(|bet| bet.status == Status::Unmatched).count();
+        
+        // sc_panic!(
+        //     "Details about current market situation: selection_back_liquidity={} best_back_odds={} selection_lay_liquidity={} best_lay_odds={} total_bets_matched={} total_bets_unmatched={}",
+        //     selection.back_liquidity,
+        //     best_back_odds,
+        //     selection.lay_liquidity,
+        //     best_lay_odds,
+        //     total_bets_matched,
+        //     total_bets_unmatched
+        // );
+
+        match bet_type {
+            BetType::Back => {
+                if best_lay_odds == &BigUint::zero() || &odds <= best_lay_odds {
+                    if best_back_odds == &BigUint::zero() || &odds > best_back_odds {
+                        selection.best_back_odds = odds.clone();
+                    }
+                    selection.back_liquidity += &token_amount;
+                    market.back_liquidity += &token_amount;
+                } else {
+                    return sc_error!("Back odds must be less than or equal to the best Lay odds");
+                }
+            },
+            BetType::Lay => {
+                if best_back_odds == &BigUint::zero() || &odds >= best_back_odds {
+                    if best_lay_odds == &BigUint::zero() || &odds > best_lay_odds {
+                        selection.best_lay_odds = odds.clone();
+                    }
+                    let potential_loss = self.calculate_win_amount(&bet_type, &token_amount, &odds);
+                    selection.lay_liquidity += &potential_loss;
+                    market.lay_liquidity += &potential_loss;
+                } else {
+                    return sc_error!("Lay odds must be greater than or equal to the best Back odds");
+                }
+            }
+        }
         
         // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
         let (initial_status, matched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &token_amount);
@@ -134,8 +148,9 @@ pub trait BetManagerModule: storage::StorageModule
                     // Ajustăm lichiditățile
                     match bet_type {
                         BetType::Back => {
-                            selection.lay_liquidity -= &match_amount;
-                            market.lay_liquidity -= &match_amount;
+                            let lay_liquidity_reduction = self.calculate_win_amount(&BetType::Lay, &match_amount, &existing_bet.odd);
+                            selection.lay_liquidity -= &lay_liquidity_reduction;
+                            market.lay_liquidity -= &lay_liquidity_reduction;
                         },
                         BetType::Lay => {
                             selection.back_liquidity -= &match_amount;
@@ -161,10 +176,9 @@ pub trait BetManagerModule: storage::StorageModule
         } else {
             Status::Unmatched
         };
-    
         (status, matched_amount)
     }
-    
+
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
         // Ajustăm limitele pentru a reprezenta odds cu două zecimale
         let min_odds = BigUint::from(101u32); // 1.01 * 100
