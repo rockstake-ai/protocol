@@ -1,4 +1,4 @@
-use crate::{constants::precision_factor, storage::{self, Bet, BetType, Market, Selection, Status}};
+use crate::{storage::{self, Bet, BetType, Market, Selection, Status}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -19,42 +19,43 @@ pub trait BetManagerModule: storage::StorageModule
         let mut market = self.markets(&market_id).get();
         require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
         require!(current_timestamp < market.close_timestamp, "Market is closed");
-    
+
+        // Verificăm dacă odds-ul este în intervalul corect (între 1.01 și 1000.00)
+        require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), "Odds must be between 1.01 and 1000.00");
+
         let selection_index = market.selections.iter()
             .position(|s| &s.selection_id == &selection_id)
             .expect("Selection not found in this market");
         let mut selection = market.selections.get(selection_index);
 
-        let precision_factor = precision_factor::<Self::Api>();
-        let odds_decimal = &odds / &precision_factor;
-        let mut best_lay_decimal = &selection.best_lay_odds / &precision_factor;
-        let mut best_back_decimal = &selection.best_back_odds / &precision_factor;
+        // let best_lay_odds = &selection.best_lay_odds;
+        // let best_back_odds = &selection.best_back_odds;
+
+        // match bet_type {
+        //     BetType::Back => {
+        //         if best_lay_odds == &BigUint::zero() || &odds <= best_lay_odds {
+        //             if best_back_odds == &BigUint::zero() || &odds > best_back_odds {
+        //                 selection.best_back_odds = odds.clone();
+        //             }
+        //             selection.back_liquidity += &token_amount;
+        //             market.back_liquidity += &token_amount;
+        //         } else {
+        //             return sc_error!("Back odds must be less than or equal to the best Lay odds");
+        //         }
+        //     },
+        //     BetType::Lay => {
+        //         if best_back_odds == &BigUint::zero() || &odds >= best_back_odds {
+        //             if best_lay_odds == &BigUint::zero() || &odds < best_lay_odds {
+        //                 selection.best_lay_odds = odds.clone();
+        //             }
+        //             selection.lay_liquidity += &token_amount;
+        //             market.lay_liquidity += &token_amount;
+        //         } else {
+        //             return sc_error!("Lay odds must be greater than or equal to the best Back odds");
+        //         }
+        //     }
+        // }
         
-        match bet_type {
-            BetType::Back => {
-                if best_lay_decimal == BigUint::zero() || odds_decimal <= best_lay_decimal {
-                    if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
-                        selection.best_back_odds = odds.clone();
-                    }
-                    selection.back_liquidity += &token_amount;
-                    market.back_liquidity += &token_amount;
-                } else {
-                    return sc_error!("Back odds must be less than or equal to the best Lay odds");
-                }
-            },
-            BetType::Lay => {
-                if best_back_decimal == BigUint::zero() || odds_decimal > best_back_decimal {
-                    if best_lay_decimal == BigUint::zero() || odds_decimal < best_lay_decimal {
-                        selection.best_lay_odds = odds.clone();
-                    }
-                    selection.lay_liquidity += &token_amount;
-                    market.lay_liquidity += &token_amount;
-                } else {
-                    return sc_error!("Lay odds must be greater than the best Back odds");
-                }
-            }
-        }
-    
         // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
         let (initial_status, matched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &token_amount);
     
@@ -163,28 +164,25 @@ pub trait BetManagerModule: storage::StorageModule
     
         (status, matched_amount)
     }
-    fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
-        let precision_factor = precision_factor::<Self::Api>();
-        let thousand = BigUint::from(1000u32);
-        
-        // Ajustăm limitele pentru a ține cont de precizia înaltă
-        let min_odds = BigUint::from(1010u32) * &precision_factor / &thousand;
-        let max_odds = BigUint::from(1000000u32) * &precision_factor / &thousand;
     
-        // Verificăm dacă cotele sunt în intervalul valid
+    fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
+        // Ajustăm limitele pentru a reprezenta odds cu două zecimale
+        let min_odds = BigUint::from(101u32); // 1.01 * 100
+        let max_odds = BigUint::from(100000u32); // 1000.00 * 100
+    
         require!(
             odds >= &min_odds && odds <= &max_odds,
-            "Odds must be between 1.01 and 1000.000"
+            "Odds must be between 1.01 and 1000.00"
         );
     
         match bet_type {
             BetType::Back => {
-                // Formula: stake_amount * (odds - precision_factor) / precision_factor
-                stake_amount * &(odds - &precision_factor) / &precision_factor
+                // Formula: stake_amount * (odds - 100) / 100
+                stake_amount * &(odds - &BigUint::from(100u32)) / BigUint::from(100u32)
             },
             BetType::Lay => {
-                // Formula: stake_amount * precision_factor / (odds - precision_factor)
-                (stake_amount * &precision_factor) / (odds - &precision_factor)
+                // Formula: stake_amount * 100 / (odds - 100)
+                (stake_amount * &BigUint::from(100u32)) / (odds - &BigUint::from(100u32))
             },
         }
     }

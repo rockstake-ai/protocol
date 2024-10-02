@@ -1,4 +1,4 @@
-use crate::{constants::precision_factor, storage::{BetType, Market, MarketStatus, Selection, SelectionStatus, Status}};
+use crate::{storage::{BetType, Market, MarketStatus, Selection, SelectionStatus, Status}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -90,7 +90,6 @@ pub trait MarketManagerModule:
         require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
         
         let market = self.markets(&market_id).get();
-        let precision_factor = precision_factor::<Self::Api>();
         
         let mut selections_status = ManagedVec::new();
         for selection in market.selections.iter() {
@@ -100,8 +99,8 @@ pub trait MarketManagerModule:
             selections_status.push(SelectionStatus {
                 selection_id: selection.selection_id,
                 description: selection.description.clone(),
-                best_back_odds: &selection.best_back_odds / &precision_factor,
-                best_lay_odds: &selection.best_lay_odds / &precision_factor,
+                best_back_odds: selection.best_back_odds,
+                best_lay_odds: selection.best_lay_odds,
                 back_liquidity: selection.back_liquidity.clone(),
                 lay_liquidity: selection.lay_liquidity.clone(),
                 back_bets,
