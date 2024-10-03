@@ -26,6 +26,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
     pub stake_amount: BigUint<M>,
     pub matched_amount: BigUint<M>, // Adăugat: suma potrivită
+    pub unmatched_amount: BigUint<M>,
     pub win_amount: BigUint<M>,      // Suma pariată
     pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
     pub bet_type: BetType,      // BACK sau LAY (adăugat)
