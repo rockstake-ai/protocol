@@ -8,6 +8,7 @@ pub mod errors;
 pub mod nft_manager;
 pub mod fund_manager;
 pub mod market_manager;
+pub mod validation;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -18,7 +19,8 @@ storage::StorageModule
 + nft_manager::NftManagerModule
 + fund_manager::FundManagerModule
 + bet_manager::BetManagerModule
-+ market_manager::MarketManagerModule{
++ market_manager::MarketManagerModule
++ validation::BetValidationModule{
     #[upgrade]
     fn upgrade(&self) {}
 

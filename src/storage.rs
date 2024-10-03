@@ -7,6 +7,7 @@ multiversx_sc::derive_imports!();
 pub enum Status {
     Matched,
     Unmatched,
+    PartiallyMatched,
     Win,
     Lost,
     Canceled,
@@ -23,7 +24,8 @@ pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
     pub event: u64,     // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
     pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
-    pub stake_amount: BigUint<M>,      // Suma pariată
+    pub stake_amount: BigUint<M>,
+    pub matched_amount: BigUint<M>, // Adăugat: suma potrivită
     pub win_amount: BigUint<M>,      // Suma pariată
     pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
     pub bet_type: BetType,      // BACK sau LAY (adăugat)

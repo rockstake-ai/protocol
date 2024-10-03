@@ -20,6 +20,18 @@ pub trait EventsModule {
         #[indexed] remaining_amount: &BigUint
     );
 
+    #[event("bet_closed")]
+fn bet_closed_event(
+    &self,
+    #[indexed] bettor: &ManagedAddress,
+    #[indexed] bet_id: &u64,
+    #[indexed] market_id: &u64,
+    #[indexed] selection_id: &u64,
+    #[indexed] refund_amount: &BigUint,
+    #[indexed] token_identifier: &EgldOrEsdtTokenIdentifier,
+    #[indexed] token_nonce: u64,
+);
+
     #[event("debug")]
     fn debug_event(&self, #[indexed] msg: ManagedBuffer, #[indexed] value: BigUint);
 
