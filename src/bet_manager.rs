@@ -61,9 +61,6 @@ pub trait BetManagerModule: storage::StorageModule
                     if best_lay_odds == &BigUint::zero() || &odds > best_lay_odds {
                         selection.best_lay_odds = odds.clone();
                     }
-                    let potential_loss = self.calculate_win_amount(&bet_type, &token_amount, &odds);
-                    selection.lay_liquidity += &potential_loss;
-                    market.lay_liquidity += &potential_loss;
                 } else {
                     return sc_error!("Lay odds must be greater than or equal to the best Back odds");
                 }
@@ -135,12 +132,12 @@ pub trait BetManagerModule: storage::StorageModule
         for i in 0..market.bets.len() {
             let mut existing_bet = market.bets.get(i);
             if existing_bet.selection.selection_id == selection.selection_id &&
-                existing_bet.status == Status::Unmatched &&
-                existing_bet.bet_type != *bet_type {
+               existing_bet.status == Status::Unmatched &&
+               existing_bet.bet_type != *bet_type {
                 if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
                    (bet_type == &BetType::Lay && odds >= &existing_bet.odd) {
                     let match_amount = remaining_amount.clone().min(existing_bet.stake_amount.clone());
-    
+                    
                     matched_amount += &match_amount;
                     remaining_amount -= &match_amount;
                     existing_bet.stake_amount -= &match_amount;
@@ -148,13 +145,37 @@ pub trait BetManagerModule: storage::StorageModule
                     // Ajustăm lichiditățile
                     match bet_type {
                         BetType::Back => {
-                            let lay_liquidity_reduction = self.calculate_win_amount(&BetType::Lay, &match_amount, &existing_bet.odd);
-                            selection.lay_liquidity -= &lay_liquidity_reduction;
-                            market.lay_liquidity -= &lay_liquidity_reduction;
+                            if existing_bet.bet_type == BetType::Lay {
+                                let lay_liquidity_reduction = self.calculate_win_amount(&BetType::Lay, &match_amount, &existing_bet.odd);
+                                sc_print!("Before Lay reduction: lay_liquidity = {}", selection.lay_liquidity);
+                                if selection.lay_liquidity >= lay_liquidity_reduction {
+                                    selection.lay_liquidity -= &lay_liquidity_reduction;
+                                } else {
+                                    selection.lay_liquidity = BigUint::zero();
+                                }
+                                if market.lay_liquidity >= lay_liquidity_reduction {
+                                    market.lay_liquidity -= &lay_liquidity_reduction;
+                                } else {
+                                    market.lay_liquidity = BigUint::zero();
+                                }
+                                sc_print!("After Lay reduction: lay_liquidity = {}", selection.lay_liquidity);
+                            }
                         },
                         BetType::Lay => {
-                            selection.back_liquidity -= &match_amount;
-                            market.back_liquidity -= &match_amount;
+                            if existing_bet.bet_type == BetType::Back {
+                                sc_print!("Before Back reduction: back_liquidity = {}", selection.back_liquidity);
+                                if selection.back_liquidity >= match_amount {
+                                    selection.back_liquidity -= &match_amount;
+                                } else {
+                                    selection.back_liquidity = BigUint::zero();
+                                }
+                                if market.back_liquidity >= match_amount {
+                                    market.back_liquidity -= &match_amount;
+                                } else {
+                                    market.back_liquidity = BigUint::zero();
+                                }
+                                sc_print!("After Back reduction: back_liquidity = {}", selection.back_liquidity);
+                            }
                         }
                     }
     
@@ -171,11 +192,21 @@ pub trait BetManagerModule: storage::StorageModule
             }
         }
     
+        // Adăugăm lichiditatea Lay doar pentru partea nepotrită a pariului Lay
+        if *bet_type == BetType::Lay && remaining_amount > BigUint::zero() {
+            let unmatched_lay_liquidity = self.calculate_win_amount(&BetType::Lay, &remaining_amount, odds);
+            sc_print!("Before Lay addition: lay_liquidity = {}", selection.lay_liquidity);
+            selection.lay_liquidity += &unmatched_lay_liquidity;
+            market.lay_liquidity += &unmatched_lay_liquidity;
+            sc_print!("After Lay addition: lay_liquidity = {}", selection.lay_liquidity);
+        }
+    
         let status = if matched_amount == *amount {
             Status::Matched
         } else {
             Status::Unmatched
         };
+    
         (status, matched_amount)
     }
 

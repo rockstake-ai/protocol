@@ -149,5 +149,9 @@ pub trait StorageModule {
     #[storage_mapper("lockedFunds")]
     fn locked_funds(&self, user: &ManagedAddress) -> SingleValueMapper<BigUint<Self::Api>>;
 
+    #[view(getPotentialLayLoss)]
+    #[storage_mapper("potential_lay_loss")]
+    fn potential_lay_loss(&self, bet_id: &u64) -> SingleValueMapper<BigUint>;
+
 }
 
