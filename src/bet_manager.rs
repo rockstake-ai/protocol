@@ -1,4 +1,4 @@
-use crate::{storage::{self, Bet, BetType, Market, Selection, BetStatus}};
+use crate::storage::{self, Bet, BetStatus, BetType, Market, MarketStatus, Selection};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -12,50 +12,41 @@ pub trait BetManagerModule: storage::StorageModule
     fn place_bet(&self, market_id: u64, selection_id: u64, odds: BigUint, bet_type: BetType) -> SCResult<(u64, BigUint, BigUint)> {
         let current_timestamp = self.blockchain().get_block_timestamp();
         let caller = self.blockchain().get_caller();
-        let (token_identifier, token_nonce, token_amount) = self.call_value().egld_or_single_esdt().into_tuple();
+        let (token_identifier, token_nonce, total_amount) = self.call_value().egld_or_single_esdt().into_tuple();
     
         let bet_id = self.get_last_bet_id() + 1;
     
         let mut market = self.markets(&market_id).get();
+
         require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
+        require!(market.market_status == MarketStatus::Open, "Market is not open for betting");
         require!(current_timestamp < market.close_timestamp, "Market is closed");
-
-        // Verificăm dacă odds-ul este în intervalul corect (între 1.01 și 1000.00)
         require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), "Odds must be between 1.01 and 1000.00");
-
+    
         let selection_index = market.selections.iter()
             .position(|s| &s.selection_id == &selection_id)
             .expect("Selection not found in this market");
         let mut selection = market.selections.get(selection_index);
-
-        let best_lay_odds = &selection.best_lay_odds;
-        let best_back_odds = &selection.best_back_odds;
-
-        match bet_type {
+    
+        // Calculăm miza efectivă și garanția
+        let (stake, collateral) = match bet_type {
             BetType::Back => {
-                if best_lay_odds == &BigUint::zero() || &odds <= best_lay_odds {
-                    if best_back_odds == &BigUint::zero() || &odds > best_back_odds {
-                        selection.best_back_odds = odds.clone();
-                    }
-                } else {
-                    return sc_error!("Back odds must be less than or equal to the best Lay odds");
-                }
+                let stake = total_amount.clone();
+                (stake, BigUint::zero())
             },
             BetType::Lay => {
-                if best_back_odds == &BigUint::zero() || &odds >= best_back_odds {
-                    if best_lay_odds == &BigUint::zero() || &odds > best_lay_odds {
-                        selection.best_lay_odds = odds.clone();
-                    }
-                    // Nu adăugăm toată suma la lichiditate aici
-                } else {
-                    return sc_error!("Lay odds must be greater than or equal to the best Back odds");
-                }
+                let stake = self.calculate_stake_from_win(&total_amount, &odds);
+                let collateral = total_amount.clone() - &stake;
+                (stake, collateral)
             }
-        }
-        
-        // Folosim o referință la bet_type pentru a o putea utiliza în multiple locuri
-        let (initial_status, matched_amount, unmatched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &token_amount); 
-        
+        };
+    
+        // Verificăm dacă utilizatorul a depus suficiente fonduri
+        require!(total_amount >= &stake + &collateral, "Insufficient funds for this bet");
+    
+        let (initial_status, matched_amount, unmatched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &stake); 
+    
+        // Actualizăm lichiditatea
         match bet_type {
             BetType::Back => {
                 selection.back_liquidity += &unmatched_amount;
@@ -66,17 +57,21 @@ pub trait BetManagerModule: storage::StorageModule
                 selection.lay_liquidity += &lay_liquidity;
                 market.lay_liquidity += &lay_liquidity;
             }
-        }        
-        let win_amount = self.calculate_win_amount(&bet_type, &token_amount, &odds);
-        
+        }
+    
+        let potential_profit = self.calculate_potential_profit(&bet_type, &stake, &odds);
+        let potential_liability = self.calculate_potential_liability(&bet_type, &stake, &odds);
+    
         let bet = Bet {
             bettor: caller.clone(),
-            event: market_id.clone(),
+            event: market_id,
             selection: selection.clone(),
-            stake_amount: token_amount.clone(),
+            stake_amount: stake.clone(),
+            collateral: collateral.clone(),
             matched_amount: matched_amount.clone(),
             unmatched_amount: unmatched_amount.clone(),
-            win_amount,
+            potential_profit,
+            potential_liability,
             odd: odds.clone(),
             bet_type: bet_type.clone(),
             status: initial_status,
@@ -84,53 +79,73 @@ pub trait BetManagerModule: storage::StorageModule
             payment_nonce: token_nonce,
             nft_nonce: bet_id,
         };
-        
     
         let bet_nft_nonce = self.mint_bet_nft(&bet);
         self.bet_by_id(bet_id).set(&bet);
         market.bets.push(bet.clone());
-
+    
         let _ = market.selections.set(selection_index, &selection);
+        market.total_matched_amount += &matched_amount;
         self.markets(&market_id).set(&market);
     
-        if unmatched_amount > BigUint::zero() {
-            self.locked_funds(&caller).update(|current_locked| *current_locked += &unmatched_amount);
+        // Blocăm fondurile nematchuite și garanția
+        if unmatched_amount > BigUint::zero() || collateral > BigUint::zero() {
+            let total_locked = &unmatched_amount + &collateral;
+            self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
         }
     
         self.send().direct_esdt(&caller, self.bet_nft_token().get_token_id_ref(), bet_nft_nonce, &BigUint::from(1u64));
+        
         self.bet_placed_event(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
             &market_id,
             &selection_id,
-            &token_amount,
+            &stake,
             &odds,
-            bet_type, // Folosim bet_type aici fără referință sau clonare
+            bet_type,
             &token_identifier,
             token_nonce,
             &matched_amount,
-            &unmatched_amount
+            &unmatched_amount,
+            &collateral
         );
     
-        Ok((bet_id, odds, token_amount))
+        // Returnăm surplusul utilizatorului, dacă există
+        let total_used = &stake + &collateral;
+        let surplus = total_amount - total_used;
+        if surplus > BigUint::zero() {
+            self.send().direct(&caller, &token_identifier, token_nonce, &surplus);
+        }
+    
+        Ok((bet_id, odds, stake))
     }
-
-    fn bet_type_to_number(&self, bet_type: &BetType) -> u8 {
+    
+    fn calculate_potential_profit(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
-            BetType::Back => 0,
-            BetType::Lay => 1,
+            BetType::Back => {
+                // Pentru pariuri Back, profitul potențial este (cotă - 1) * miză
+                let profit = (odds - &BigUint::from(100u32)) * stake / BigUint::from(100u32);
+                profit
+            },
+            BetType::Lay => {
+                // Pentru pariuri Lay, profitul potențial este chiar miza
+                stake.clone()
+            }
         }
     }
-
-    fn status_to_number(&self, status: &BetStatus) -> u8 {
-        match status {
-            BetStatus::Unmatched => 0,
-            BetStatus::PartiallyMatched => 1,
-            BetStatus::Matched => 2,
-            BetStatus::Canceled => 3,
-            BetStatus::Win => 4,
-            BetStatus::Lost => 5,
-            // Adaugă alte variante dacă există
+    
+    fn calculate_potential_liability(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
+        match bet_type {
+            BetType::Back => {
+                // Pentru pariuri Back, răspunderea potențială este chiar miza
+                stake.clone()
+            },
+            BetType::Lay => {
+                // Pentru pariuri Lay, răspunderea potențială este (cotă - 1) * miză
+                let liability = (odds - &BigUint::from(100u32)) * stake / BigUint::from(100u32);
+                liability
+            }
         }
     }
 
@@ -140,50 +155,34 @@ pub trait BetManagerModule: storage::StorageModule
         selection: &mut Selection<Self::Api>,
         bet_type: &BetType,
         odds: &BigUint,
-        amount: &BigUint
+        stake: &BigUint
     ) -> (BetStatus, BigUint, BigUint) {
-        
         let mut matched_amount = BigUint::zero();
-        let mut unmatched_amount = amount.clone();
+        let mut unmatched_amount = stake.clone();
     
         for i in 0..market.bets.len() {
             let mut existing_bet = market.bets.get(i);
-
-            // sc_panic!(
-            //     "Checking bet: existing_bet_type={}, existing_odds={}, existing_amount={}, existing_matched_amount={}, existing_status={}",
-            //     self.bet_type_to_number(&existing_bet.bet_type),
-            //     existing_bet.odd,
-            //     existing_bet.stake_amount,
-            //     existing_bet.matched_amount,
-            //     self.status_to_number(&existing_bet.status),
-            // );
-
+    
             if existing_bet.selection.selection_id == selection.selection_id &&
                (existing_bet.status == BetStatus::Unmatched || existing_bet.status == BetStatus::PartiallyMatched) &&
                existing_bet.bet_type != *bet_type {
-
+    
                 if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
                    (bet_type == &BetType::Lay && odds >= &existing_bet.odd) {
                     let existing_unmatched = &existing_bet.stake_amount - &existing_bet.matched_amount;
                     let mut match_amount = unmatched_amount.clone().min(existing_unmatched.clone());
-
-                    // sc_panic!("Potential match found: match_amount={}, existing_unmatched={}",
-                    //     match_amount,
-                    //     existing_unmatched
-                    // );
     
-                    // Calculăm suma reală care poate fi potrivită bazată pe lichiditate
                     match bet_type {
                         BetType::Back => {
-                            let potential_win = self.calculate_win_amount(bet_type, &match_amount, odds);
+                            let potential_win = self.calculate_potential_profit(bet_type, &match_amount, odds);
                             if potential_win > selection.lay_liquidity {
                                 match_amount = self.calculate_stake_from_win(&selection.lay_liquidity, odds);
                             }
                         },
                         BetType::Lay => {
-                            let potential_liability = self.calculate_win_amount(bet_type, &match_amount, odds);
+                            let potential_liability = self.calculate_potential_liability(bet_type, &match_amount, odds);
                             if potential_liability > selection.back_liquidity {
-                                match_amount = selection.back_liquidity.clone();
+                                match_amount = self.calculate_stake_from_liability(&selection.back_liquidity, odds);
                             }
                         }
                     }
@@ -191,27 +190,21 @@ pub trait BetManagerModule: storage::StorageModule
                     matched_amount += &match_amount;
                     unmatched_amount -= &match_amount;
                     existing_bet.matched_amount += &match_amount;
-
-                    // sc_panic!(
-                    //     "After liquidity check: adjusted_match_amount={}, new_matched_amount={}, new_unmatched_amount={}",
-                    //     match_amount,
-                    //     matched_amount + &match_amount,
-                    //     unmatched_amount - &match_amount
-                    // );
     
                     // Actualizăm lichiditățile
                     match bet_type {
                         BetType::Back => {
-                            let win_amount = self.calculate_win_amount(bet_type, &match_amount, odds);
+                            let win_amount = self.calculate_potential_profit(bet_type, &match_amount, odds);
                             selection.lay_liquidity -= &win_amount;
                             market.lay_liquidity -= &win_amount;
                         },
                         BetType::Lay => {
-                            selection.back_liquidity -= &match_amount;
-                            market.back_liquidity -= &match_amount;
+                            let liability = self.calculate_potential_liability(bet_type, &match_amount, odds);
+                            selection.back_liquidity -= &liability;
+                            market.back_liquidity -= &liability;
                         }
                     }
-
+    
                     // Actualizăm statusul pariului existent
                     if existing_bet.matched_amount == existing_bet.stake_amount {
                         existing_bet.status = BetStatus::Matched;
@@ -228,111 +221,26 @@ pub trait BetManagerModule: storage::StorageModule
             }
         }
     
-        let status = if matched_amount == *amount {
+        let status = if matched_amount == *stake {
             BetStatus::Matched
         } else if matched_amount > BigUint::zero() {
             BetStatus::PartiallyMatched
         } else {
             BetStatus::Unmatched
         };
-
-
-       
-            sc_panic!(
-                "Matching complete: status={}, matched_amount={}, unmatched_amount={}, selection_back_liquidity={}, selection_lay_liquidity={}",
-                self.status_to_number(&status),
-            matched_amount,
-    unmatched_amount,
-    selection.back_liquidity,
-    selection.lay_liquidity
-            );
     
         (status, matched_amount, unmatched_amount)
     }
     
-    // Funcție auxiliară pentru a calcula miza în funcție de câștigul potențial
     fn calculate_stake_from_win(&self, win_amount: &BigUint, odds: &BigUint) -> BigUint {
         (win_amount * &BigUint::from(100u32)) / (odds - &BigUint::from(100u32))
     }
     
-
-    #[endpoint(closeBet)]
-    fn close_bet(&self, bet_id: u64) -> SCResult<()> {
-        let caller = self.blockchain().get_caller();
-        let mut bet = self.bet_by_id(bet_id).get();
-
-        require!(bet.bettor == caller, "Only the bettor can close the bet");
-        require!(
-            bet.status == BetStatus::Matched || bet.status == BetStatus::PartiallyMatched,
-            "Bet cannot be closed in its current state"
-        );
-
-        let mut market = self.markets(&bet.event).get();
-        let selection_index = market.selections.iter()
-            .position(|s| s.selection_id == bet.selection.selection_id)
-            .expect("Selection not found in this market");
-        let mut selection = market.selections.get(selection_index);
-
-        let refund_amount = bet.unmatched_amount.clone();
-
-        match bet.bet_type {
-            BetType::Back => {
-                require!(
-                    selection.back_liquidity >= refund_amount,
-                    "Insufficient back liquidity"
-                );
-                selection.back_liquidity -= &refund_amount;
-                market.back_liquidity -= &refund_amount;
-            },
-            BetType::Lay => {
-                let lay_liquidity_reduction = self.calculate_win_amount(&BetType::Lay, &refund_amount, &bet.odd);
-                require!(
-                    selection.lay_liquidity >= lay_liquidity_reduction,
-                    "Insufficient lay liquidity"
-                );
-                selection.lay_liquidity -= &lay_liquidity_reduction;
-                market.lay_liquidity -= &lay_liquidity_reduction;
-            }
-        }
-
-        if bet.matched_amount == BigUint::zero() {
-            bet.status = BetStatus::Canceled;
-        } else {
-            bet.status = BetStatus::Matched;
-        }
-
-        bet.stake_amount = bet.matched_amount.clone();
-        bet.unmatched_amount = BigUint::zero();
-
-        self.bet_by_id(bet_id).set(&bet);
-        let _ = market.selections.set(selection_index, &selection);
-        self.markets(&bet.event).set(&market);
-
-        if refund_amount > BigUint::zero() {
-            self.send().direct(
-                &caller,
-                &bet.payment_token,
-                bet.payment_nonce,
-                &refund_amount
-            );
-        }
-
-        self.bet_closed_event(
-            &caller,
-            &bet_id,
-            &bet.event,
-            &bet.selection.selection_id,
-            &refund_amount,
-            &bet.payment_token,
-            bet.payment_nonce
-        );
-
-        Ok(())
+    fn calculate_stake_from_liability(&self, liability: &BigUint, odds: &BigUint) -> BigUint {
+        (liability * &BigUint::from(100u32)) / (odds - &BigUint::from(100u32))
     }
-
-
+    
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
-        // Ajustăm limitele pentru a reprezenta odds cu două zecimale
         let min_odds = BigUint::from(101u32); // 1.01 * 100
         let max_odds = BigUint::from(100000u32); // 1000.00 * 100
     
@@ -342,14 +250,8 @@ pub trait BetManagerModule: storage::StorageModule
         );
     
         match bet_type {
-            BetType::Back => {
-                // Formula: stake_amount * (odds - 100) / 100
-                stake_amount * &(odds - &BigUint::from(100u32)) / BigUint::from(100u32)
-            },
-            BetType::Lay => {
-                // Formula: stake_amount * 100 / (odds - 100)
-                (stake_amount * &BigUint::from(100u32)) / (odds - &BigUint::from(100u32))
-            },
+            BetType::Back => self.calculate_potential_profit(bet_type, stake_amount, odds),
+            BetType::Lay => self.calculate_potential_liability(bet_type, stake_amount, odds),
         }
     }
            

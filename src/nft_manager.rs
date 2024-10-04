@@ -63,7 +63,7 @@ pub trait NftManagerModule:
             event_id: bet.event.clone(),
             selection: bet.selection.clone(),
             stake_amount: bet.stake_amount.clone(),
-            win_amount: bet.win_amount.clone(),
+            win_amount: bet.potential_profit.clone(),
             odd: bet.odd.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),

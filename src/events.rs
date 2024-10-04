@@ -17,7 +17,9 @@ pub trait EventsModule {
         #[indexed] token_identifier: &EgldOrEsdtTokenIdentifier,
         #[indexed] token_nonce: u64,
         #[indexed] matched_amount: &BigUint,
-        #[indexed] remaining_amount: &BigUint
+        #[indexed] unmatched_amount: &BigUint,
+        #[indexed] collateral: &BigUint
+
     );
 
     #[event("bet_closed")]
