@@ -22,16 +22,18 @@ pub enum BetType {
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
-    pub event: u64,     // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
-    pub selection: Selection<M>,     // ID-ul selecției (ex: 1 = First Team Win)
-    pub stake_amount: BigUint<M>,
-    pub matched_amount: BigUint<M>, // Adăugat: suma potrivită
-    pub unmatched_amount: BigUint<M>,
-    pub win_amount: BigUint<M>,      // Suma pariată
-    pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
-    pub bet_type: BetType,      // BACK sau LAY (adăugat)
-    pub status: Status,         // Starea pariului (InProgress, Matched, etc.)
-    pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
+    pub event: u64, // ID-ul evenimentului (ex: Real Madrid vs Barcelona)
+    pub selection: Selection<M>, // ID-ul selecției (ex: 1 = First Team Win)
+    pub stake_amount: BigUint<M>, // Miza efectivă
+    pub collateral: BigUint<M>, // Garanția blocată (pentru pariuri LAY)
+    pub matched_amount: BigUint<M>, // Suma potrivită
+    pub unmatched_amount: BigUint<M>, // Suma nepotrivită
+    pub potential_profit: BigUint<M>, // Profitul potențial (înlocuiește win_amount)
+    pub potential_liability: BigUint<M>, // Pierderea potențială maximă (pentru pariuri LAY)
+    pub odd: BigUint<M>, // Cota la care s-a plasat pariul
+    pub bet_type: BetType, // BACK sau LAY
+    pub status: Status, // Starea pariului (Unmatched, PartiallyMatched, Matched, etc.)
+    pub payment_token: EgldOrEsdtTokenIdentifier<M>, // e.g BOBER
     pub payment_nonce: u64,
     pub nft_nonce: u64,
 }
