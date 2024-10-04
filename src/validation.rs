@@ -83,28 +83,28 @@ pub trait BetValidationModule:
 
     // Funcție auxiliară pentru procesarea plăților pentru pariurile câștigătoare
     fn process_winning_bet(&self, bet: &Bet<Self::Api>) {
-        // let bettor = &bet.bettor;
-        // let token_identifier = &bet.payment_token;
-        // let win_amount = &bet.win_amount;
+        let bettor = &bet.bettor;
+        let token_identifier = &bet.payment_token;
+        let win_amount = &bet.potential_profit;
 
-        // // Transferăm suma câștigată către pariator
-        // self.send().direct(
-        //     &bettor,
-        //     &token_identifier,
-        //     bet.payment_nonce,
-        //     &win_amount,
-        // );
+        // Transferăm suma câștigată către pariator
+        self.send().direct(
+            &bettor,
+            &token_identifier,
+            bet.payment_nonce,
+            &win_amount,
+        );
 
-        // // Emitem un eveniment pentru câștig
-        // self.bet_won_event(
-        //     &bettor,
-        //     &bet.nft_nonce,
-        //     &bet.event,
-        //     &bet.selection.selection_id,
-        //     &win_amount,
-        //     &token_identifier,
-        //     bet.payment_nonce,
-        // );
+        // Emitem un eveniment pentru câștig
+        self.bet_won_event(
+            &bettor,
+            &bet.nft_nonce,
+            &bet.event,
+            &bet.selection.selection_id,
+            &win_amount,
+            &token_identifier,
+            bet.payment_nonce,
+        );
     }
 
     // Storage pentru rezultatele evenimentelor
