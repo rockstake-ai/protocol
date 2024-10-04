@@ -1,4 +1,4 @@
-use crate::{storage::{BetType, Market, MarketStatus, Selection, SelectionStatus, Status}};
+use crate::{storage::{BetType, Market, MarketStatus, Selection, SelectionStatus, BetStatus}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -64,7 +64,7 @@ pub trait MarketManagerModule:
                 let mut market = self.markets(&market_id).get();
                 if current_timestamp >= market.close_timestamp && !self.is_market_closed(&market) {
                     for bet in market.bets.iter() {
-                        if bet.status == Status::Unmatched {
+                        if bet.status == BetStatus::Unmatched {
                             self.distribute_rewards(bet.nft_nonce);
                         }
                     }
@@ -80,7 +80,7 @@ pub trait MarketManagerModule:
 
     fn is_market_closed(&self, market: &Market<Self::Api>) -> bool {
         market.bets.iter().all(|bet| 
-            matches!(bet.status, Status::Win | Status::Lost | Status::Canceled)
+            matches!(bet.status, BetStatus::Win | BetStatus::Lost | BetStatus::Canceled)
         )
     }
 
@@ -109,8 +109,8 @@ pub trait MarketManagerModule:
         }
         
         let total_bets = market.bets.len();
-        let matched_bets = self.count_bets_by_status(&market, &Status::Matched);
-        let unmatched_bets = self.count_bets_by_status(&market, &Status::Unmatched);
+        let matched_bets = self.count_bets_by_status(&market, &BetStatus::Matched);
+        let unmatched_bets = self.count_bets_by_status(&market, &BetStatus::Unmatched);
         
         Ok(MarketStatus {
             market_id: market.market_id,
@@ -131,7 +131,7 @@ pub trait MarketManagerModule:
             .count()
     }
 
-    fn count_bets_by_status(&self, market: &Market<Self::Api>, status: &Status) -> usize {
+    fn count_bets_by_status(&self, market: &Market<Self::Api>, status: &BetStatus) -> usize {
         market.bets.iter()
             .filter(|bet| bet.status == *status)
             .count()

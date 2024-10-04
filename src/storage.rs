@@ -4,7 +4,7 @@ multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
-pub enum Status {
+pub enum BetStatus {
     Matched,
     Unmatched,
     PartiallyMatched,
@@ -19,6 +19,14 @@ pub enum BetType {
     Lay
 }
 
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone, PartialEq)]
+pub enum MarketStatus {
+    Open,    // Piața este deschisă pentru pariuri
+    Closed,  // Piața este închisă pentru pariuri noi, dar încă nu s-a stabilit rezultatul
+    Settled  // Rezultatul a fost stabilit și pariurile au fost decontate
+}
+
+
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
@@ -32,7 +40,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub potential_liability: BigUint<M>, // Pierderea potențială maximă (pentru pariuri LAY)
     pub odd: BigUint<M>, // Cota la care s-a plasat pariul
     pub bet_type: BetType, // BACK sau LAY
-    pub status: Status, // Starea pariului (Unmatched, PartiallyMatched, Matched, etc.)
+    pub status: BetStatus, // Starea pariului (Unmatched, PartiallyMatched, Matched, etc.)
     pub payment_token: EgldOrEsdtTokenIdentifier<M>, // e.g BOBER
     pub payment_nonce: u64,
     pub nft_nonce: u64,
@@ -49,17 +57,20 @@ pub struct Selection<M: ManagedTypeApi> {
 }
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
-pub struct Market<M:ManagedTypeApi>{
-    pub market_id: u64,              
-    pub event_id: u64,                  
-    pub description: ManagedBuffer<M>,   
-    pub selections: ManagedVec<M,Selection<M>>,
-    pub back_liquidity: BigUint<M>,        
-    pub lay_liquidity: BigUint<M>,          
-    pub best_back_odds: BigUint<M>,         
-    pub best_lay_odds: BigUint<M>,          
+pub struct Market<M: ManagedTypeApi> {
+    pub market_id: u64,
+    pub event_id: u64,
+    pub description: ManagedBuffer<M>,
+    pub selections: ManagedVec<M, Selection<M>>,
+    pub back_liquidity: BigUint<M>,
+    pub lay_liquidity: BigUint<M>,
+    pub best_back_odds: BigUint<M>,
+    pub best_lay_odds: BigUint<M>,
     pub bets: ManagedVec<M, Bet<M>>,
     pub close_timestamp: u64, // Timestamp când piața se închide
+    pub market_status: MarketStatus, // Adăugat: starea curentă a pieței
+    pub total_matched_amount: BigUint<M>, // Adăugat: suma totală potrivită în această piață
+    pub created_timestamp: u64, // Adăugat: timestamp-ul creării pieței
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -71,34 +82,9 @@ pub struct BetAttributes<M:ManagedTypeApi>{
     pub win_amount: BigUint<M>,      // Suma pariată
     pub odd: BigUint<M>,        // Cota la care s-a plasat pariul
     pub bet_type: BetType,      // BACK sau LAY (adăugat)
-    pub status: Status,         // Starea pariului (InProgress, Matched, etc.)
+    pub status: BetStatus,         // Starea pariului (InProgress, Matched, etc.)
     pub payment_token: EgldOrEsdtTokenIdentifier<M>, //e.g BOBER
     pub payment_nonce: u64,
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct MarketStatus<M: ManagedTypeApi> {
-    pub market_id: u64,
-    pub description: ManagedBuffer<M>,
-    pub total_back_liquidity: BigUint<M>,
-    pub total_lay_liquidity: BigUint<M>,
-    pub total_bets: usize,
-    pub matched_bets: usize,
-    pub unmatched_bets: usize,
-    pub selections: ManagedVec<M, SelectionStatus<M>>,
-    pub close_timestamp: u64,
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct SelectionStatus<M: ManagedTypeApi> {
-    pub selection_id: u64,
-    pub description: ManagedBuffer<M>,
-    pub best_back_odds: BigUint<M>,
-    pub best_lay_odds: BigUint<M>,
-    pub back_liquidity: BigUint<M>,
-    pub lay_liquidity: BigUint<M>,
-    pub back_bets: usize,
-    pub lay_bets: usize,
 }
 
 #[multiversx_sc::module]

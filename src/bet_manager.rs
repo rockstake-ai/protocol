@@ -1,4 +1,4 @@
-use crate::{storage::{self, Bet, BetType, Market, Selection, Status}};
+use crate::{storage::{self, Bet, BetType, Market, Selection, BetStatus}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -122,14 +122,14 @@ pub trait BetManagerModule: storage::StorageModule
         }
     }
 
-    fn status_to_number(&self, status: &Status) -> u8 {
+    fn status_to_number(&self, status: &BetStatus) -> u8 {
         match status {
-            Status::Unmatched => 0,
-            Status::PartiallyMatched => 1,
-            Status::Matched => 2,
-            Status::Canceled => 3,
-            Status::Win => 4,
-            Status::Lost => 5,
+            BetStatus::Unmatched => 0,
+            BetStatus::PartiallyMatched => 1,
+            BetStatus::Matched => 2,
+            BetStatus::Canceled => 3,
+            BetStatus::Win => 4,
+            BetStatus::Lost => 5,
             // Adaugă alte variante dacă există
         }
     }
@@ -141,7 +141,7 @@ pub trait BetManagerModule: storage::StorageModule
         bet_type: &BetType,
         odds: &BigUint,
         amount: &BigUint
-    ) -> (Status, BigUint, BigUint) {
+    ) -> (BetStatus, BigUint, BigUint) {
         
         let mut matched_amount = BigUint::zero();
         let mut unmatched_amount = amount.clone();
@@ -159,7 +159,7 @@ pub trait BetManagerModule: storage::StorageModule
             // );
 
             if existing_bet.selection.selection_id == selection.selection_id &&
-               (existing_bet.status == Status::Unmatched || existing_bet.status == Status::PartiallyMatched) &&
+               (existing_bet.status == BetStatus::Unmatched || existing_bet.status == BetStatus::PartiallyMatched) &&
                existing_bet.bet_type != *bet_type {
 
                 if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
@@ -214,9 +214,9 @@ pub trait BetManagerModule: storage::StorageModule
 
                     // Actualizăm statusul pariului existent
                     if existing_bet.matched_amount == existing_bet.stake_amount {
-                        existing_bet.status = Status::Matched;
+                        existing_bet.status = BetStatus::Matched;
                     } else {
-                        existing_bet.status = Status::PartiallyMatched;
+                        existing_bet.status = BetStatus::PartiallyMatched;
                     }
     
                     let _ = market.bets.set(i, &existing_bet);
@@ -229,11 +229,11 @@ pub trait BetManagerModule: storage::StorageModule
         }
     
         let status = if matched_amount == *amount {
-            Status::Matched
+            BetStatus::Matched
         } else if matched_amount > BigUint::zero() {
-            Status::PartiallyMatched
+            BetStatus::PartiallyMatched
         } else {
-            Status::Unmatched
+            BetStatus::Unmatched
         };
 
 
@@ -263,7 +263,7 @@ pub trait BetManagerModule: storage::StorageModule
 
         require!(bet.bettor == caller, "Only the bettor can close the bet");
         require!(
-            bet.status == Status::Matched || bet.status == Status::PartiallyMatched,
+            bet.status == BetStatus::Matched || bet.status == BetStatus::PartiallyMatched,
             "Bet cannot be closed in its current state"
         );
 
@@ -296,9 +296,9 @@ pub trait BetManagerModule: storage::StorageModule
         }
 
         if bet.matched_amount == BigUint::zero() {
-            bet.status = Status::Canceled;
+            bet.status = BetStatus::Canceled;
         } else {
-            bet.status = Status::Matched;
+            bet.status = BetStatus::Matched;
         }
 
         bet.stake_amount = bet.matched_amount.clone();

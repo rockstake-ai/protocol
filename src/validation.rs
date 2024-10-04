@@ -1,4 +1,4 @@
-use crate::storage::{Bet, BetType, Status};
+use crate::storage::{Bet, BetType, BetStatus};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -48,7 +48,7 @@ pub trait BetValidationModule:
             let mut processed_bets = MultiValueEncoded::new();
 
             for bet in market.bets.iter() {
-                if bet.status != Status::Matched {
+                if bet.status != BetStatus::Matched {
                     continue;
                 }
 
@@ -57,7 +57,7 @@ pub trait BetValidationModule:
                     BetType::Lay => bet.selection.selection_id != winning_selection_id,
                 };
 
-                let new_status = if is_winner { Status::Win } else { Status::Lost };
+                let new_status = if is_winner { BetStatus::Win } else { BetStatus::Lost };
                 let mut updated_bet = bet.clone();
                 updated_bet.status = new_status;
 
