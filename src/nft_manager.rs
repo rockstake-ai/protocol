@@ -60,10 +60,14 @@ pub trait NftManagerModule:
 
         let attributes = BetAttributes {
             bettor: bet.bettor.clone(),
-            event_id: bet.event.clone(),
+            event: bet.event.clone(),
             selection: bet.selection.clone(),
             stake_amount: bet.stake_amount.clone(),
-            win_amount: bet.potential_profit.clone(),
+            collateral: bet.collateral.clone(),
+            matched_amount: bet.matched_amount.clone(),
+            unmatched_amount: bet.unmatched_amount.clone(),
+            potential_profit: bet.potential_profit.clone(),
+            potential_liability: bet.potential_liability.clone(),
             odd: bet.odd.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),
