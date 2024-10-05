@@ -26,7 +26,6 @@ pub enum MarketStatus {
     Settled  // Rezultatul a fost stabilit și pariurile au fost decontate
 }
 
-
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
