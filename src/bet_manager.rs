@@ -18,11 +18,11 @@ pub trait BetManagerModule: storage::StorageModule
             require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), "Odds must be between 1.01 and 1000.00");
     
         let caller = self.blockchain().get_caller();
-        let (token_identifier, token_nonce, total_esdts_amount) = self.call_value().egld_or_single_esdt().into_tuple();
+        let (token_identifier, token_nonce, stake_amount) = self.call_value().egld_or_single_esdt().into_tuple();
         let bet_id = self.get_last_bet_id() + 1;
 
-        //TODO 
-        //get_total_esdt_tokens_from_caller() 
+        let token_identifier_clone = token_identifier.clone();
+        let total_amount = self.blockchain().get_esdt_balance(&caller, &token_identifier_clone.unwrap_esdt(), token_nonce);
 
         let selection_index = market.selections.iter()
             .position(|s| &s.selection_id == &selection_id)
@@ -31,17 +31,17 @@ pub trait BetManagerModule: storage::StorageModule
     
         let (stake, collateral) = match bet_type {
             BetType::Back => {
-                let stake = total_esdts_amount.clone();
+                let stake = stake_amount.clone();
                 (stake, BigUint::zero())
             },
             BetType::Lay => {
-                let stake = self.calculate_stake_from_win(&total_esdts_amount, &odds);
-                let collateral = total_esdts_amount.clone() - &stake;
+                let stake = self.calculate_stake_from_win(&stake_amount, &odds);
+                let collateral = stake_amount.clone() - &stake;
                 (stake, collateral)
             }
         };
     
-        require!(total_esdts_amount >= &stake + &collateral, "Insufficient funds for this bet");
+        require!(total_amount >= &stake + &collateral, "Insufficient funds for this bet");
     
         let (initial_status, matched_amount, unmatched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &stake); 
     
@@ -109,7 +109,7 @@ pub trait BetManagerModule: storage::StorageModule
         );
     
         let total_used = &stake + &collateral;
-        let surplus = total_esdts_amount - total_used;
+        let surplus = stake_amount - total_used;
         if surplus > BigUint::zero() {
             self.send().direct(&caller, &token_identifier, token_nonce, &surplus);
         }
