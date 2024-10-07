@@ -32,7 +32,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub event: u64, 
     pub selection: Selection<M>, 
     pub stake_amount: BigUint<M>, 
-    pub collateral: BigUint<M>, 
+    pub liability: BigUint<M>, 
     pub matched_amount: BigUint<M>, 
     pub unmatched_amount: BigUint<M>, 
     pub potential_profit: BigUint<M>, 

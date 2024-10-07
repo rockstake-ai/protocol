@@ -29,19 +29,19 @@ pub trait BetManagerModule: storage::StorageModule
             .expect("Selection not found in this market");
         let mut selection = market.selections.get(selection_index);
     
-        let (stake, collateral) = match bet_type {
+        let (stake, liability) = match bet_type {
             BetType::Back => {
                 let stake = stake_amount.clone();
-                (stake, BigUint::zero())
+                (stake.clone(), stake)
             },
             BetType::Lay => {
-                let stake = self.calculate_stake_from_win(&stake_amount, &odds);
-                let collateral = stake_amount.clone() - &stake;
-                (stake, collateral)
+                let liability = self.calculate_potential_liability(&bet_type, &stake_amount, &odds);
+                let stake = self.calculate_stake_from_liability(&liability, &odds);
+                (stake, liability)
             }
         };
     
-        require!(total_amount >= &stake + &collateral, "Insufficient funds for this bet");
+        require!(total_amount >= liability, "Insufficient funds for this bet");
     
         let (initial_status, matched_amount, unmatched_amount) = self.matching_bet(&mut market, &mut selection, &bet_type, &odds, &stake); 
     
@@ -65,7 +65,10 @@ pub trait BetManagerModule: storage::StorageModule
             event: market_id,
             selection: selection.clone(),
             stake_amount: stake.clone(),
-            collateral: collateral.clone(),
+            liability: match bet_type {
+                BetType::Back => BigUint::zero(),
+                BetType::Lay => liability.clone() - &stake,
+            },
             matched_amount: matched_amount.clone(),
             unmatched_amount: unmatched_amount.clone(),
             potential_profit,
@@ -86,10 +89,14 @@ pub trait BetManagerModule: storage::StorageModule
         market.total_matched_amount += &matched_amount;
         self.markets(&market_id).set(&market);
     
-        if unmatched_amount > BigUint::zero() || collateral > BigUint::zero() {
-            let total_locked = &unmatched_amount + &collateral;
+        if unmatched_amount > BigUint::zero() || liability > stake {
+            let total_locked = match bet_type {
+                BetType::Back => unmatched_amount.clone(),
+                BetType::Lay => liability.clone() - &stake + &unmatched_amount,
+            };
             self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
         }
+    
     
         self.send().direct_esdt(&caller, self.bet_nft_token().get_token_id_ref(), bet_nft_nonce, &BigUint::from(1u64));
         
@@ -105,11 +112,10 @@ pub trait BetManagerModule: storage::StorageModule
             token_nonce,
             &matched_amount,
             &unmatched_amount,
-            &collateral
+            &(liability.clone() - &stake)
         );
     
-        let total_used = &stake + &collateral;
-        let surplus = stake_amount - total_used;
+        let surplus = stake_amount - liability;
         if surplus > BigUint::zero() {
             self.send().direct(&caller, &token_identifier, token_nonce, &surplus);
         }
