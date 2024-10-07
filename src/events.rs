@@ -1,4 +1,4 @@
-use crate::storage::BetType;
+use crate::types::BetType;
 
 multiversx_sc::imports!();
 

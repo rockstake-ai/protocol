@@ -2,7 +2,7 @@ use crate::{types::{Bet, BetType, Market}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct PriorityQueue<M: ManagedTypeApi> {
     back_bets: ManagedVec<M, Bet<M>>,
     lay_bets: ManagedVec<M, Bet<M>>,

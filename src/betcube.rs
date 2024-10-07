@@ -21,8 +21,7 @@ storage::StorageModule
 + nft_manager::NftManagerModule
 + fund_manager::FundManagerModule
 + bet_manager::BetManagerModule
-+ market_manager::MarketManagerModule
-+ validation::BetValidationModule{
++ market_manager::MarketManagerModule{
     #[upgrade]
     fn upgrade(&self) {}
 

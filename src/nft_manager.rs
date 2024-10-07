@@ -63,7 +63,7 @@ pub trait NftManagerModule:
             event: bet.event.clone(),
             selection: bet.selection.clone(),
             stake_amount: bet.stake_amount.clone(),
-            collateral: bet.liability.clone(),
+            liability: bet.liability.clone(),
             matched_amount: bet.matched_amount.clone(),
             unmatched_amount: bet.unmatched_amount.clone(),
             potential_profit: bet.potential_profit.clone(),
