@@ -79,6 +79,7 @@ pub trait BetManagerModule: storage::StorageModule
             payment_token: token_identifier.clone(),
             payment_nonce: token_nonce,
             nft_nonce: bet_id,
+            timestamp: current_timestamp
         };
     
         let bet_nft_nonce = self.mint_bet_nft(&bet);

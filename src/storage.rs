@@ -1,4 +1,4 @@
-use crate::errors::ERR_INVALID_STREAM;
+use crate::{errors::ERR_INVALID_STREAM, priority_queue::PriorityQueue};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -43,6 +43,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub payment_token: EgldOrEsdtTokenIdentifier<M>,
     pub payment_nonce: u64,
     pub nft_nonce: u64,
+    pub timestamp: u64, // Adăugați acest câmp nou
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -146,6 +147,10 @@ pub trait StorageModule {
     #[view(getPotentialLayLoss)]
     #[storage_mapper("potential_lay_loss")]
     fn potential_lay_loss(&self, bet_id: &u64) -> SingleValueMapper<BigUint>;
+
+    #[view(getUnmatchedBets)]
+    #[storage_mapper("unmatched_bets")]
+    fn unmatched_bets(&self, market_id: u64) -> SingleValueMapper<PriorityQueue<Self::Api>>;
 
 }
 

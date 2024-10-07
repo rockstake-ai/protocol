@@ -9,6 +9,7 @@ pub mod nft_manager;
 pub mod fund_manager;
 pub mod market_manager;
 pub mod validation;
+pub mod priority_queue;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
