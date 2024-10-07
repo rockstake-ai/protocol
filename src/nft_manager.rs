@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, storage::{Bet, BetAttributes}};
+use crate::{errors::{ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes}};
 
 multiversx_sc::imports!();
 

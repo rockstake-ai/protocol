@@ -1,4 +1,4 @@
-use crate::storage::{Market, MarketStatus, Selection};
+use crate::types::{Bet, Market, MarketStatus, Selection};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();

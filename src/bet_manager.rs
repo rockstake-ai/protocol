@@ -1,9 +1,9 @@
-use crate::storage::{self, Bet, BetStatus, BetType, Market, MarketStatus, Selection};
+use crate::types::{self, Bet, BetStatus, BetType, Market, MarketStatus, Selection};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
 #[multiversx_sc::module]
-pub trait BetManagerModule: storage::StorageModule 
+pub trait BetManagerModule: crate::storage::StorageModule 
     + crate::events::EventsModule 
     + crate::nft_manager::NftManagerModule {
 
@@ -82,8 +82,8 @@ pub trait BetManagerModule: storage::StorageModule
     
         let bet_nft_nonce = self.mint_bet_nft(&bet);
         self.bet_by_id(bet_id).set(&bet);
+
         market.bets.push(bet.clone());
-    
         let _ = market.selections.set(selection_index, &selection);
         market.total_matched_amount += &matched_amount;
         self.markets(&market_id).set(&market);

@@ -10,6 +10,7 @@ pub mod fund_manager;
 pub mod market_manager;
 pub mod validation;
 pub mod priority_queue;
+pub mod types;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();

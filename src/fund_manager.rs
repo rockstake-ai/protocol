@@ -1,4 +1,4 @@
-use crate::storage::{BetType, BetStatus};
+use crate::types::{BetType, BetStatus};
 multiversx_sc::imports!();
 
 #[multiversx_sc::module]
