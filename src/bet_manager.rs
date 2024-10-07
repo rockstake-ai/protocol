@@ -58,7 +58,6 @@ pub trait BetManagerModule: storage::StorageModule
         }
     
         let potential_profit = self.calculate_potential_profit(&bet_type, &stake, &odds);
-        let potential_liability = self.calculate_potential_liability(&bet_type, &stake, &odds);
     
         let bet = Bet {
             bettor: caller.clone(),
@@ -72,7 +71,6 @@ pub trait BetManagerModule: storage::StorageModule
             matched_amount: matched_amount.clone(),
             unmatched_amount: unmatched_amount.clone(),
             potential_profit,
-            potential_liability,
             odd: odds.clone(),
             bet_type: bet_type.clone(),
             status: initial_status,

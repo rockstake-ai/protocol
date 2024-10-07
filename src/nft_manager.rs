@@ -67,12 +67,12 @@ pub trait NftManagerModule:
             matched_amount: bet.matched_amount.clone(),
             unmatched_amount: bet.unmatched_amount.clone(),
             potential_profit: bet.potential_profit.clone(),
-            potential_liability: bet.potential_liability.clone(),
             odd: bet.odd.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),
             payment_token: bet.payment_token.clone(),
             payment_nonce: bet.payment_nonce,
+            timestamp:bet.timestamp
         };
         let mut serialized_attributes = ManagedBuffer::new();
         if let core::result::Result::Err(err) = attributes.top_encode(&mut serialized_attributes) {

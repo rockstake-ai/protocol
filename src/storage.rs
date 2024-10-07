@@ -36,14 +36,13 @@ pub struct Bet<M: ManagedTypeApi> {
     pub matched_amount: BigUint<M>, 
     pub unmatched_amount: BigUint<M>, 
     pub potential_profit: BigUint<M>, 
-    pub potential_liability: BigUint<M>, 
     pub odd: BigUint<M>, 
     pub bet_type: BetType, 
     pub status: BetStatus, 
     pub payment_token: EgldOrEsdtTokenIdentifier<M>,
     pub payment_nonce: u64,
     pub nft_nonce: u64,
-    pub timestamp: u64, // Adăugați acest câmp nou
+    pub timestamp: u64, 
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -56,12 +55,12 @@ pub struct BetAttributes<M:ManagedTypeApi>{
     pub matched_amount: BigUint<M>, 
     pub unmatched_amount: BigUint<M>,    
     pub potential_profit: BigUint<M>,     
-    pub potential_liability: BigUint<M>,  
     pub odd: BigUint<M>,        
     pub bet_type: BetType,      
     pub status: BetStatus,         
     pub payment_token: EgldOrEsdtTokenIdentifier<M>, 
     pub payment_nonce: u64,
+    pub timestamp: u64, 
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
@@ -151,6 +150,8 @@ pub trait StorageModule {
     #[view(getUnmatchedBets)]
     #[storage_mapper("unmatched_bets")]
     fn unmatched_bets(&self, market_id: u64) -> SingleValueMapper<PriorityQueue<Self::Api>>;
+    #[storage_mapper("market_queues")]
+    fn market_queues(&self, market_id: u64) -> SingleValueMapper<PriorityQueue<Self::Api>>;
 
 }
 
