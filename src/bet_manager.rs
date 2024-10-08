@@ -1,4 +1,4 @@
-use crate::{priority_queue::PriorityQueue, types::{Bet, BetStatus, BetType, MarketStatus}};
+use crate::{errors::{ERR_MARKET_CLOSED, ERR_MARKET_EXISTENCE, ERR_MARKET_OPEN, ERR_ODDS, ERR_SELECTION, ERR_USER_FUNDS}, priority_queue::PriorityQueue, types::{Bet, BetStatus, BetType, MarketStatus}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -12,10 +12,10 @@ pub trait BetManagerModule: crate::storage::StorageModule
     fn place_bet(&self, market_id: u64, selection_id: u64, odds: BigUint, bet_type: BetType) -> SCResult<(u64, BigUint, BigUint)> {
         let mut market = self.markets(&market_id).get();
         let current_timestamp = self.blockchain().get_block_timestamp();
-        require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
-        require!(market.market_status == MarketStatus::Open, "Market is not open for betting");
-        require!(current_timestamp < market.close_timestamp, "Market is closed");
-        require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), "Odds must be between 1.01 and 1000.00");
+        require!(!self.markets(&market_id).is_empty(), ERR_MARKET_EXISTENCE);
+        require!(market.market_status == MarketStatus::Open, ERR_MARKET_OPEN);
+        require!(current_timestamp < market.close_timestamp, ERR_MARKET_CLOSED);
+        require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), ERR_ODDS);
     
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, stake_amount) = self.call_value().egld_or_single_esdt().into_tuple();
@@ -26,7 +26,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
     
         let selection_index = market.selections.iter()
             .position(|s| &s.selection_id == &selection_id)
-            .expect("Selection not found in this market");
+            .expect(ERR_SELECTION);
         let mut selection = market.selections.get(selection_index);
     
         let (stake, liability) = match bet_type {
@@ -41,7 +41,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             }
         };
     
-        require!(total_amount >= liability, "Insufficient funds for this bet");
+        require!(total_amount >= liability, ERR_USER_FUNDS);
     
         let bet = Bet {
             bettor: caller.clone(),
@@ -65,7 +65,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
         };
     
         let (matching_bets, matched_amount, unmatched_amount) = 
-            selection.priority_queue.get_matching_bets(&bet_type, &odds, &stake);
+            selection.priority_queue.get_matching_bets(&bet);
     
         // Update matched bets
         for mut matched_bet in matching_bets.iter() {
@@ -74,12 +74,11 @@ pub trait BetManagerModule: crate::storage::StorageModule
             } else {
                 matched_bet.status = BetStatus::PartiallyMatched;
             }
-            selection.priority_queue.remove(matched_bet.nft_nonce);
+            selection.priority_queue.remove(&matched_bet);
             if matched_bet.unmatched_amount > BigUint::zero() {
                 selection.priority_queue.add(matched_bet);
             }
-        }
-    
+        }   
         // Update the current bet
         let mut updated_bet = bet.clone();
         updated_bet.matched_amount = matched_amount.clone();
@@ -108,6 +107,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             let total_locked = match bet_type {
                 BetType::Back => unmatched_amount.clone(),
                 BetType::Lay => liability.clone() - &stake + &unmatched_amount,
+                // BetType::Lay => liability.clone()
             };
             self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
         }

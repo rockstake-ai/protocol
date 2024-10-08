@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes}};
+use crate::{errors::{ERR_INVALID_NFT_TOKEN, ERR_INVALID_NFT_TOKEN_NONCE, ERR_INVALID_ROLE, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes}};
 
 multiversx_sc::imports!();
 
@@ -104,15 +104,15 @@ pub trait NftManagerModule:
         let bet: Bet<<Self as ContractBase>::Api> = self.get_bet(bet_id);
 
         if payments.len() == 0 {
-            require!(caller == bet.bettor, "Invalid role");
+            require!(caller == bet.bettor, ERR_INVALID_ROLE);
         } else {
             require!(payments.len() == 1, "Invalid");
             let payment = payments.get(0);
             require!(
                 self.bet_nft_token().get_token_id() == payment.token_identifier,
-                "Invalid"
+                ERR_INVALID_NFT_TOKEN
             );
-            require!(bet.nft_nonce == payment.token_nonce, "Invalid");        
+            require!(bet.nft_nonce == payment.token_nonce, ERR_INVALID_NFT_TOKEN_NONCE);        
         }
         bet
     }

@@ -1,14 +1,7 @@
-use crate::{types::{Bet, BetType, Market}};
-
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode,Clone, ManagedVecItem)]
-pub struct BetIndex<> {
-    bet_id: u64,
-    index: usize,
-    bet_type: BetType,
-}
+use crate::types::{Bet, BetType};
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct PriorityQueue<M: ManagedTypeApi> {
@@ -18,7 +11,6 @@ pub struct PriorityQueue<M: ManagedTypeApi> {
     best_lay_odds: BigUint<M>,
     back_liquidity: BigUint<M>,
     lay_liquidity: BigUint<M>,
-    bet_id_to_index: ManagedVec<M, BetIndex<>>,
 }
 
 impl<M: ManagedTypeApi> PriorityQueue<M> {
@@ -30,48 +22,43 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
             best_lay_odds: BigUint::zero(),
             back_liquidity: BigUint::zero(),
             lay_liquidity: BigUint::zero(),
-            bet_id_to_index: ManagedVec::new(),
         }
     }
 
     pub fn add(&mut self, bet: Bet<M>) {
-        let index = match bet.bet_type {
+        match bet.bet_type {
             BetType::Back => {
-                self.insert_bet(&mut self.back_bets.clone(), bet.clone(), true);
+                self.insert_bet(&mut self.back_bets.clone(), bet.clone());
                 self.back_liquidity += &bet.stake_amount;
                 self.update_best_back_odds();
-                self.back_bets.len() - 1
             },
             BetType::Lay => {
-                self.insert_bet(&mut self.lay_bets.clone(), bet.clone(), false);
+                self.insert_bet(&mut self.lay_bets.clone(), bet.clone());
                 self.lay_liquidity += &bet.liability;
                 self.update_best_lay_odds();
-                self.lay_bets.len() - 1
             },
         };
-        self.bet_id_to_index.push(BetIndex {
-            bet_id: bet.nft_nonce,
-            index,
-            bet_type: bet.bet_type,
-        });
     }
 
-    fn insert_bet(&mut self, queue: &mut ManagedVec<M, Bet<M>>, bet: Bet<M>, is_back: bool) {
-        let mut insert_position = queue.len();
+    fn insert_bet(&mut self, queue: &mut ManagedVec<M, Bet<M>>, bet: Bet<M>) {
+        let mut insert_index = queue.len();
         for i in 0..queue.len() {
-            if self.should_insert_before(&bet, &queue.get(i), is_back) {
-                insert_position = i;
+            if self.should_insert_before(&bet, &queue.get(i), bet.bet_type == BetType::Back) {
+                insert_index = i;
                 break;
             }
         }
-        queue.push(bet);
-        if insert_position < queue.len() - 1 {
-            for i in (insert_position + 1..queue.len()).rev() {
-                let temp = queue.get(i - 1);
-                queue.set(i, &temp);
-            }
-            queue.set(insert_position, &queue.get(queue.len() - 1));
+        
+        // Create a new vector with the bet inserted at the correct position
+        let mut new_queue = ManagedVec::new();
+        for i in 0..insert_index {
+            new_queue.push(queue.get(i));
         }
+        new_queue.push(bet);
+        for i in insert_index..queue.len() {
+            new_queue.push(queue.get(i));
+        }
+        *queue = new_queue;
     }
 
     fn should_insert_before(&self, new_bet: &Bet<M>, existing_bet: &Bet<M>, is_back: bool) -> bool {
@@ -84,73 +71,74 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         }
     }
 
-    fn remove_bet_id_index(&mut self, bet_id: u64) {
-        for i in 0..self.bet_id_to_index.len() {
-            if self.bet_id_to_index.get(i).bet_id == bet_id {
-                self.bet_id_to_index.remove(i);
+    pub fn remove(&mut self, bet: &Bet<M>) -> Option<Bet<M>> {
+        let queue = match bet.bet_type {
+            BetType::Back => &mut self.back_bets,
+            BetType::Lay => &mut self.lay_bets,
+        };
+
+        let mut index_to_remove = None;
+        for i in 0..queue.len() {
+            if queue.get(i).nft_nonce == bet.nft_nonce {
+                index_to_remove = Some(i);
                 break;
             }
         }
-    }
 
-    pub fn remove(&mut self, bet_id: u64) -> Option<Bet<M>> {
-        if let Some((index, bet_type)) = self.find_bet_index(bet_id) {
-            let removed_bet = match bet_type {
+        if let Some(index) = index_to_remove {
+            let removed_bet = queue.get(index);
+            
+            // Create a new vector without the removed bet
+            let mut new_queue = ManagedVec::new();
+            for i in 0..queue.len() {
+                if i != index {
+                    new_queue.push(queue.get(i));
+                }
+            }
+            *queue = new_queue;
+
+            match bet.bet_type {
                 BetType::Back => {
-                    let bet = self.back_bets.get(index);
-                    self.back_liquidity -= &bet.stake_amount;
-                    self.back_bets.remove(index);
+                    self.back_liquidity -= &removed_bet.stake_amount;
                     self.update_best_back_odds();
-                    bet
                 },
                 BetType::Lay => {
-                    let bet = self.lay_bets.get(index);
-                    self.lay_liquidity -= &bet.liability;
-                    self.lay_bets.remove(index);
+                    self.lay_liquidity -= &removed_bet.liability;
                     self.update_best_lay_odds();
-                    bet
                 },
-            };
-            self.remove_bet_id_index(bet_id);
+            }
             Some(removed_bet)
         } else {
             None
         }
     }
 
-
-    fn find_bet_index(&self, bet_id: u64) -> Option<(usize, BetType)> {
-        for i in 0..self.bet_id_to_index.len() {
-            let bet_index = self.bet_id_to_index.get(i);
-            if bet_index.bet_id == bet_id {
-                return Some((bet_index.index, bet_index.bet_type));
-            }
-        }
-        None
-    }
-
-    pub fn get_matching_bets(&mut self, bet_type: &BetType, odds: &BigUint<M>, stake: &BigUint<M>) -> (ManagedVec<M, Bet<M>>, BigUint<M>, BigUint<M>) {
+    pub fn get_matching_bets(&mut self, bet: &Bet<M>) -> (ManagedVec<M, Bet<M>>, BigUint<M>, BigUint<M>) {
         let mut matched_amount = BigUint::zero();
-        let mut unmatched_amount = stake.clone();
+        let mut unmatched_amount = bet.stake_amount.clone();
         let mut matching_bets = ManagedVec::new();
 
-        let source = match bet_type {
+        let source = match bet.bet_type {
             BetType::Back => &mut self.lay_bets,
             BetType::Lay => &mut self.back_bets,
         };
 
         for i in 0..source.len() {
             let existing_bet = source.get(i);
-            if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
-            (bet_type == &BetType::Lay && odds >= &existing_bet.odd) {
-                let existing_unmatched = &existing_bet.stake_amount - &existing_bet.matched_amount;
-                let match_amount = unmatched_amount.clone().min(existing_unmatched.clone());
+            let is_match = match bet.bet_type {
+                BetType::Back => bet.odd <= existing_bet.odd,
+                BetType::Lay => bet.odd >= existing_bet.odd,
+            };
+
+            if is_match {
+                let match_amount = unmatched_amount.clone().min(existing_bet.unmatched_amount.clone());
 
                 matched_amount += &match_amount;
                 unmatched_amount -= &match_amount;
 
                 let mut updated_bet = existing_bet.clone();
                 updated_bet.matched_amount += &match_amount;
+                updated_bet.unmatched_amount -= &match_amount;
                 matching_bets.push(updated_bet);
 
                 if unmatched_amount == BigUint::zero() {
@@ -160,38 +148,23 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
                 break;  // No more matching bets due to ordering
             }
         }
-
         (matching_bets, matched_amount, unmatched_amount)
     }
 
-    fn update_back_liquidity(&mut self) {
-        self.back_liquidity = BigUint::zero();
-        for i in 0..self.back_bets.len() {
-            self.back_liquidity += &self.back_bets.get(i).stake_amount;
-        }
-    }
-
-    fn update_lay_liquidity(&mut self) {
-        self.lay_liquidity = BigUint::zero();
-        for i in 0..self.lay_bets.len() {
-            self.lay_liquidity += &self.lay_bets.get(i).liability;
-        }
-    }
-
     fn update_best_back_odds(&mut self) {
-        self.best_back_odds = if self.back_bets.is_empty() {
-            BigUint::zero()
+        if self.back_bets.is_empty() {
+            self.best_back_odds = BigUint::zero();
         } else {
-            self.back_bets.get(0).odd.clone()
-        };
+            self.best_back_odds = self.back_bets.get(0).odd.clone();
+        }
     }
 
     fn update_best_lay_odds(&mut self) {
-        self.best_lay_odds = if self.lay_bets.is_empty() {
-            BigUint::zero()
+        if self.lay_bets.is_empty() {
+            self.best_lay_odds = BigUint::zero();
         } else {
-            self.lay_bets.get(0).odd.clone()
-        };
+            self.best_lay_odds = self.lay_bets.get(0).odd.clone();
+        }
     }
 
     pub fn get_best_back_odds(&self) -> BigUint<M> {
@@ -210,26 +183,6 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         self.lay_liquidity.clone()
     }
 
-    pub fn get_bet_index(&self, bet: &Bet<M>) -> usize {
-        match bet.bet_type {
-            BetType::Back => {
-                for i in 0..self.back_bets.len() {
-                    if self.back_bets.get(i).nft_nonce == bet.nft_nonce {
-                        return i;
-                    }
-                }
-            },
-            BetType::Lay => {
-                for i in 0..self.lay_bets.len() {
-                    if self.lay_bets.get(i).nft_nonce == bet.nft_nonce {
-                        return i;
-                    }
-                }
-            },
-        }
-        panic!("Bet not found");
-    }
-
     pub fn get_top_n_bets(&self, bet_type: BetType, n: usize) -> ManagedVec<M, Bet<M>> {
         let source = match bet_type {
             BetType::Back => &self.back_bets,
@@ -237,21 +190,12 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         };
         let mut result = ManagedVec::new();
         for i in 0..n.min(source.len()) {
-            result.push(source.get(i));
+            result.push(source.get(i).clone());
         }
         result
     }
 
     pub fn get_total_bets(&self) -> usize {
         self.back_bets.len() + self.lay_bets.len()
-    }
-
-    pub fn bet_exists(&self, bet_id: u64) -> bool {
-        for i in 0..self.bet_id_to_index.len() {
-            if self.bet_id_to_index.get(i).bet_id == bet_id {
-                return true;
-            }
-        }
-        false
     }
 }
