@@ -129,51 +129,39 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         None
     }
 
-    pub fn get_matching_bets(&mut self, bet_type: &BetType, odds: &BigUint<M>) -> ManagedVec<M, Bet<M>> {
-        match bet_type {
-            BetType::Back => self.get_matching_lay_bets(odds),
-            BetType::Lay => self.get_matching_back_bets(odds),
-        }
-    }
-
-    fn get_matching_back_bets(&mut self, odds: &BigUint<M>) -> ManagedVec<M, Bet<M>> {
+    pub fn get_matching_bets(&mut self, bet_type: &BetType, odds: &BigUint<M>, stake: &BigUint<M>) -> (ManagedVec<M, Bet<M>>, BigUint<M>, BigUint<M>) {
+        let mut matched_amount = BigUint::zero();
+        let mut unmatched_amount = stake.clone();
         let mut matching_bets = ManagedVec::new();
-        let mut remaining_bets = ManagedVec::new();
 
-        for i in 0..self.back_bets.len() {
-            let bet = self.back_bets.get(i);
-            if odds >= &bet.odd {
-                matching_bets.push(bet);
+        let source = match bet_type {
+            BetType::Back => &mut self.lay_bets,
+            BetType::Lay => &mut self.back_bets,
+        };
+
+        for i in 0..source.len() {
+            let existing_bet = source.get(i);
+            if (bet_type == &BetType::Back && odds <= &existing_bet.odd) ||
+            (bet_type == &BetType::Lay && odds >= &existing_bet.odd) {
+                let existing_unmatched = &existing_bet.stake_amount - &existing_bet.matched_amount;
+                let match_amount = unmatched_amount.clone().min(existing_unmatched.clone());
+
+                matched_amount += &match_amount;
+                unmatched_amount -= &match_amount;
+
+                let mut updated_bet = existing_bet.clone();
+                updated_bet.matched_amount += &match_amount;
+                matching_bets.push(updated_bet);
+
+                if unmatched_amount == BigUint::zero() {
+                    break;
+                }
             } else {
-                remaining_bets.push(bet);
+                break;  // No more matching bets due to ordering
             }
         }
 
-        self.back_bets = remaining_bets;
-        self.update_back_liquidity();
-        self.update_best_back_odds();
-        
-        matching_bets
-    }
-
-    fn get_matching_lay_bets(&mut self, odds: &BigUint<M>) -> ManagedVec<M, Bet<M>> {
-        let mut matching_bets = ManagedVec::new();
-        let mut remaining_bets = ManagedVec::new();
-
-        for i in 0..self.lay_bets.len() {
-            let bet = self.lay_bets.get(i);
-            if odds <= &bet.odd {
-                matching_bets.push(bet);
-            } else {
-                remaining_bets.push(bet);
-            }
-        }
-
-        self.lay_bets = remaining_bets;
-        self.update_lay_liquidity();
-        self.update_best_lay_odds();
-        
-        matching_bets
+        (matching_bets, matched_amount, unmatched_amount)
     }
 
     fn update_back_liquidity(&mut self) {
