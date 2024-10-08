@@ -52,7 +52,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
                         bettor: caller.clone(),
                         event: market_id,
                         selection: selection.clone(),
-                        stake_amount: unmatched_amount.clone(),
+                        stake_amount: stake_amount.clone(),
                         liability: BigUint::zero(),
                         matched_amount: BigUint::zero(),
                         unmatched_amount: unmatched_amount.clone(),
@@ -69,13 +69,12 @@ pub trait BetManagerModule: crate::storage::StorageModule
             },
             BetType::Lay => {
                 if unmatched_amount > BigUint::zero() {
-                    let lay_liability = self.calculate_potential_liability(&bet_type, &unmatched_amount, &odds);
                     selection.priority_queue.add(Bet {
                         bettor: caller.clone(),
                         event: market_id,
                         selection: selection.clone(),
                         stake_amount: unmatched_amount.clone(),
-                        liability: lay_liability,
+                        liability: liability.clone(),
                         matched_amount: BigUint::zero(),
                         unmatched_amount: unmatched_amount.clone(),
                         potential_profit: unmatched_amount.clone(),
@@ -90,6 +89,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
                 }
             }
         }
+        sc_print!("Bet: stake_amount - {}, liability - {}, matched_amount - {}, unmatched_amount - {}, potential_profit - {}", stake_amount, liability, matched_amount, unmatched_amount, unmatched_amount);
 
         let bet = Bet {
             bettor: caller.clone(),
@@ -98,7 +98,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             stake_amount: stake.clone(),
             liability: match bet_type {
                 BetType::Back => BigUint::zero(),
-                BetType::Lay => liability.clone() - &stake,
+                BetType::Lay => liability.clone(),
             },
             matched_amount: matched_amount.clone(),
             unmatched_amount: unmatched_amount.clone(),
@@ -200,34 +200,24 @@ pub trait BetManagerModule: crate::storage::StorageModule
     }
 
     
-    fn calculate_stake_from_win(&self, win_amount: &BigUint, odds: &BigUint) -> BigUint {
-        (win_amount * &BigUint::from(100u32)) / (odds - &BigUint::from(100u32))
-    }
-    
     fn calculate_stake_from_liability(&self, liability: &BigUint, odds: &BigUint) -> BigUint {
-        (liability * &BigUint::from(100u32)) / (odds - &BigUint::from(100u32))
+        liability / &(odds - &BigUint::from(1u32))
     }
 
     fn calculate_potential_profit(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
             BetType::Back => {
-                let profit = (odds - &BigUint::from(100u32)) * stake / BigUint::from(100u32);
-                profit
+                (odds - &BigUint::from(1u32)) * stake
             },
-            BetType::Lay => {
-                stake.clone()
-            }
+            BetType::Lay => stake.clone()
         }
     }
     
     fn calculate_potential_liability(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
-            BetType::Back => {
-                stake.clone()
-            },
+            BetType::Back => stake.clone(),
             BetType::Lay => {
-                let liability = (odds - &BigUint::from(100u32)) * stake / BigUint::from(100u32);
-                liability
+                (odds - &BigUint::from(1u32)) * stake
             }
         }
     }
