@@ -71,6 +71,7 @@ pub struct Market<M: ManagedTypeApi> {
     pub close_timestamp: u64,
     pub market_status: MarketStatus,
     pub total_matched_amount: BigUint<M>,
+    pub liquidity: BigUint<M>,
     pub created_timestamp: u64,
 }
 
@@ -80,3 +81,33 @@ pub struct Selection<M: ManagedTypeApi> {
     pub description: ManagedBuffer<M>,
     pub priority_queue: PriorityQueue<M>,
 }
+
+
+
+// #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+// pub struct Selection<M: ManagedTypeApi> {
+//     pub selection_id: u64,              
+//     pub description: ManagedBuffer<M>,         
+//     pub back_liquidity: BigUint<M>,            
+//     pub lay_liquidity: BigUint<M>,             
+//     pub best_back_odds: BigUint<M>,            
+//     pub best_lay_odds: BigUint<M>,            
+// }
+
+// #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
+// pub struct Market<M: ManagedTypeApi> {
+//     pub market_id: u64,
+//     pub event_id: u64,
+//     pub description: ManagedBuffer<M>,
+//     pub selections: ManagedVec<M, Selection<M>>,
+//     pub priority_queue: PriorityQueue<M>, // Adăugați acest câmp nou
+//     pub back_liquidity: BigUint<M>,
+//     pub lay_liquidity: BigUint<M>,
+//     pub best_back_odds: BigUint<M>,
+//     pub best_lay_odds: BigUint<M>,
+//     pub bets: ManagedVec<M, Bet<M>>,
+//     pub close_timestamp: u64, 
+//     pub market_status: MarketStatus, 
+//     pub total_matched_amount: BigUint<M>, 
+//     pub created_timestamp: u64, 
+// }
