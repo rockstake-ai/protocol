@@ -1,4 +1,4 @@
-use crate::{errors::ERR_INVALID_STREAM, priority_queue::PriorityQueue, types::{Bet, BetType, Market}};
+use crate::{priority_queue::PriorityQueue, types::{Bet, BetType, Market}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -8,7 +8,7 @@ pub trait StorageModule {
     #[view(getBetslipData)]
     fn get_bet(&self, bet_id: u64) -> Bet<Self::Api> {
         let bet_mapper = self.bet_by_id(bet_id);
-        require!(!bet_mapper.is_empty(), ERR_INVALID_STREAM);
+        require!(!bet_mapper.is_empty(), "Invalid");
         bet_mapper.get()
     }
 
