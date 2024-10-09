@@ -125,18 +125,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
             &(liability.clone() - &stake)
         );
     
-        match bet_type {
-            BetType::Back => {
-                let surplus = &stake_amount - &stake;
-                if surplus > BigUint::zero() {
-                    self.send().direct(&caller, &token_identifier, token_nonce, &surplus);
-                }
-            },
-            BetType::Lay => {
-                require!(stake_amount >= liability, ERR_USER_FUNDS);
-            }
-        }
-
         Ok((bet_id, odds, stake))
     }
 

@@ -4,3 +4,4 @@ pub const ROYALTIES_MAX: u32 = 10;
 pub const NFT_AMOUNT: u32 = 1;
 pub const TOKEN_NAME: &[u8] = b"BetCube";
 pub const TOKEN_TICKER: &[u8] = b"BET";
+
