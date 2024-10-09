@@ -41,7 +41,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub payment_token: EgldOrEsdtTokenIdentifier<M>,
     pub payment_nonce: u64,
     pub nft_nonce: u64,
-    pub timestamp: u64, 
+    pub created_at: u64, 
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -59,7 +59,7 @@ pub struct BetAttributes<M:ManagedTypeApi>{
     pub status: BetStatus,         
     pub payment_token: EgldOrEsdtTokenIdentifier<M>, 
     pub payment_nonce: u64,
-    pub timestamp: u64, 
+    pub created_at: u64, 
 }
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
@@ -72,7 +72,7 @@ pub struct Market<M: ManagedTypeApi> {
     pub market_status: MarketStatus,
     pub total_matched_amount: BigUint<M>,
     pub liquidity: BigUint<M>,
-    pub created_timestamp: u64,
+    pub created_at: u64,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]

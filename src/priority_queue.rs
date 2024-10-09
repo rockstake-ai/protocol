@@ -64,10 +64,10 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
     fn should_insert_before(&self, new_bet: &Bet<M>, existing_bet: &Bet<M>, is_back: bool) -> bool {
         if is_back {
             new_bet.odd > existing_bet.odd || 
-            (new_bet.odd == existing_bet.odd && new_bet.timestamp < existing_bet.timestamp)
+            (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
         } else {
             new_bet.odd < existing_bet.odd || 
-            (new_bet.odd == existing_bet.odd && new_bet.timestamp < existing_bet.timestamp)
+            (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
         }
     }
 
