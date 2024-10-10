@@ -1,7 +1,7 @@
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-use crate::types::{Bet, BetType};
+use crate::types::{Bet, BetStatus, BetType};
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct PriorityQueue<M: ManagedTypeApi> {
@@ -25,7 +25,8 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         }
     }
 
-    pub fn add(&mut self, bet: Bet<M>) {
+    pub fn add(&mut self, mut bet: Bet<M>) {
+        bet.status = BetStatus::Unmatched;
         match bet.bet_type {
             BetType::Back => {
                 self.insert_bet(&mut self.back_bets.clone(), bet.clone());
@@ -99,7 +100,7 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
 
             match bet.bet_type {
                 BetType::Back => {
-                    self.back_liquidity -= &removed_bet.stake_amount;
+                    self.back_liquidity -= &removed_bet.unmatched_amount;
                     self.update_best_back_odds();
                 },
                 BetType::Lay => {
@@ -117,30 +118,30 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         let mut matched_amount = BigUint::zero();
         let mut unmatched_amount = bet.stake_amount.clone();
         let mut matching_bets = ManagedVec::new();
-
+    
         let source = match bet.bet_type {
             BetType::Back => &mut self.lay_bets,
             BetType::Lay => &mut self.back_bets,
         };
-
+    
         for i in 0..source.len() {
             let existing_bet = source.get(i);
             let is_match = match bet.bet_type {
-                BetType::Back => bet.odd <= existing_bet.odd,
-                BetType::Lay => bet.odd >= existing_bet.odd,
+                BetType::Back => bet.odd >= existing_bet.odd,
+                BetType::Lay => bet.odd <= existing_bet.odd,
             };
-
+    
             if is_match {
                 let match_amount = unmatched_amount.clone().min(existing_bet.unmatched_amount.clone());
-
+    
                 matched_amount += &match_amount;
                 unmatched_amount -= &match_amount;
-
+    
                 let mut updated_bet = existing_bet.clone();
                 updated_bet.matched_amount += &match_amount;
                 updated_bet.unmatched_amount -= &match_amount;
                 matching_bets.push(updated_bet);
-
+    
                 if unmatched_amount == BigUint::zero() {
                     break;
                 }
@@ -150,6 +151,41 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         }
         (matching_bets, matched_amount, unmatched_amount)
     }
+
+    pub fn match_bet(&mut self, bet: &mut Bet<M>) -> (BigUint<M>, BigUint<M>) {
+        let (matching_bets, matched_amount, unmatched_amount) = self.get_matching_bets(bet);
+        
+        // Actualizăm statusul pariului curent
+        bet.matched_amount = matched_amount.clone();
+        bet.unmatched_amount = unmatched_amount.clone();
+        bet.status = if matched_amount == bet.stake_amount {
+            BetStatus::Matched
+        } else if matched_amount > BigUint::zero() {
+            BetStatus::PartiallyMatched
+        } else {
+            BetStatus::Unmatched
+        };
+
+        // Actualizăm pariurile potrivite și le readăugăm dacă este necesar
+        for mut matched_bet in matching_bets.iter() {
+            self.remove(&matched_bet);
+            
+            if matched_bet.matched_amount == matched_bet.stake_amount {
+                matched_bet.status = BetStatus::Matched;
+            } else {
+                matched_bet.status = BetStatus::PartiallyMatched;
+                self.add(matched_bet);
+            }
+        }
+
+        // Adăugăm pariul curent dacă nu este complet potrivit
+        if bet.unmatched_amount > BigUint::zero() {
+            self.add(bet.clone());
+        }
+
+        (matched_amount, unmatched_amount)
+    }
+
 
     fn update_best_back_odds(&mut self) {
         if self.back_bets.is_empty() {
@@ -165,6 +201,14 @@ impl<M: ManagedTypeApi> PriorityQueue<M> {
         } else {
             self.best_lay_odds = self.lay_bets.get(0).odd.clone();
         }
+    }
+
+    pub fn get_back_bets(&self) -> ManagedVec<M, Bet<M>>{
+        self.back_bets.clone()
+    }
+
+    pub fn get_lay_bets(&self) -> ManagedVec<M, Bet<M>>{
+        self.lay_bets.clone()
     }
 
     pub fn get_best_back_odds(&self) -> BigUint<M> {

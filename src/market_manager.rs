@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetType, Market, MarketStatus, Selection};
+use crate::types::{Bet, BetStatus, BetType, Market, MarketStatus, Selection};
 use crate::priority_queue::PriorityQueue;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -51,117 +51,37 @@ pub trait MarketManagerModule:
         market_id
     }
 
-
-    #[view(getMarket)]
-    fn get_market(&self, market_id: u64) -> OptionalValue<Market<Self::Api>> {
-        if !self.markets(&market_id).is_empty() {
-            OptionalValue::Some(self.markets(&market_id).get())
-        } else {
-            OptionalValue::None
-        }
-    }
-
-
-    #[endpoint(updateMarketStatus)]
-    fn update_market_status(&self, market_id: u64, new_status: MarketStatus) -> bool {
-        if self.markets(&market_id).is_empty() {
-            return false;
-        }
-        
-        let mut market = self.markets(&market_id).get();
-        market.market_status = new_status;
-        self.markets(&market_id).set(&market);
-        true
-    }
-
     #[only_owner]
-    #[endpoint(getMarketLiquidity)]
-    fn get_market_liquidity(&self, market_id: u64) -> MultiValue2<BigUint<Self::Api>, BigUint<Self::Api>> {
-        if self.markets(&market_id).is_empty() {
-            return (BigUint::zero(), BigUint::zero()).into();
-        }
-        let market = self.markets(&market_id).get();
-        let mut total_back_liquidity = BigUint::zero();
-        let mut total_lay_liquidity = BigUint::zero();
-        
-        for selection in market.selections.iter() {
-            total_back_liquidity += &selection.priority_queue.get_back_liquidity();
-            total_lay_liquidity += &selection.priority_queue.get_lay_liquidity();
-        }
-        
-        (total_back_liquidity, total_lay_liquidity).into()
-    }
-
-    #[only_owner]
-    #[endpoint(getBestOdds)]
-    fn get_best_odds(&self, market_id: u64, selection_id: u64) -> MultiValue2<BigUint<Self::Api>, BigUint<Self::Api>> {
-        if self.markets(&market_id).is_empty() {
-            return (BigUint::zero(), BigUint::zero()).into();
-        }
+    #[endpoint(getBetCountsByStatus)]
+    fn get_bet_counts_by_status(&self, market_id: u64) ->  SCResult<(BigUint, BigUint, BigUint)> {
+        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
         
         let market = self.markets(&market_id).get();
+        let mut matched_count = 0;
+        let mut unmatched_count = 0;
+        let mut partially_matched_count = 0;
+
         for selection in market.selections.iter() {
-            if selection.selection_id == selection_id {
-                return (
-                        selection.priority_queue.get_best_back_odds(), 
-                        selection.priority_queue.get_best_lay_odds()).into();
+            for bet_type in [BetType::Back, BetType::Lay].iter() {
+                let bets = match bet_type {
+                    BetType::Back => selection.priority_queue.get_back_bets(),
+                    BetType::Lay => selection.priority_queue.get_lay_bets(),
+                };
+
+                for bet in bets.iter() {
+                    match bet.status {
+                        BetStatus::Matched => matched_count += 1u32,
+                        BetStatus::Unmatched => unmatched_count += 1u32,
+                        BetStatus::PartiallyMatched => partially_matched_count += 1u32,
+                        _ => (), // Ignorăm alte statusuri
+                    }
+                }
             }
         }
-        
-        (BigUint::zero(), BigUint::zero()).into()
+
+        Ok((matched_count.into(), unmatched_count.into(), partially_matched_count.into()))
     }
 
-    #[only_owner]
-    #[endpoint(getTopNBets)]
-    fn get_top_n_bets(
-        &self,
-        market_id: u64,
-        selection_id: u64,
-        bet_type: BetType,
-        n: usize
-    ) -> MultiValue2<ManagedVec<Bet<Self::Api>>, usize> {
-        if self.markets(&market_id).is_empty() {
-            return (ManagedVec::new(), 0).into();
-        }
-        let market = self.markets(&market_id).get();
-        for selection in market.selections.iter() {
-            if selection.selection_id == selection_id {
-                let top_bets = selection.priority_queue.get_top_n_bets(bet_type, n);
-                let total_bets = selection.priority_queue.get_total_bets();
-                return (top_bets, total_bets).into();
-            }
-        }
-        (ManagedVec::new(), 0).into()
-    }
-
-    #[only_owner]
-    #[endpoint(getTotalBetsForSelection)]
-    fn get_total_bets_for_selection(
-        &self,
-        market_id: u64,
-        selection_id: u64
-    ) -> usize {
-        if self.markets(&market_id).is_empty() {
-            return 0;
-        }
-        let market = self.markets(&market_id).get();
-        for selection in market.selections.iter() {
-            if selection.selection_id == selection_id {
-                return selection.priority_queue.get_total_bets();
-            }
-        }
-        0
-    }
-
-    #[only_owner]
-    #[endpoint(getTotalMatchedAmount)]
-    fn get_total_matched_amount(&self, market_id: u64) -> BigUint<Self::Api> {
-        if self.markets(&market_id).is_empty() {
-            return BigUint::zero();
-        }
-        let market = self.markets(&market_id).get();
-        market.total_matched_amount
-    }
 
     fn get_and_increment_market_counter(&self) -> u64 {
         let mut counter = self.market_counter().get();

@@ -39,7 +39,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             .expect(ERR_SELECTION);
         let mut selection = market.selections.get(selection_index);
     
-        let bet = Bet {
+        let mut bet = Bet {
             bettor: caller.clone(),
             event: market_id,
             selection: selection.clone(),
@@ -60,38 +60,14 @@ pub trait BetManagerModule: crate::storage::StorageModule
             created_at: created_at
         };
     
-        let (matching_bets, matched_amount, unmatched_amount) = 
-            selection.priority_queue.get_matching_bets(&bet);
-            
-        for mut matched_bet in matching_bets.iter() {
-            if matched_bet.matched_amount == matched_bet.stake_amount {
-                matched_bet.status = BetStatus::Matched;
-            } else {
-                matched_bet.status = BetStatus::PartiallyMatched;
-            }
-            selection.priority_queue.remove(&matched_bet);
-            if matched_bet.unmatched_amount > BigUint::zero() {
-                selection.priority_queue.add(matched_bet);
-            }
-        }   
-
-        let mut updated_bet = bet.clone();
-        updated_bet.matched_amount = matched_amount.clone();
-        updated_bet.unmatched_amount = unmatched_amount.clone();
-        updated_bet.status = if matched_amount == stake {
-            BetStatus::Matched
-        } else if matched_amount > BigUint::zero() {
-            BetStatus::PartiallyMatched
-        } else {
-            BetStatus::Unmatched
-        };
+        let (matched_amount, unmatched_amount) = 
+        selection.priority_queue.match_bet(&mut bet);
+        
+        // Salvăm modificările în structura de date principală
+        self.bet_by_id(bet.nft_nonce).set(&bet);
     
-        if unmatched_amount > BigUint::zero() {
-            selection.priority_queue.add(updated_bet.clone());
-        }
-    
-        let bet_nft_nonce = self.mint_bet_nft(&updated_bet);
-        self.bet_by_id(bet_id).set(&updated_bet);
+        let bet_nft_nonce = self.mint_bet_nft(&bet);
+        self.bet_by_id(bet_id).set(&bet);
     
         let _ = market.selections.set(selection_index, &selection);
         let _ = market.total_matched_amount += &matched_amount;
