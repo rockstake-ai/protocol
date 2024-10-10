@@ -19,21 +19,18 @@ pub trait BetManagerModule: crate::storage::StorageModule
         require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), ERR_ODDS);
     
         let caller = self.blockchain().get_caller();
-        let (token_identifier, token_nonce, stake_amount) = self.call_value().egld_or_single_esdt().into_tuple();
+        let (token_identifier, token_nonce, total_amount) = self.call_value().egld_or_single_esdt().into_tuple();
         let bet_id = self.get_last_bet_id() + 1;
     
-        let token_identifier_clone = token_identifier.clone();
-
         let (stake, liability) = match bet_type {
             BetType::Back => {
-                (stake_amount.clone(), BigUint::zero())
+                (total_amount.clone(), BigUint::zero())
             },
             BetType::Lay => {
-                let calculated_liability = self.calculate_potential_liability(&bet_type, &stake_amount, &odds);
-                let required_total = &stake_amount + &calculated_liability;
-                let user_balance = self.blockchain().get_esdt_balance(&caller, &token_identifier_clone.unwrap_esdt(), token_nonce);
-                require!(user_balance >= calculated_liability && stake_amount >= required_total, ERR_USER_FUNDS);
-                (stake_amount.clone(), calculated_liability)
+                let stake = self.calculate_stake_from_total(&total_amount, &odds);
+                let liability = &total_amount - &stake;
+                require!(liability == self.calculate_potential_liability(&bet_type, &stake, &odds), "Calculation mismatch");
+                (stake, liability)
             }
         };
         
@@ -139,14 +136,20 @@ pub trait BetManagerModule: crate::storage::StorageModule
     fn calculate_stake_from_liability(&self, liability: &BigUint, odds: &BigUint) -> BigUint {
         liability / &(odds - &BigUint::from(1u32))
     }
-    
+
     fn calculate_potential_liability(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
             BetType::Back => stake.clone(),
             BetType::Lay => {
-                (odds - &BigUint::from(1u32)) * stake
+                // Presupunem că odds este reprezentat ca 170 pentru 1.70
+                let odds_minus_one = odds - &BigUint::from(100u32);
+                (stake * &odds_minus_one) / &BigUint::from(100u32)
             }
         }
+    }
+    
+    fn calculate_stake_from_total(&self, total: &BigUint, odds: &BigUint) -> BigUint {
+        total * &BigUint::from(100u32) / odds
     }
     
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
