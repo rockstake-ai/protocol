@@ -1,7 +1,7 @@
-pub const ERR_MARKET_EXISTENCE: &str = "Market doesn't exist!";
-pub const ERR_MARKET_OPEN: &str = "Market is not open for betting";
+pub const ERR_INVALID_MARKET: &str = "Market doesn't exist!";
+pub const ERR_MARKET_NOT_OPEN: &str = "Market is not open for betting";
 pub const ERR_MARKET_CLOSED: &str = "Market is closed";
-pub const ERR_ODDS: &str = "Odds must be between 1.01 and 1000.00";
+pub const ERR_BET_ODDS: &str = "Odds must be between 1.01 and 1000.00";
 pub const ERR_USER_FUNDS: &str = "Insufficient funds for this bet";
 pub const ERR_BET_STATE: &str = "Bet is not in a state eligible for distribution";
 pub const ERR_SELECTION: &str = "Selection not found in this market";

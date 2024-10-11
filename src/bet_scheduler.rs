@@ -4,7 +4,7 @@ multiversx_sc::derive_imports!();
 use crate::types::{Bet, BetStatus, BetType};
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
-pub struct PriorityQueue<M: ManagedTypeApi> {
+pub struct BetScheduler<M: ManagedTypeApi> {
     back_bets: ManagedVec<M, Bet<M>>,
     lay_bets: ManagedVec<M, Bet<M>>,
     best_back_odds: BigUint<M>,
@@ -13,9 +13,9 @@ pub struct PriorityQueue<M: ManagedTypeApi> {
     lay_liquidity: BigUint<M>,
 }
 
-impl<M: ManagedTypeApi> PriorityQueue<M> {
+impl<M: ManagedTypeApi> BetScheduler<M> {
     pub fn new() -> Self {
-        PriorityQueue {
+        BetScheduler {
             back_bets: ManagedVec::new(),
             lay_bets: ManagedVec::new(),
             best_back_odds: BigUint::zero(),

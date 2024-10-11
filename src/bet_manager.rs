@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_MARKET_CLOSED, ERR_MARKET_EXISTENCE, ERR_MARKET_OPEN, ERR_ODDS, ERR_SELECTION, ERR_USER_FUNDS}, priority_queue::PriorityQueue, types::{Bet, BetStatus, BetType, MarketStatus}};
+use crate::{errors::{ERR_MARKET_CLOSED, ERR_INVALID_MARKET, ERR_MARKET_NOT_OPEN, ERR_BET_ODDS, ERR_SELECTION}, bet_scheduler::BetScheduler, types::{Bet, BetStatus, BetType, MarketStatus}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -13,10 +13,10 @@ pub trait BetManagerModule: crate::storage::StorageModule
         let mut market = self.markets(&market_id).get();
         let created_at = self.blockchain().get_block_timestamp();
 
-        require!(!self.markets(&market_id).is_empty(), ERR_MARKET_EXISTENCE);
-        require!(market.market_status == MarketStatus::Open, ERR_MARKET_OPEN);
+        require!(!self.markets(&market_id).is_empty(), ERR_INVALID_MARKET);
+        require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
         require!(created_at < market.close_timestamp, ERR_MARKET_CLOSED);
-        require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), ERR_ODDS);
+        require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), ERR_BET_ODDS);
     
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, total_amount) = self.call_value().egld_or_single_esdt().into_tuple();

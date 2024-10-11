@@ -1,5 +1,5 @@
 use crate::types::{Bet, BetStatus, BetType, Market, MarketStatus, Selection};
-use crate::priority_queue::PriorityQueue;
+use crate::bet_scheduler::BetScheduler;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -30,7 +30,7 @@ pub trait MarketManagerModule:
             let selection = Selection {
                 selection_id: (index + 1) as u64,
                 description: desc.as_ref().clone_value(),
-                priority_queue: PriorityQueue::new(),
+                priority_queue: BetScheduler::new(),
             };
             selections.push(selection);
         }

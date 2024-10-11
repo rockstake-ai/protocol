@@ -1,4 +1,4 @@
-use crate::priority_queue::PriorityQueue;
+use crate::bet_scheduler::BetScheduler;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -79,5 +79,5 @@ pub struct Market<M: ManagedTypeApi> {
 pub struct Selection<M: ManagedTypeApi> {
     pub selection_id: u64,
     pub description: ManagedBuffer<M>,
-    pub priority_queue: PriorityQueue<M>,
+    pub priority_queue: BetScheduler<M>,
 }
