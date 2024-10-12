@@ -1,4 +1,4 @@
-use crate::types::BetType;
+use crate::types::{BetType, EventResult};
 
 multiversx_sc::imports!();
 
@@ -58,5 +58,22 @@ fn bet_closed_event(
         #[indexed] payout: &BigUint,
         #[indexed] recipient: &ManagedAddress,
     );
+
+      // Storage pentru rezultatele evenimentelor
+      #[view(getEventResult)]
+      #[storage_mapper("eventResults")]
+      fn event_results(&self, market_id: &u64) -> SingleValueMapper<EventResult>;
+  
+      #[event("bet_won")]
+      fn bet_won_event(
+          &self,
+          #[indexed] bettor: &ManagedAddress,
+          #[indexed] nft_nonce: &u64,
+          #[indexed] event_id: &u64,
+          #[indexed] selection_id: &u64,
+          #[indexed] win_amount: &BigUint,
+          #[indexed] token_identifier: &EgldOrEsdtTokenIdentifier,
+          #[indexed] token_nonce: u64,
+      );
 
 }

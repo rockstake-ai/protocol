@@ -4,11 +4,11 @@
 // multiversx_sc::imports!();
 // multiversx_sc::derive_imports!();
 
-// #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
-// pub enum EventResult {
-//     NotReported,
-//     Reported(u64), // ID-ul selecției câștigătoare
-// }
+// // #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
+// // pub enum EventResult {
+// //     NotReported,
+// //     Reported(u64), // ID-ul selecției câștigătoare
+// // }
 
 // #[multiversx_sc::module]
 // pub trait BetValidationModule:
@@ -48,7 +48,7 @@
 //         if let EventResult::Reported(winning_selection_id) = event_result {
 //             let mut processed_bets = MultiValueEncoded::new();
 
-//             for bet in market.bets.iter() {
+//             for bet in market.selections {
 //                 if bet.status != BetStatus::Matched {
 //                     continue;
 //                 }
@@ -107,22 +107,5 @@
 //             bet.payment_nonce,
 //         );
 //     }
-
-//     // Storage pentru rezultatele evenimentelor
-//     #[view(getEventResult)]
-//     #[storage_mapper("eventResults")]
-//     fn event_results(&self, market_id: &u64) -> SingleValueMapper<EventResult>;
-
-//     #[event("bet_won")]
-//     fn bet_won_event(
-//         &self,
-//         #[indexed] bettor: &ManagedAddress,
-//         #[indexed] nft_nonce: &u64,
-//         #[indexed] event_id: &u64,
-//         #[indexed] selection_id: &u64,
-//         #[indexed] win_amount: &BigUint,
-//         #[indexed] token_identifier: &EgldOrEsdtTokenIdentifier,
-//         #[indexed] token_nonce: u64,
-//     );
   
 // }

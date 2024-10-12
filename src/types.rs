@@ -81,3 +81,9 @@ pub struct Selection<M: ManagedTypeApi> {
     pub description: ManagedBuffer<M>,
     pub priority_queue: BetScheduler<M>,
 }
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
+pub enum EventResult {
+    NotReported,
+    Reported(u64), // ID-ul selecției câștigătoare
+}
