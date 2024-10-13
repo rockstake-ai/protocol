@@ -76,4 +76,12 @@ fn bet_closed_event(
           #[indexed] token_nonce: u64,
       );
 
+      #[event("reward_distributed")]
+      fn reward_distributed_event(
+          &self,
+          #[indexed] bet_id: u64,
+          #[indexed] bettor: &ManagedAddress,
+          amount: &BigUint,
+      );
+
 }
