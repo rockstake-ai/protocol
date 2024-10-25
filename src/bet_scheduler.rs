@@ -191,7 +191,7 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
         // Actualizăm o singură dată
         if original_status != final_status {
             self.update_status_counters(&original_status, &final_status);
-            bet.status = final_status;
+            bet.status = final_status.clone();
         }
     
         for mut matched_bet in matching_bets.iter() {
@@ -206,7 +206,7 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
     
             if original_matched_status != new_matched_status {
                 self.update_status_counters(&original_matched_status, &new_matched_status);
-                matched_bet.status = new_matched_status;
+                matched_bet.status = new_matched_status.clone();
             }
     
             if matched_bet.unmatched_amount > BigUint::zero() {
