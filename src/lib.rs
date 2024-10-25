@@ -15,7 +15,7 @@ pub mod types;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 #[multiversx_sc::contract]
-pub trait BetCube:
+pub trait Rockstake:
 storage::StorageModule
 + events::EventsModule
 + nft_manager::NftManagerModule

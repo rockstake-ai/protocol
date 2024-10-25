@@ -52,35 +52,37 @@ pub trait MarketManagerModule:
     }
 
     #[only_owner]
-    #[endpoint(getBetCountsByStatus)]
-    fn get_bet_counts_by_status(&self, market_id: u64) ->  SCResult<(BigUint, BigUint, BigUint)> {
-        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
-        
-        let market = self.markets(&market_id).get();
-        let mut matched_count = 0;
-        let mut unmatched_count = 0;
-        let mut partially_matched_count = 0;
+#[endpoint(getBetCountsByStatus)]
+fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint, BigUint, BigUint, BigUint, BigUint)> {
+    require!(!self.markets(&market_id).is_empty(), "Market does not exist");
+    let market = self.markets(&market_id).get();
+    
+    let mut total_matched = BigUint::zero();
+    let mut total_unmatched = BigUint::zero();
+    let mut total_partially_matched = BigUint::zero();
+    let mut total_win = BigUint::zero();
+    let mut total_lost = BigUint::zero();
+    let mut total_canceled = BigUint::zero();
 
-        for selection in market.selections.iter() {
-            for bet_type in [BetType::Back, BetType::Lay].iter() {
-                let bets = match bet_type {
-                    BetType::Back => selection.priority_queue.get_back_bets(),
-                    BetType::Lay => selection.priority_queue.get_lay_bets(),
-                };
-
-                for bet in bets.iter() {
-                    match bet.status {
-                        BetStatus::Matched => matched_count += 1u32,
-                        BetStatus::Unmatched => unmatched_count += 1u32,
-                        BetStatus::PartiallyMatched => partially_matched_count += 1u32,
-                        _ => (), // Ignorăm alte statusuri
-                    }
-                }
-            }
-        }
-
-        Ok((matched_count.into(), unmatched_count.into(), partially_matched_count.into()))
+    for selection in market.selections.iter() {
+        let (matched, unmatched, partially, win, lost, canceled) = selection.priority_queue.get_status_counts();
+        total_matched += matched;
+        total_unmatched += unmatched;
+        total_partially_matched += partially;
+        total_win += win;
+        total_lost += lost;
+        total_canceled += canceled;
     }
+
+    Ok((
+        total_matched,
+        total_unmatched,
+        total_partially_matched,
+        total_win,
+        total_lost,
+        total_canceled
+    ))
+}
 
 
     fn get_and_increment_market_counter(&self) -> u64 {

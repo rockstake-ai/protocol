@@ -62,10 +62,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
     
         let (matched_amount, unmatched_amount) = 
         selection.priority_queue.match_bet(&mut bet);
-        
-        // Salvăm modificările în structura de date principală
-        self.bet_by_id(bet.nft_nonce).set(&bet);
-    
+            
         let bet_nft_nonce = self.mint_bet_nft(&bet);
         self.bet_by_id(bet_id).set(&bet);
     
@@ -98,7 +95,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
     
         Ok((bet_id, odds, stake))
     }
-
+    
 
     fn calculate_potential_profit(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {

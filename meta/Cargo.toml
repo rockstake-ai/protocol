@@ -1,10 +1,10 @@
 [package]
-name = "betcube-meta"
+name = "rockstake-meta"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
-[dependencies.betcube]
+[dependencies.rockstake]
 path = ".."
 
 [dependencies.multiversx-sc-meta]

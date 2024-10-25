@@ -1,12 +1,12 @@
 [package]
-name = "betcube"
+name = "rockstake"
 version = "0.0.0"
 authors = ["you"]
 edition = "2021"
 publish = false
 
 [lib]
-path = "src/betcube.rs"
+path = "src/lib.rs"
 
 [dependencies.multiversx-sc]
 version = "0.46.1"

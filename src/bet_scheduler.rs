@@ -11,6 +11,13 @@ pub struct BetScheduler<M: ManagedTypeApi> {
     best_lay_odds: BigUint<M>,
     back_liquidity: BigUint<M>,
     lay_liquidity: BigUint<M>,
+    // Contoare pentru toate statusurile posibile
+    matched_count: usize,
+    unmatched_count: usize,
+    partially_matched_count: usize,
+    win_count: usize,
+    lost_count: usize,
+    canceled_count: usize,
 }
 
 impl<M: ManagedTypeApi> BetScheduler<M> {
@@ -22,19 +29,32 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
             best_lay_odds: BigUint::zero(),
             back_liquidity: BigUint::zero(),
             lay_liquidity: BigUint::zero(),
+            matched_count: 0,
+            unmatched_count: 0,
+            partially_matched_count: 0,
+            win_count: 0,
+            lost_count: 0,
+            canceled_count: 0,
         }
     }
 
     pub fn add(&mut self, mut bet: Bet<M>) {
+        let old_status = bet.status.clone();
         bet.status = BetStatus::Unmatched;
+        self.update_status_counters(&old_status, &bet.status);
+    
         match bet.bet_type {
             BetType::Back => {
-                self.insert_bet(&mut self.back_bets.clone(), bet.clone());
+                let mut queue = self.back_bets.clone();
+                self.insert_bet(&mut queue, bet.clone());
+                self.back_bets = queue;
                 self.back_liquidity += &bet.stake_amount;
                 self.update_best_back_odds();
             },
             BetType::Lay => {
-                self.insert_bet(&mut self.lay_bets.clone(), bet.clone());
+                let mut queue = self.lay_bets.clone();
+                self.insert_bet(&mut queue, bet.clone());
+                self.lay_bets = queue;
                 self.lay_liquidity += &bet.liability;
                 self.update_best_lay_odds();
             },
@@ -152,39 +172,98 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
         (matching_bets, matched_amount, unmatched_amount)
     }
 
+
     pub fn match_bet(&mut self, bet: &mut Bet<M>) -> (BigUint<M>, BigUint<M>) {
+        let original_status = bet.status.clone();
         let (matching_bets, matched_amount, unmatched_amount) = self.get_matching_bets(bet);
         
-        // Actualizăm statusul pariului curent
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = unmatched_amount.clone();
-        bet.status = if matched_amount == bet.stake_amount {
+        
+        let final_status = if matched_amount == bet.stake_amount {
             BetStatus::Matched
         } else if matched_amount > BigUint::zero() {
             BetStatus::PartiallyMatched
         } else {
             BetStatus::Unmatched
         };
-
-        // Actualizăm pariurile potrivite și le readăugăm dacă este necesar
+    
+        // Actualizăm o singură dată
+        if original_status != final_status {
+            self.update_status_counters(&original_status, &final_status);
+            bet.status = final_status;
+        }
+    
         for mut matched_bet in matching_bets.iter() {
+            let original_matched_status = matched_bet.status.clone();
             self.remove(&matched_bet);
             
-            if matched_bet.matched_amount == matched_bet.stake_amount {
-                matched_bet.status = BetStatus::Matched;
+            let new_matched_status = if matched_bet.matched_amount == matched_bet.stake_amount {
+                BetStatus::Matched
             } else {
-                matched_bet.status = BetStatus::PartiallyMatched;
+                BetStatus::PartiallyMatched
+            };
+    
+            if original_matched_status != new_matched_status {
+                self.update_status_counters(&original_matched_status, &new_matched_status);
+                matched_bet.status = new_matched_status;
+            }
+    
+            if matched_bet.unmatched_amount > BigUint::zero() {
+                // Nu mai actualizăm statusul în add() pentru că am făcut-o deja
+                matched_bet.status = new_matched_status;
                 self.add(matched_bet);
             }
         }
-
-        // Adăugăm pariul curent dacă nu este complet potrivit
+    
         if bet.unmatched_amount > BigUint::zero() {
+            // Nu mai actualizăm statusul în add() pentru că am făcut-o deja
+            bet.status = final_status;
             self.add(bet.clone());
         }
-
+    
         (matched_amount, unmatched_amount)
     }
+
+    pub fn update_bet_status(&mut self, bet: &mut Bet<M>, new_status: BetStatus) {
+        let old_status = bet.status.clone();
+        self.update_status_counters(&old_status, &new_status);
+        bet.status = new_status;
+    }
+
+    fn update_status_counters(&mut self, old_status: &BetStatus, new_status: &BetStatus) {
+        // Decrementăm contorul vechi
+        match old_status {
+            BetStatus::Matched => self.matched_count = self.matched_count.saturating_sub(1),
+            BetStatus::Unmatched => self.unmatched_count = self.unmatched_count.saturating_sub(1),
+            BetStatus::PartiallyMatched => self.partially_matched_count = self.partially_matched_count.saturating_sub(1),
+            BetStatus::Win => self.win_count = self.win_count.saturating_sub(1),
+            BetStatus::Lost => self.lost_count = self.lost_count.saturating_sub(1),
+            BetStatus::Canceled => self.canceled_count = self.canceled_count.saturating_sub(1),
+        }
+
+        // Incrementăm noul contor
+        match new_status {
+            BetStatus::Matched => self.matched_count += 1,
+            BetStatus::Unmatched => self.unmatched_count += 1,
+            BetStatus::PartiallyMatched => self.partially_matched_count += 1,
+            BetStatus::Win => self.win_count += 1,
+            BetStatus::Lost => self.lost_count += 1,
+            BetStatus::Canceled => self.canceled_count += 1,
+        }
+    }
+
+    pub fn get_status_counts(&self) -> (BigUint<M>, BigUint<M>, BigUint<M>, BigUint<M>, BigUint<M>, BigUint<M>) {
+        (
+            self.matched_count.into(),
+            self.unmatched_count.into(),
+            self.partially_matched_count.into(),
+            self.win_count.into(),
+            self.lost_count.into(),
+            self.canceled_count.into()
+        )
+    }
+
 
 
     fn update_best_back_odds(&mut self) {
