@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, Market, MarketStatus, Selection};
+use crate::types::{Bet, BetStatus, BetType, Market, MarketStatus, OrderbookEntry, Selection};
 use crate::bet_scheduler::BetScheduler;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -90,5 +90,40 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         counter += 1;
         self.market_counter().set(&counter);
         counter
+    }
+
+    // #[view(getOrderbook)]
+    #[endpoint(getOrderbook)]
+    fn get_orderbook(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> SCResult<MultiValue2<ManagedVec<OrderbookEntry<Self::Api>>, ManagedVec<OrderbookEntry<Self::Api>>>> {
+        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
+        let market = self.markets(&market_id).get();
+        
+        let selection_index = market.selections.iter()
+            .position(|s| s.selection_id == selection_id)
+            .ok_or("Selection not found")?;
+        
+        let selection = market.selections.get(selection_index);
+        
+        let mut back_orders = ManagedVec::new();
+        for bet in selection.priority_queue.get_back_bets().iter() {
+            back_orders.push(OrderbookEntry {
+                odd: bet.odd.clone(),
+                amount: bet.unmatched_amount.clone()
+            });
+        }
+        
+        let mut lay_orders = ManagedVec::new();
+        for bet in selection.priority_queue.get_lay_bets().iter() {
+            lay_orders.push(OrderbookEntry {
+                odd: bet.odd.clone(),
+                amount: bet.unmatched_amount.clone()
+            });
+        }
+        
+        Ok((back_orders, lay_orders).into())
     }
 }

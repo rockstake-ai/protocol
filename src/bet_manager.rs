@@ -100,23 +100,17 @@ pub trait BetManagerModule: crate::storage::StorageModule
     fn calculate_potential_profit(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
             BetType::Back => {
-                (odds - &BigUint::from(1u32)) * stake
+                (odds - &BigUint::from(100u32)) * stake / &BigUint::from(100u32)
             },
-            BetType::Lay => stake.clone()
+            BetType::Lay => stake.clone()  // Pentru Lay, profitul este stake-ul
         }
     }
-
-    fn calculate_stake_from_liability(&self, liability: &BigUint, odds: &BigUint) -> BigUint {
-        liability / &(odds - &BigUint::from(1u32))
-    }
-
+    
     fn calculate_potential_liability(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
             BetType::Back => stake.clone(),
             BetType::Lay => {
-                // Presupunem că odds este reprezentat ca 170 pentru 1.70
-                let odds_minus_one = odds - &BigUint::from(100u32);
-                (stake * &odds_minus_one) / &BigUint::from(100u32)
+                (stake * &(odds - &BigUint::from(100u32))) / &BigUint::from(100u32)
             }
         }
     }

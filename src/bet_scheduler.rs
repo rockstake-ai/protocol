@@ -136,7 +136,10 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
 
     pub fn get_matching_bets(&mut self, bet: &Bet<M>) -> (ManagedVec<M, Bet<M>>, BigUint<M>, BigUint<M>) {
         let mut matched_amount = BigUint::zero();
-        let mut unmatched_amount = bet.stake_amount.clone();
+        let mut unmatched_amount = match bet.bet_type {
+            BetType::Back => bet.stake_amount.clone(),
+            BetType::Lay => bet.liability.clone(),  // Pentru Lay trebuie să folosim liability
+        };
         let mut matching_bets = ManagedVec::new();
     
         let source = match bet.bet_type {
@@ -144,15 +147,30 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
             BetType::Lay => &mut self.back_bets,
         };
     
+        // Sortăm mai întâi sursele pentru matching optim
+        // Back-urile trebuie sortate descrescător după cotă
+        // Lay-urile trebuie sortate crescător după cotă
         for i in 0..source.len() {
             let existing_bet = source.get(i);
             let is_match = match bet.bet_type {
-                BetType::Back => bet.odd >= existing_bet.odd,
-                BetType::Lay => bet.odd <= existing_bet.odd,
+                BetType::Back => {
+                    // Pentru Back, căutăm Lay-uri cu cotă mai mică sau egală
+                    bet.odd >= existing_bet.odd
+                },
+                BetType::Lay => {
+                    // Pentru Lay, căutăm Back-uri cu cotă mai mare sau egală
+                    bet.odd <= existing_bet.odd
+                },
             };
     
             if is_match {
-                let match_amount = unmatched_amount.clone().min(existing_bet.unmatched_amount.clone());
+                let match_amount = if bet.bet_type == BetType::Back {
+                    // Pentru Back, folosim minimul dintre stake-ul rămas și unmatched amount-ul Lay-ului
+                    unmatched_amount.clone().min(existing_bet.unmatched_amount.clone())
+                } else {
+                    // Pentru Lay, folosim minimul dintre liability și stake-ul Back-ului
+                    unmatched_amount.clone().min(existing_bet.stake_amount.clone())
+                };
     
                 matched_amount += &match_amount;
                 unmatched_amount -= &match_amount;
@@ -160,27 +178,37 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
                 let mut updated_bet = existing_bet.clone();
                 updated_bet.matched_amount += &match_amount;
                 updated_bet.unmatched_amount -= &match_amount;
+                
+                // Calculăm și actualizăm liability pentru Lay-uri
+                if bet.bet_type == BetType::Lay {
+                    updated_bet.liability = &match_amount * &(&bet.odd - &BigUint::from(1u32));
+                }
+                
                 matching_bets.push(updated_bet);
     
                 if unmatched_amount == BigUint::zero() {
                     break;
                 }
             } else {
-                break;  // No more matching bets due to ordering
+                // Dacă nu mai găsim match-uri, ieșim din loop
+                // deoarece pariurile sunt ordonate după cotă
+                break;
             }
         }
+    
         (matching_bets, matched_amount, unmatched_amount)
     }
 
 
     pub fn match_bet(&mut self, bet: &mut Bet<M>) -> (BigUint<M>, BigUint<M>) {
-        let original_status = bet.status.clone();
+        let old_status = bet.status.clone();
         let (matching_bets, matched_amount, unmatched_amount) = self.get_matching_bets(bet);
         
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = unmatched_amount.clone();
         
-        let final_status = if matched_amount == bet.stake_amount {
+        // Actualizăm statusul în funcție de cât s-a potrivit
+        let new_status = if matched_amount == bet.stake_amount {
             BetStatus::Matched
         } else if matched_amount > BigUint::zero() {
             BetStatus::PartiallyMatched
@@ -188,14 +216,15 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
             BetStatus::Unmatched
         };
     
-        // Actualizăm o singură dată
-        if original_status != final_status {
-            self.update_status_counters(&original_status, &final_status);
-            bet.status = final_status.clone();
+        // Actualizăm contoarele doar dacă s-a schimbat statusul
+        if old_status != new_status {
+            self.update_status_counters(&old_status, &new_status);
         }
+        bet.status = new_status;
     
+        // Procesăm pariurile care s-au potrivit
         for mut matched_bet in matching_bets.iter() {
-            let original_matched_status = matched_bet.status.clone();
+            let old_matched_status = matched_bet.status.clone();
             self.remove(&matched_bet);
             
             let new_matched_status = if matched_bet.matched_amount == matched_bet.stake_amount {
@@ -204,21 +233,20 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
                 BetStatus::PartiallyMatched
             };
     
-            if original_matched_status != new_matched_status {
-                self.update_status_counters(&original_matched_status, &new_matched_status);
-                matched_bet.status = new_matched_status.clone();
+            // Actualizăm contoarele doar dacă s-a schimbat statusul
+            if old_matched_status != new_matched_status {
+                self.update_status_counters(&old_matched_status, &new_matched_status);
             }
+            matched_bet.status = new_matched_status;
     
+            // Readăugăm pariul dacă mai are unmatched amount
             if matched_bet.unmatched_amount > BigUint::zero() {
-                // Nu mai actualizăm statusul în add() pentru că am făcut-o deja
-                matched_bet.status = new_matched_status;
                 self.add(matched_bet);
             }
         }
     
+        // Adăugăm pariul curent dacă mai are unmatched amount
         if bet.unmatched_amount > BigUint::zero() {
-            // Nu mai actualizăm statusul în add() pentru că am făcut-o deja
-            bet.status = final_status;
             self.add(bet.clone());
         }
     

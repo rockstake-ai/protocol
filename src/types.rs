@@ -87,3 +87,9 @@ pub enum EventResult {
     NotReported,
     Reported(u64), // ID-ul selecției câștigătoare
 }
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
+pub struct OrderbookEntry<M: ManagedTypeApi> {
+    pub odd: BigUint<M>,
+    pub amount: BigUint<M>,
+}
