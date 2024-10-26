@@ -93,3 +93,25 @@ pub struct OrderbookEntry<M: ManagedTypeApi> {
     pub odd: BigUint<M>,
     pub amount: BigUint<M>,
 }
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
+pub struct BetOrderEntry<M: ManagedTypeApi> {
+    pub bet_type: BetType,
+    pub odd: BigUint<M>,
+    pub amount: BigUint<M>,
+    pub status: BetStatus,
+    pub nft_nonce: u64  // să identificăm ordinea plasării
+}
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
+pub struct DetailedBetEntry<M: ManagedTypeApi> {
+    pub bet_type: BetType,
+    pub odd: BigUint<M>,
+    pub unmatched_amount: BigUint<M>,
+    pub matched_amount: BigUint<M>,
+    pub original_stake: BigUint<M>,
+    pub liability: BigUint<M>,
+    pub status: BetStatus,
+    pub nft_nonce: u64,
+    pub created_at: u64
+}

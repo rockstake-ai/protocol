@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, Market, MarketStatus, OrderbookEntry, Selection};
+use crate::types::{Bet, BetOrderEntry, BetStatus, BetType, DetailedBetEntry, Market, MarketStatus, OrderbookEntry, Selection};
 use crate::bet_scheduler::BetScheduler;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -125,5 +125,53 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         }
         
         Ok((back_orders, lay_orders).into())
+    }
+
+    #[endpoint(getBetQueueStatus)]
+    fn get_detailed_bet_queue(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> SCResult<MultiValue2<ManagedVec<DetailedBetEntry<Self::Api>>, ManagedVec<DetailedBetEntry<Self::Api>>>> {
+        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
+        let market = self.markets(&market_id).get();
+        
+        let selection_index = market.selections.iter()
+            .position(|s| s.selection_id == selection_id)
+            .ok_or("Selection not found")?;
+        
+        let selection = market.selections.get(selection_index);
+        
+        let mut back_queue = ManagedVec::new();
+        for bet in selection.priority_queue.get_back_bets().iter() {
+            back_queue.push(DetailedBetEntry {
+                bet_type: bet.bet_type.clone(),
+                odd: bet.odd.clone(),
+                unmatched_amount: bet.unmatched_amount.clone(),
+                matched_amount: bet.matched_amount.clone(),
+                original_stake: bet.stake_amount.clone(),
+                liability: bet.liability.clone(),
+                status: bet.status.clone(),
+                nft_nonce: bet.nft_nonce,
+                created_at: bet.created_at
+            });
+        }
+        
+        let mut lay_queue = ManagedVec::new();
+        for bet in selection.priority_queue.get_lay_bets().iter() {
+            lay_queue.push(DetailedBetEntry {
+                bet_type: bet.bet_type.clone(),
+                odd: bet.odd.clone(),
+                unmatched_amount: bet.unmatched_amount.clone(),
+                matched_amount: bet.matched_amount.clone(),
+                original_stake: bet.stake_amount.clone(),
+                liability: bet.liability.clone(),
+                status: bet.status.clone(),
+                nft_nonce: bet.nft_nonce,
+                created_at: bet.created_at
+            });
+        }
+        
+        Ok((back_queue, lay_queue).into())
     }
 }

@@ -28,9 +28,12 @@ pub trait BetManagerModule: crate::storage::StorageModule
             },
             BetType::Lay => {
                 let stake = self.calculate_stake_from_total(&total_amount, &odds);
-                let liability = &total_amount - &stake;
-                require!(liability == self.calculate_potential_liability(&bet_type, &stake, &odds), "Calculation mismatch");
-                (stake, liability)
+                let calculated_liability = self.calculate_potential_liability(&bet_type, &stake, &odds);
+                let required_total = stake.clone() + &calculated_liability;
+                
+                require!(total_amount.clone() >= required_total, "Insufficient total amount");
+                
+                (stake, calculated_liability)
             }
         };
         
@@ -106,17 +109,26 @@ pub trait BetManagerModule: crate::storage::StorageModule
         }
     }
     
+    fn calculate_stake_from_total(&self, total: &BigUint, odds: &BigUint) -> BigUint {
+        total * &BigUint::from(100u32) / odds
+    }
+    
     fn calculate_potential_liability(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
             BetType::Back => stake.clone(),
             BetType::Lay => {
-                (stake * &(odds - &BigUint::from(100u32))) / &BigUint::from(100u32)
+                let odds_minus_100 = odds - &BigUint::from(100u32);
+                let result = (stake * &odds_minus_100) / &BigUint::from(100u32);
+                // sc_panic!(
+                //     "Liability calculation: stake={}, odds={}, odds_minus_100={}, calculated_liability={}", 
+                //     stake, 
+                //     odds,
+                //     odds_minus_100,
+                //     result
+                // );
+                result
             }
         }
-    }
-    
-    fn calculate_stake_from_total(&self, total: &BigUint, odds: &BigUint) -> BigUint {
-        total * &BigUint::from(100u32) / odds
     }
     
     fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
