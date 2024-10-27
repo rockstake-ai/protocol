@@ -11,7 +11,6 @@ pub struct BetScheduler<M: ManagedTypeApi> {
     best_lay_odds: BigUint<M>,
     back_liquidity: BigUint<M>,
     lay_liquidity: BigUint<M>,
-    // Contoare pentru toate statusurile posibile
     matched_count: usize,
     unmatched_count: usize,
     partially_matched_count: usize,
@@ -70,7 +69,6 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
             }
         }
         
-        // Create a new vector with the bet inserted at the correct position
         let mut new_queue = ManagedVec::new();
         for i in 0..insert_index {
             new_queue.push(queue.get(i));
@@ -291,8 +289,6 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
             self.canceled_count.into()
         )
     }
-
-
 
     fn update_best_back_odds(&mut self) {
         if self.back_bets.is_empty() {

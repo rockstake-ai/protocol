@@ -85,7 +85,7 @@ pub struct Selection<M: ManagedTypeApi> {
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
 pub enum EventResult {
     NotReported,
-    Reported(u64), // ID-ul selecției câștigătoare
+    Reported(u64), 
 }
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
@@ -100,7 +100,7 @@ pub struct BetOrderEntry<M: ManagedTypeApi> {
     pub odd: BigUint<M>,
     pub amount: BigUint<M>,
     pub status: BetStatus,
-    pub nft_nonce: u64  // să identificăm ordinea plasării
+    pub nft_nonce: u64 
 }
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]

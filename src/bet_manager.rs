@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_MARKET_CLOSED, ERR_INVALID_MARKET, ERR_MARKET_NOT_OPEN, ERR_BET_ODDS, ERR_SELECTION}, bet_scheduler::BetScheduler, types::{Bet, BetStatus, BetType, MarketStatus}};
+use crate::{errors::{ERR_MARKET_CLOSED, ERR_INVALID_MARKET, ERR_MARKET_NOT_OPEN, ERR_BET_ODDS, ERR_SELECTION}, types::{Bet, BetStatus, BetType, MarketStatus}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -30,7 +30,13 @@ pub trait BetManagerModule: crate::storage::StorageModule
                 let stake = self.calculate_stake_from_total(&total_amount, &odds);
                 let calculated_liability = self.calculate_potential_liability(&bet_type, &stake, &odds);
                 let required_total = stake.clone() + &calculated_liability;
-                
+                // sc_panic!(
+                //     "Liability calculation: stake={}, odds={}, odds_minus_100={}, calculated_liability={}", 
+                //     stake, 
+                //     odds,
+                //     odds_minus_100,
+                //     result
+                // );
                 require!(total_amount.clone() >= required_total, "Insufficient total amount");
                 
                 (stake, calculated_liability)
