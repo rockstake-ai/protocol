@@ -124,5 +124,17 @@ pub trait StorageModule {
         result
     }
 
+    #[view(getBetSchedulerCounts)]
+    fn get_bet_scheduler_counts(&self, scheduler: &BetScheduler<Self::Api>) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
+        (
+            BigUint::from(scheduler.matched_count),
+            BigUint::from(scheduler.unmatched_count),
+            BigUint::from(scheduler.partially_matched_count),
+            BigUint::from(scheduler.win_count),
+            BigUint::from(scheduler.lost_count),
+            BigUint::from(scheduler.canceled_count)
+        ).into()
+    }
+
 }
 

@@ -7,9 +7,9 @@ use crate::types::{Bet, BetScheduler, BetStatus, BetType};
 pub trait BetSchedulerModule:
     crate::storage::StorageModule +
     crate::events::EventsModule + {
-        
+
     fn init_bet_scheduler(&self) -> BetScheduler<Self::Api> {
-        let scheduler = BetScheduler {
+        BetScheduler {
             back_bets: ManagedVec::new(),
             lay_bets: ManagedVec::new(),
             best_back_odds: BigUint::zero(),
@@ -22,9 +22,7 @@ pub trait BetSchedulerModule:
             win_count: 0,
             lost_count: 0,
             canceled_count: 0,
-        };
-        self.bet_scheduler().set(scheduler.clone());
-        scheduler
+        }
     }
 
     fn add(&self, bet: Bet<Self::Api>) {
@@ -277,6 +275,18 @@ pub trait BetSchedulerModule:
         old_status: &BetStatus,
         new_status: &BetStatus
     ) {
+        // Emit event before update
+        self.bet_counter_update_event(
+            old_status,
+            new_status,
+            scheduler.matched_count,
+            scheduler.unmatched_count,
+            scheduler.partially_matched_count,
+            scheduler.win_count,
+            scheduler.lost_count,
+            scheduler.canceled_count,
+        );
+
         match old_status {
             BetStatus::Matched => scheduler.matched_count = scheduler.matched_count.saturating_sub(1),
             BetStatus::Unmatched => scheduler.unmatched_count = scheduler.unmatched_count.saturating_sub(1),
@@ -294,6 +304,18 @@ pub trait BetSchedulerModule:
             BetStatus::Lost => scheduler.lost_count += 1,
             BetStatus::Canceled => scheduler.canceled_count += 1,
         }
+
+        // Emit event after update
+        self.bet_counter_updated_event(
+            old_status,
+            new_status,
+            scheduler.matched_count,
+            scheduler.unmatched_count,
+            scheduler.partially_matched_count,
+            scheduler.win_count,
+            scheduler.lost_count,
+            scheduler.canceled_count,
+        );
     }
 
     fn update_best_back_odds(&self, scheduler: &mut BetScheduler<Self::Api>) {

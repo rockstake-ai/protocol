@@ -54,35 +54,64 @@ pub trait MarketManagerModule:
 
     #[only_owner]
     #[endpoint(getBetCountsByStatus)]
-    fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(usize, usize, usize, usize, usize, usize)> {
+    fn get_bet_counts_by_status(&self, market_id: u64) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
         require!(!self.markets(&market_id).is_empty(), "Market does not exist");
         let market = self.markets(&market_id).get();
         
-        let mut total_matched = 0usize;
-        let mut total_unmatched = 0usize;
-        let mut total_partially_matched = 0usize;
-        let mut total_win = 0usize;
-        let mut total_lost = 0usize;
-        let mut total_canceled = 0usize;
-
+        let mut total_matched = BigUint::zero();
+        let mut total_unmatched = BigUint::zero();
+        let mut total_partially_matched = BigUint::zero();
+        let mut total_win = BigUint::zero();
+        let mut total_lost = BigUint::zero();
+        let mut total_canceled = BigUint::zero();
+    
+        // Emit event for debugging
+        self.market_query_event(market_id, market.selections.len());
+    
         for selection in market.selections.iter() {
             let scheduler = selection.priority_queue;
-            total_matched += scheduler.matched_count;
-            total_unmatched += scheduler.unmatched_count;
-            total_partially_matched += scheduler.partially_matched_count;
-            total_win += scheduler.win_count;
-            total_lost += scheduler.lost_count;
-            total_canceled += scheduler.canceled_count;
+            let (matched, unmatched, partially_matched, win, lost, canceled) = 
+                self.get_bet_scheduler_counts(&scheduler).into_tuple();
+    
+            // Emit event for each selection's counts
+            self.selection_counts_event(
+                market_id,
+                selection.selection_id,
+                &matched,
+                &unmatched,
+                &partially_matched,
+                &win,
+                &lost,
+                &canceled
+            );
+    
+            total_matched += matched;
+            total_unmatched += unmatched;
+            total_partially_matched += partially_matched;
+            total_win += win;
+            total_lost += lost;
+            total_canceled += canceled;
         }
-
-        Ok((
+    
+        // Emit final totals for debugging
+        self.total_counts_event(
+            market_id,
+            &total_matched,
+            &total_unmatched,
+            &total_partially_matched,
+            &total_win,
+            &total_lost,
+            &total_canceled
+        );
+    
+        (
             total_matched,
             total_unmatched,
             total_partially_matched,
             total_win,
             total_lost,
             total_canceled
-        ))
+        ).into()
     }
 
     fn get_and_increment_market_counter(&self) -> u64 {

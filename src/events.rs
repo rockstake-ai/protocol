@@ -1,4 +1,4 @@
-use crate::types::{BetType, EventResult};
+use crate::types::{BetStatus, BetType, EventResult};
 
 multiversx_sc::imports!();
 
@@ -83,5 +83,63 @@ fn bet_closed_event(
           #[indexed] bettor: &ManagedAddress,
           amount: &BigUint,
       );
+
+      #[event("betCounterUpdate")]
+      fn bet_counter_update_event(
+          &self,
+          #[indexed] old_status: &BetStatus,
+          #[indexed] new_status: &BetStatus,
+          #[indexed] matched_count: usize,
+          #[indexed] unmatched_count: usize,
+          #[indexed] partially_matched_count: usize,
+          #[indexed] win_count: usize,
+          #[indexed] lost_count: usize,
+          #[indexed] canceled_count: usize,
+      );
+  
+      #[event("betCounterUpdated")]
+      fn bet_counter_updated_event(
+          &self,
+          #[indexed] old_status: &BetStatus,
+          #[indexed] new_status: &BetStatus,
+          #[indexed] matched_count: usize,
+          #[indexed] unmatched_count: usize,
+          #[indexed] partially_matched_count: usize,
+          #[indexed] win_count: usize,
+          #[indexed] lost_count: usize,
+          #[indexed] canceled_count: usize,
+      );
+
+      #[event("marketQuery")]
+fn market_query_event(
+    &self,
+    #[indexed] market_id: u64,
+    #[indexed] selection_count: usize
+);
+
+#[event("selectionCounts")]
+fn selection_counts_event(
+    &self,
+    #[indexed] market_id: u64,
+    #[indexed] selection_id: u64,
+    #[indexed] matched: &BigUint,
+    #[indexed] unmatched: &BigUint,
+    #[indexed] partially_matched: &BigUint,
+    #[indexed] win: &BigUint,
+    #[indexed] lost: &BigUint,
+    #[indexed] canceled: &BigUint
+);
+
+#[event("totalCounts")]
+fn total_counts_event(
+    &self,
+    #[indexed] market_id: u64,
+    #[indexed] matched: &BigUint,
+    #[indexed] unmatched: &BigUint,
+    #[indexed] partially_matched: &BigUint,
+    #[indexed] win: &BigUint,
+    #[indexed] lost: &BigUint,
+    #[indexed] canceled: &BigUint
+);
 
 }
