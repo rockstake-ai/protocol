@@ -10,17 +10,29 @@ pub trait BetManagerModule: crate::storage::StorageModule
 
     #[payable("*")]
     #[endpoint(placeBet)]
-    fn place_bet(&self, market_id: u64, selection_id: u64, odds: BigUint, bet_type: BetType) -> SCResult<(u64, BigUint, BigUint)> {
+    fn place_bet(
+        &self,
+        market_id: u64,
+        selection_id: u64,
+        odds: BigUint,
+        bet_type: BetType
+    ) -> SCResult<(u64, BigUint, BigUint)> {
         let mut market = self.markets(&market_id).get();
         let created_at = self.blockchain().get_block_timestamp();
-
+    
         require!(!self.markets(&market_id).is_empty(), ERR_INVALID_MARKET);
         require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
         require!(created_at < market.close_timestamp, ERR_MARKET_CLOSED);
-        require!(odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32), ERR_BET_ODDS);
+        require!(
+            odds >= BigUint::from(101u32) && odds <= BigUint::from(100000u32),
+            ERR_BET_ODDS
+        );
     
         let caller = self.blockchain().get_caller();
-        let (token_identifier, token_nonce, total_amount) = self.call_value().egld_or_single_esdt().into_tuple();
+        let (token_identifier, token_nonce, total_amount) = self
+            .call_value()
+            .egld_or_single_esdt()
+            .into_tuple();
         let bet_id = self.get_last_bet_id() + 1;
     
         let (stake, liability) = match bet_type {
@@ -39,13 +51,15 @@ pub trait BetManagerModule: crate::storage::StorageModule
                 (stake, calculated_liability)
             }
         };
-        
-        let selection_index = market.selections.iter()
+    
+        let selection_index = market
+            .selections
+            .iter()
             .position(|s| &s.selection_id == &selection_id)
             .expect(ERR_SELECTION);
         let mut selection = market.selections.get(selection_index);
     
-        let mut bet = Bet {
+        let bet = Bet {
             bettor: caller.clone(),
             event: market_id,
             selection: selection.clone(),
@@ -55,9 +69,9 @@ pub trait BetManagerModule: crate::storage::StorageModule
                 BetType::Lay => liability.clone(),
             },
             matched_amount: BigUint::zero(),
-            unmatched_amount: match bet_type {  // MODIFICARE AICI
+            unmatched_amount: match bet_type {
                 BetType::Back => stake.clone(),
-                BetType::Lay => liability.clone(),  // Pentru Lay folosim liability ca unmatched_amount
+                BetType::Lay => liability.clone(),
             },
             potential_profit: self.calculate_potential_profit(&bet_type, &stake, &odds),
             odd: odds.clone(),
@@ -69,14 +83,17 @@ pub trait BetManagerModule: crate::storage::StorageModule
             created_at: created_at
         };
     
+        // Folosim direct metodele din BetSchedulerModule
         let (matched_amount, unmatched_amount, updated_bet) = self.match_bet(bet);
-        selection.priority_queue.best_lay_odds;
-            
-        let bet_nft_nonce = self.mint_bet_nft(&bet);
-        self.bet_by_id(bet_id).set(&bet);
+        
+        // Actualizăm selection cu noua stare
+        selection.priority_queue = self.bet_scheduler().get();
+        
+        let bet_nft_nonce = self.mint_bet_nft(&updated_bet);
+        self.bet_by_id(bet_id).set(&updated_bet);
     
-        let _ = market.selections.set(selection_index, &selection);
-        let _ = market.total_matched_amount += &matched_amount;
+        market.selections.set(selection_index, &selection);
+        market.total_matched_amount += &matched_amount;
         self.markets(&market_id).set(&market);
     
         let total_locked = match bet_type {
@@ -84,9 +101,14 @@ pub trait BetManagerModule: crate::storage::StorageModule
             BetType::Lay => liability.clone(),
         };
         self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
-
-        self.send().direct_esdt(&caller, self.bet_nft_token().get_token_id_ref(), bet_nft_nonce, &BigUint::from(1u64));
-        
+    
+        self.send().direct_esdt(
+            &caller,
+            self.bet_nft_token().get_token_id_ref(),
+            bet_nft_nonce,
+            &BigUint::from(1u64)
+        );
+    
         self.bet_placed_event(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
@@ -104,7 +126,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
     
         Ok((bet_id, odds, stake))
     }
-    
+
 
     fn calculate_potential_profit(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
         match bet_type {
