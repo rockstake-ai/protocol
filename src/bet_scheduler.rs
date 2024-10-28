@@ -227,7 +227,7 @@ pub trait BetSchedulerModule:
 
     fn update_bet_status(&self, bet: Bet<Self::Api>, new_status: BetStatus) -> Bet<Self::Api> {
         let mut scheduler = self.bet_scheduler().get();
-        let old_status = bet.status;
+        let old_status = bet.status.clone(); 
         self.update_status_counters(&mut scheduler, &old_status, &new_status);
         let mut updated_bet = bet;
         updated_bet.status = new_status;
