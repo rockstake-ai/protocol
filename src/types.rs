@@ -1,5 +1,3 @@
-use crate::bet_scheduler::BetScheduler;
-
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
@@ -114,4 +112,20 @@ pub struct DetailedBetEntry<M: ManagedTypeApi> {
     pub status: BetStatus,
     pub nft_nonce: u64,
     pub created_at: u64
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+pub struct BetScheduler<M: ManagedTypeApi> {
+    pub back_bets: ManagedVec<M, Bet<M>>,
+    pub lay_bets: ManagedVec<M, Bet<M>>,
+    pub best_back_odds: BigUint<M>,
+    pub best_lay_odds: BigUint<M>,
+    pub back_liquidity: BigUint<M>,
+    pub lay_liquidity: BigUint<M>,
+    pub matched_count: usize,
+    pub unmatched_count: usize,
+    pub partially_matched_count: usize,
+    pub win_count: usize,
+    pub lost_count: usize,
+    pub canceled_count: usize,
 }

@@ -1,4 +1,4 @@
-use crate::{bet_scheduler::BetScheduler, types::{Bet, BetType, Market}};
+use crate::{types::BetScheduler, types::{Bet, BetType, Market}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -65,6 +65,65 @@ pub trait StorageModule {
     fn unmatched_bets(&self, market_id: u64) -> SingleValueMapper<BetScheduler<Self::Api>>;
     #[storage_mapper("market_queues")]
     fn market_queues(&self, market_id: u64) -> SingleValueMapper<BetScheduler<Self::Api>>;
+
+    #[view(getBetSchedulerStorage)]
+    #[storage_mapper("bet_scheduler")]
+    fn bet_scheduler(&self) -> SingleValueMapper<BetScheduler<Self::Api>>;
+
+
+    #[view(getBackBets)]
+    fn get_back_bets(&self) -> ManagedVec<Self::Api, Bet<Self::Api>> {
+        let scheduler = self.bet_scheduler().get();
+        scheduler.back_bets
+    }
+
+    #[view(getLayBets)]
+    fn get_lay_bets(&self) -> ManagedVec<Self::Api, Bet<Self::Api>> {
+        let scheduler = self.bet_scheduler().get();
+        scheduler.lay_bets
+    }
+
+    #[view(getBestBackOdds)]
+    fn get_best_back_odds(&self) -> BigUint {
+        let scheduler = self.bet_scheduler().get();
+        scheduler.best_back_odds
+    }
+
+    #[view(getBestLayOdds)]
+    fn get_best_lay_odds(&self) -> BigUint {
+        let scheduler = self.bet_scheduler().get();
+        scheduler.best_lay_odds
+    }
+
+    #[view(getBackLiquidity)]
+    fn get_back_liquidity(&self) -> BigUint {
+        let scheduler = self.bet_scheduler().get();
+        scheduler.back_liquidity
+    }
+
+    #[view(getLayLiquidity)]
+    fn get_lay_liquidity(&self) -> BigUint {
+        let scheduler = self.bet_scheduler().get();
+        scheduler.lay_liquidity
+    }
+
+    #[view(getTopNBets)]
+    fn get_top_n_bets(
+        &self,
+        bet_type: BetType,
+        n: usize
+    ) -> ManagedVec<Self::Api, Bet<Self::Api>> {
+        let scheduler = self.bet_scheduler().get();
+        let source = match bet_type {
+            BetType::Back => &scheduler.back_bets,
+            BetType::Lay => &scheduler.lay_bets,
+        };
+        let mut result = ManagedVec::new();
+        for i in 0..n.min(source.len()) {
+            result.push(source.get(i).clone());
+        }
+        result
+    }
 
 }
 

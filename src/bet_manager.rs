@@ -5,7 +5,8 @@ multiversx_sc::derive_imports!();
 #[multiversx_sc::module]
 pub trait BetManagerModule: crate::storage::StorageModule 
     + crate::events::EventsModule 
-    + crate::nft_manager::NftManagerModule {
+    + crate::nft_manager::NftManagerModule
+    + crate::bet_scheduler::BetSchedulerModule {
 
     #[payable("*")]
     #[endpoint(placeBet)]
@@ -68,8 +69,8 @@ pub trait BetManagerModule: crate::storage::StorageModule
             created_at: created_at
         };
     
-        let (matched_amount, unmatched_amount) = 
-        selection.priority_queue.match_bet(&mut bet);
+        let (matched_amount, unmatched_amount, updated_bet) = self.match_bet(bet);
+        selection.priority_queue.best_lay_odds;
             
         let bet_nft_nonce = self.mint_bet_nft(&bet);
         self.bet_by_id(bet_id).set(&bet);

@@ -21,7 +21,8 @@ storage::StorageModule
 + nft_manager::NftManagerModule
 + fund_manager::FundManagerModule
 + bet_manager::BetManagerModule
-+ market_manager::MarketManagerModule{
++ market_manager::MarketManagerModule
++ bet_scheduler::BetSchedulerModule{
     #[upgrade]
     fn upgrade(&self) {}
 

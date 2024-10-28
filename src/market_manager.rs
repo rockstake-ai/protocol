@@ -1,5 +1,4 @@
-use crate::types::{Bet, BetOrderEntry, BetStatus, BetType, DetailedBetEntry, Market, MarketStatus, OrderbookEntry, Selection};
-use crate::bet_scheduler::BetScheduler;
+use crate::types::{Bet, BetOrderEntry, BetScheduler, BetStatus, BetType, DetailedBetEntry, Market, MarketStatus, OrderbookEntry, Selection};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -8,7 +7,8 @@ pub trait MarketManagerModule:
     crate::storage::StorageModule +
     crate::events::EventsModule +
     crate::fund_manager::FundManagerModule +
-    crate::nft_manager::NftManagerModule
+    crate::nft_manager::NftManagerModule +
+    crate::bet_scheduler::BetSchedulerModule
 {
     #[only_owner]
     #[endpoint(createMarket)]
