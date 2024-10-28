@@ -54,7 +54,10 @@ pub trait BetManagerModule: crate::storage::StorageModule
                 BetType::Lay => liability.clone(),
             },
             matched_amount: BigUint::zero(),
-            unmatched_amount: stake.clone(),
+            unmatched_amount: match bet_type {  // MODIFICARE AICI
+                BetType::Back => stake.clone(),
+                BetType::Lay => liability.clone(),  // Pentru Lay folosim liability ca unmatched_amount
+            },
             potential_profit: self.calculate_potential_profit(&bet_type, &stake, &odds),
             odd: odds.clone(),
             bet_type: bet_type.clone(),
