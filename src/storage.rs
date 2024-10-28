@@ -70,7 +70,6 @@ pub trait StorageModule {
     #[storage_mapper("bet_scheduler")]
     fn bet_scheduler(&self) -> SingleValueMapper<BetScheduler<Self::Api>>;
 
-
     #[view(getBackBets)]
     fn get_back_bets(&self) -> ManagedVec<Self::Api, Bet<Self::Api>> {
         let scheduler = self.bet_scheduler().get();

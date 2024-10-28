@@ -21,23 +21,21 @@ pub trait MarketManagerModule:
     ) -> u64 {
         let market_id = self.get_and_increment_market_counter();
         require!(self.markets(&market_id).is_empty(), "Market already exists");
-        
+
         let created_at = self.blockchain().get_block_timestamp();
         require!(close_timestamp > created_at, "Close timestamp must be in the future");
-        
-        // Initialize bet scheduler pentru fiecare selecție
+
         let mut selections = ManagedVec::new();
         for (index, desc) in selection_descriptions.iter().enumerate() {
-            self.init_bet_scheduler(); // Inițializăm un nou scheduler pentru fiecare selecție
-            
+            let scheduler = self.init_bet_scheduler();  // Primim direct scheduler-ul
             let selection = Selection {
                 selection_id: (index + 1) as u64,
                 description: desc.as_ref().clone_value(),
-                priority_queue: self.bet_scheduler().get(),
+                priority_queue: scheduler,
             };
             selections.push(selection);
         }
-        
+
         let market = Market {
             market_id,
             event_id,
@@ -49,7 +47,7 @@ pub trait MarketManagerModule:
             total_matched_amount: BigUint::zero(),
             created_at,
         };
-        
+
         self.markets(&market_id).set(&market);
         market_id
     }

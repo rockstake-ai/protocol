@@ -6,9 +6,9 @@ use crate::types::{Bet, BetScheduler, BetStatus, BetType};
 #[multiversx_sc::module]
 pub trait BetSchedulerModule:
     crate::storage::StorageModule +
-    crate::events::EventsModule +{
-    #[endpoint]
-    fn init_bet_scheduler(&self) {
+    crate::events::EventsModule + {
+        
+    fn init_bet_scheduler(&self) -> BetScheduler<Self::Api> {
         let scheduler = BetScheduler {
             back_bets: ManagedVec::new(),
             lay_bets: ManagedVec::new(),
@@ -23,7 +23,8 @@ pub trait BetSchedulerModule:
             lost_count: 0,
             canceled_count: 0,
         };
-        self.bet_scheduler().set(scheduler);
+        self.bet_scheduler().set(scheduler.clone());
+        scheduler
     }
 
     fn add(&self, bet: Bet<Self::Api>) {
