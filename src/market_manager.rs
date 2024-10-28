@@ -25,12 +25,15 @@ pub trait MarketManagerModule:
         let created_at = self.blockchain().get_block_timestamp();
         require!(close_timestamp > created_at, "Close timestamp must be in the future");
         
+        // Initialize bet scheduler pentru fiecare selecție
         let mut selections = ManagedVec::new();
         for (index, desc) in selection_descriptions.iter().enumerate() {
+            self.init_bet_scheduler(); // Inițializăm un nou scheduler pentru fiecare selecție
+            
             let selection = Selection {
                 selection_id: (index + 1) as u64,
                 description: desc.as_ref().clone_value(),
-                priority_queue: BetScheduler::new(),
+                priority_queue: self.bet_scheduler().get(),
             };
             selections.push(selection);
         }
@@ -52,38 +55,37 @@ pub trait MarketManagerModule:
     }
 
     #[only_owner]
-#[endpoint(getBetCountsByStatus)]
-fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint, BigUint, BigUint, BigUint, BigUint)> {
-    require!(!self.markets(&market_id).is_empty(), "Market does not exist");
-    let market = self.markets(&market_id).get();
-    
-    let mut total_matched = BigUint::zero();
-    let mut total_unmatched = BigUint::zero();
-    let mut total_partially_matched = BigUint::zero();
-    let mut total_win = BigUint::zero();
-    let mut total_lost = BigUint::zero();
-    let mut total_canceled = BigUint::zero();
+    #[endpoint(getBetCountsByStatus)]
+    fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(usize, usize, usize, usize, usize, usize)> {
+        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
+        let market = self.markets(&market_id).get();
+        
+        let mut total_matched = 0usize;
+        let mut total_unmatched = 0usize;
+        let mut total_partially_matched = 0usize;
+        let mut total_win = 0usize;
+        let mut total_lost = 0usize;
+        let mut total_canceled = 0usize;
 
-    for selection in market.selections.iter() {
-        let (matched, unmatched, partially, win, lost, canceled) = selection.priority_queue.get_status_counts();
-        total_matched += matched;
-        total_unmatched += unmatched;
-        total_partially_matched += partially;
-        total_win += win;
-        total_lost += lost;
-        total_canceled += canceled;
+        for selection in market.selections.iter() {
+            let scheduler = selection.priority_queue;
+            total_matched += scheduler.matched_count;
+            total_unmatched += scheduler.unmatched_count;
+            total_partially_matched += scheduler.partially_matched_count;
+            total_win += scheduler.win_count;
+            total_lost += scheduler.lost_count;
+            total_canceled += scheduler.canceled_count;
+        }
+
+        Ok((
+            total_matched,
+            total_unmatched,
+            total_partially_matched,
+            total_win,
+            total_lost,
+            total_canceled
+        ))
     }
-
-    Ok((
-        total_matched,
-        total_unmatched,
-        total_partially_matched,
-        total_win,
-        total_lost,
-        total_canceled
-    ))
-}
-
 
     fn get_and_increment_market_counter(&self) -> u64 {
         let mut counter = self.market_counter().get();
@@ -92,7 +94,6 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         counter
     }
 
-    // #[view(getOrderbook)]
     #[endpoint(getOrderbook)]
     fn get_orderbook(
         &self,
@@ -109,7 +110,7 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         let selection = market.selections.get(selection_index);
         
         let mut back_orders = ManagedVec::new();
-        for bet in selection.priority_queue.get_back_bets().iter() {
+        for bet in selection.priority_queue.back_bets.iter() {
             back_orders.push(OrderbookEntry {
                 odd: bet.odd.clone(),
                 amount: bet.unmatched_amount.clone()
@@ -117,7 +118,7 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         }
         
         let mut lay_orders = ManagedVec::new();
-        for bet in selection.priority_queue.get_lay_bets().iter() {
+        for bet in selection.priority_queue.lay_bets.iter() {
             lay_orders.push(OrderbookEntry {
                 odd: bet.odd.clone(),
                 amount: bet.unmatched_amount.clone()
@@ -143,7 +144,7 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         let selection = market.selections.get(selection_index);
         
         let mut back_queue = ManagedVec::new();
-        for bet in selection.priority_queue.get_back_bets().iter() {
+        for bet in selection.priority_queue.back_bets.iter() {
             back_queue.push(DetailedBetEntry {
                 bet_type: bet.bet_type.clone(),
                 odd: bet.odd.clone(),
@@ -158,7 +159,7 @@ fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<(BigUint, BigUint
         }
         
         let mut lay_queue = ManagedVec::new();
-        for bet in selection.priority_queue.get_lay_bets().iter() {
+        for bet in selection.priority_queue.lay_bets.iter() {
             lay_queue.push(DetailedBetEntry {
                 bet_type: bet.bet_type.clone(),
                 odd: bet.odd.clone(),
