@@ -29,15 +29,11 @@ pub trait BetManagerModule: crate::storage::StorageModule
             BetType::Lay => {
                 let stake = self.calculate_stake_from_total(&total_amount, &odds);
                 let calculated_liability = self.calculate_potential_liability(&bet_type, &stake, &odds);
-                let required_total = stake.clone() + &calculated_liability;
-                // sc_panic!(
-                //     "Liability calculation: stake={}, odds={}, odds_minus_100={}, calculated_liability={}", 
-                //     stake, 
-                //     odds,
-                //     odds_minus_100,
-                //     result
-                // );
-                require!(total_amount.clone() >= required_total, "Insufficient total amount");
+                
+                require!(
+                    stake.clone() + calculated_liability.clone() <= total_amount,
+                    "Invalid total amount for Lay bet"
+                );
                 
                 (stake, calculated_liability)
             }
@@ -125,13 +121,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
             BetType::Lay => {
                 let odds_minus_100 = odds - &BigUint::from(100u32);
                 let result = (stake * &odds_minus_100) / &BigUint::from(100u32);
-                // sc_panic!(
-                //     "Liability calculation: stake={}, odds={}, odds_minus_100={}, calculated_liability={}", 
-                //     stake, 
-                //     odds,
-                //     odds_minus_100,
-                //     result
-                // );
                 result
             }
         }

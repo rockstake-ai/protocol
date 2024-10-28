@@ -205,13 +205,26 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = unmatched_amount.clone();
         
-        // Actualizăm statusul în funcție de cât s-a potrivit
-        let new_status = if matched_amount == bet.stake_amount {
-            BetStatus::Matched
-        } else if matched_amount > BigUint::zero() {
-            BetStatus::PartiallyMatched
-        } else {
-            BetStatus::Unmatched
+        // Actualizăm statusul în funcție de bet_type
+        let new_status = match bet.bet_type {
+            BetType::Back => {
+                if matched_amount == bet.stake_amount {
+                    BetStatus::Matched
+                } else if matched_amount > BigUint::zero() {
+                    BetStatus::PartiallyMatched
+                } else {
+                    BetStatus::Unmatched
+                }
+            },
+            BetType::Lay => {
+                if matched_amount == bet.liability {
+                    BetStatus::Matched
+                } else if matched_amount > BigUint::zero() {
+                    BetStatus::PartiallyMatched
+                } else {
+                    BetStatus::Unmatched
+                }
+            }
         };
     
         // Actualizăm contoarele doar dacă s-a schimbat statusul
@@ -225,25 +238,33 @@ impl<M: ManagedTypeApi> BetScheduler<M> {
             let old_matched_status = matched_bet.status.clone();
             self.remove(&matched_bet);
             
-            let new_matched_status = if matched_bet.matched_amount == matched_bet.stake_amount {
-                BetStatus::Matched
-            } else {
-                BetStatus::PartiallyMatched
+            let new_matched_status = match matched_bet.bet_type {
+                BetType::Back => {
+                    if matched_bet.matched_amount == matched_bet.stake_amount {
+                        BetStatus::Matched
+                    } else {
+                        BetStatus::PartiallyMatched
+                    }
+                },
+                BetType::Lay => {
+                    if matched_bet.matched_amount == matched_bet.liability {
+                        BetStatus::Matched
+                    } else {
+                        BetStatus::PartiallyMatched
+                    }
+                }
             };
     
-            // Actualizăm contoarele doar dacă s-a schimbat statusul
             if old_matched_status != new_matched_status {
                 self.update_status_counters(&old_matched_status, &new_matched_status);
             }
             matched_bet.status = new_matched_status;
     
-            // Readăugăm pariul dacă mai are unmatched amount
             if matched_bet.unmatched_amount > BigUint::zero() {
                 self.add(matched_bet);
             }
         }
     
-        // Adăugăm pariul curent dacă mai are unmatched amount
         if bet.unmatched_amount > BigUint::zero() {
             self.add(bet.clone());
         }
