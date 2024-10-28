@@ -58,6 +58,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             .position(|s| &s.selection_id == &selection_id)
             .expect(ERR_SELECTION);
         let mut selection = market.selections.get(selection_index);
+        self.bet_scheduler().set(selection.priority_queue.clone());
     
         let bet = Bet {
             bettor: caller.clone(),
@@ -92,7 +93,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
         let bet_nft_nonce = self.mint_bet_nft(&updated_bet);
         self.bet_by_id(bet_id).set(&updated_bet);
     
-        market.selections.set(selection_index, &selection);
+        let _ = market.selections.set(selection_index, &selection);
         market.total_matched_amount += &matched_amount;
         self.markets(&market_id).set(&market);
     
