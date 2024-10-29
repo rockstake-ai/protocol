@@ -2,7 +2,7 @@ use multiversx_sc::codec::multi_types::MultiValue6;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-use crate::types::{Bet, Tracker, BetStatus, BetType};
+use crate::types::{Bet, BetStatus, BetType, SchedulerDebugView, Tracker};
 
 #[multiversx_sc::module]
 pub trait TrackerModule:
@@ -477,6 +477,30 @@ pub trait TrackerModule:
     fn get_market_liquidity(&self, market_id: u64, selection_id: u64) -> MultiValue2<BigUint, BigUint> {
         let scheduler = self.get_scheduler_state(market_id, selection_id);
         (scheduler.back_liquidity, scheduler.lay_liquidity).into()
+    }
+
+    #[view(getSchedulerDebugState)]
+    fn get_scheduler_debug_state(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> SchedulerDebugView<Self::Api> {
+        let scheduler = self.get_scheduler_state(market_id, selection_id);
+        
+        SchedulerDebugView {
+            back_bets_count: scheduler.back_bets.len(),
+            lay_bets_count: scheduler.lay_bets.len(),
+            best_back_odds: scheduler.best_back_odds,
+            best_lay_odds: scheduler.best_lay_odds,
+            back_liquidity: scheduler.back_liquidity,
+            lay_liquidity: scheduler.lay_liquidity,
+            matched_count: scheduler.matched_count as u32,
+            unmatched_count: scheduler.unmatched_count as u32,
+            partially_matched_count: scheduler.partially_matched_count as u32,
+            win_count: scheduler.win_count as u32,
+            lost_count: scheduler.lost_count as u32,
+            canceled_count: scheduler.canceled_count as u32
+        }
     }
 }
 

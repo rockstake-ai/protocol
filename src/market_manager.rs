@@ -1,6 +1,6 @@
 use crate::types::{
     Bet, 
-    DetailedBetEntry, Market, MarketStatus, OrderbookEntry, Selection, Tracker
+    Market, MarketStatus, Selection, Tracker
 };
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -101,41 +101,6 @@ pub trait MarketManagerModule:
         }
     }
 
-    fn build_orderbook_entries(
-        &self,
-        bets: &ManagedVec<Self::Api, Bet<Self::Api>>
-    ) -> ManagedVec<OrderbookEntry<Self::Api>> {
-        let mut entries = ManagedVec::new();
-        for bet in bets.iter() {
-            entries.push(OrderbookEntry {
-                odd: bet.odd.clone(),
-                amount: bet.unmatched_amount.clone()
-            });
-        }
-        entries
-    }
-
-    fn build_detailed_entries(
-        &self,
-        bets: &ManagedVec<Self::Api, Bet<Self::Api>>
-    ) -> ManagedVec<DetailedBetEntry<Self::Api>> {
-        let mut entries = ManagedVec::new();
-        for bet in bets.iter() {
-            entries.push(DetailedBetEntry {
-                bet_type: bet.bet_type.clone(),
-                odd: bet.odd.clone(),
-                unmatched_amount: bet.unmatched_amount.clone(),
-                matched_amount: bet.matched_amount.clone(),
-                original_stake: bet.stake_amount.clone(),
-                liability: bet.liability.clone(),
-                status: bet.status.clone(),
-                nft_nonce: bet.nft_nonce,
-                created_at: bet.created_at
-            });
-        }
-        entries
-    }
-
     #[view(isMarketOpen)]
     fn is_market_open(&self, market_id: u64) -> bool {
         if self.markets(&market_id).is_empty() {
@@ -152,21 +117,6 @@ pub trait MarketManagerModule:
     fn get_market(&self, market_id: u64) -> SCResult<Market<Self::Api>> {
         require!(!self.markets(&market_id).is_empty(), "Market does not exist");
         Ok(self.markets(&market_id).get())
-    }
-
-    #[view(getOrderbook)]
-    fn get_orderbook(
-        &self,
-        market_id: u64,
-        selection_id: u64
-    ) -> SCResult<MultiValue2<ManagedVec<OrderbookEntry<Self::Api>>, ManagedVec<OrderbookEntry<Self::Api>>>> {
-        let market = self.get_market(market_id)?;
-        let selection = self.get_selection(&market, selection_id)?;
-        
-        let back_orders = self.build_orderbook_entries(&selection.priority_queue.back_bets);
-        let lay_orders = self.build_orderbook_entries(&selection.priority_queue.lay_bets);
-        
-        Ok((back_orders, lay_orders).into())
     }
 
     #[view(getMarketStats)]

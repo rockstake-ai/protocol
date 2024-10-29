@@ -80,40 +80,6 @@ pub struct Selection<M: ManagedTypeApi> {
     pub priority_queue: Tracker<M>,
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
-pub enum EventResult {
-    NotReported,
-    Reported(u64), 
-}
-
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
-pub struct OrderbookEntry<M: ManagedTypeApi> {
-    pub odd: BigUint<M>,
-    pub amount: BigUint<M>,
-}
-
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
-pub struct BetOrderEntry<M: ManagedTypeApi> {
-    pub bet_type: BetType,
-    pub odd: BigUint<M>,
-    pub amount: BigUint<M>,
-    pub status: BetStatus,
-    pub nft_nonce: u64 
-}
-
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, ManagedVecItem)]
-pub struct DetailedBetEntry<M: ManagedTypeApi> {
-    pub bet_type: BetType,
-    pub odd: BigUint<M>,
-    pub unmatched_amount: BigUint<M>,
-    pub matched_amount: BigUint<M>,
-    pub original_stake: BigUint<M>,
-    pub liability: BigUint<M>,
-    pub status: BetStatus,
-    pub nft_nonce: u64,
-    pub created_at: u64
-}
-
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Tracker<M: ManagedTypeApi> {
     pub back_bets: ManagedVec<M, Bet<M>>,
@@ -129,3 +95,20 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub lost_count: usize,
     pub canceled_count: usize,
 }
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode)]
+pub struct SchedulerDebugView<M: ManagedTypeApi> {
+    pub back_bets_count: usize,
+    pub lay_bets_count: usize,
+    pub best_back_odds: BigUint<M>,
+    pub best_lay_odds: BigUint<M>,
+    pub back_liquidity: BigUint<M>,
+    pub lay_liquidity: BigUint<M>,
+    pub matched_count: u32,
+    pub unmatched_count: u32,
+    pub partially_matched_count: u32,
+    pub win_count: u32,
+    pub lost_count: u32,
+    pub canceled_count: u32
+}
+
