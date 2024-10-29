@@ -154,4 +154,11 @@ pub trait NftManagerModule:
 
         o
     }
+
+    #[view(getBetslipData)]
+    fn get_bet(&self, bet_id: u64) -> Bet<Self::Api> {
+        let bet_mapper = self.bet_by_id(bet_id);
+        require!(!bet_mapper.is_empty(), "Invalid");
+        bet_mapper.get()
+    }
 }

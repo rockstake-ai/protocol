@@ -25,7 +25,6 @@ pub trait BetSchedulerModule:
     #[view(getBetCounts)]
     fn get_bet_counts(&self, market_id: u64, selection_id: u64) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
         let scheduler = self.get_scheduler_state(market_id, selection_id);
-        
         (
             BigUint::from(scheduler.matched_count),
             BigUint::from(scheduler.unmatched_count),
@@ -442,4 +441,16 @@ pub trait BetSchedulerModule:
         #[indexed] matched_amount: &BigUint,
         #[indexed] remaining_unmatched: &BigUint
     );
+
+    #[view(getBetSchedulerCounts)]
+    fn get_bet_scheduler_counts(&self, scheduler: &BetScheduler<Self::Api>) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
+        (
+            BigUint::from(scheduler.matched_count),
+            BigUint::from(scheduler.unmatched_count),
+            BigUint::from(scheduler.partially_matched_count),
+            BigUint::from(scheduler.win_count),
+            BigUint::from(scheduler.lost_count),
+            BigUint::from(scheduler.canceled_count)
+        ).into()
+    }
 }

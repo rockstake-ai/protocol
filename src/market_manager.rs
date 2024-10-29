@@ -271,4 +271,16 @@ pub trait MarketManagerModule:
         }
         entries
     }
+
+    #[view(isMarketOpen)]
+    fn is_market_open(&self, market_id: u64) -> bool {
+        if self.markets(&market_id).is_empty() {
+            return false;
+        }
+        
+        let market = self.markets(&market_id).get();
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        
+        current_timestamp < market.close_timestamp
+    }
 }

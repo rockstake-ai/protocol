@@ -159,5 +159,12 @@ pub trait BetManagerModule: crate::storage::StorageModule
             BetType::Lay => self.calculate_potential_liability(bet_type, stake_amount, odds),
         }
     }
+
+    fn get_last_bet_id(&self) -> u64 {
+        self.blockchain().get_current_esdt_nft_nonce(
+            &self.blockchain().get_sc_address(),
+            self.bet_nft_token().get_token_id_ref(),
+        )
+    }
            
 }
