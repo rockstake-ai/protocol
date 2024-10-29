@@ -131,4 +131,13 @@ fn bet_counter_debug_event(
     #[indexed] canceled: &usize,
 );
 
+ // Event for tracking selection creation
+ #[event("selection_created")]
+ fn selection_created_event(
+     &self,
+     #[indexed] market_id: &u64,
+     #[indexed] selection_id: &u64,
+     #[indexed] description: &ManagedBuffer,
+ );
+
 }
