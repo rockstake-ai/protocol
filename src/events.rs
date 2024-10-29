@@ -84,7 +84,6 @@ fn bet_closed_event(
           amount: &BigUint,
       );
 
-     // Events
     #[event("market_created")]
     fn market_created_event(
         &self,
@@ -93,13 +92,6 @@ fn bet_closed_event(
         #[indexed] description: &ManagedBuffer,
         #[indexed] close_timestamp: u64,
         #[indexed] created_at: u64,
-    );
-
-    #[event("market_closed")]
-    fn market_closed_event(
-        &self,
-        #[indexed] market_id: BigUint,
-        #[indexed] winning_selection: BigUint
     );
 
     #[event("market_query")]
@@ -132,6 +124,37 @@ fn bet_closed_event(
         #[indexed] win: &BigUint,
         #[indexed] lost: &BigUint,
         #[indexed] canceled: &BigUint
+    );
+
+    #[event("bet_status_updated")]
+    fn bet_status_updated_event(
+        &self,
+        #[indexed] market_id: u64,
+        #[indexed] selection_id: u64,
+        #[indexed] bet_id: u64,
+        #[indexed] old_status: &BetStatus,
+        #[indexed] new_status: &BetStatus,
+    );
+
+    #[event("scheduler_state_updated")]
+    fn scheduler_state_updated_event(
+        &self,
+        #[indexed] market_id: u64,
+        #[indexed] selection_id: u64,
+        #[indexed] back_liquidity: &BigUint,
+        #[indexed] lay_liquidity: &BigUint,
+        #[indexed] best_back_odds: &BigUint,
+        #[indexed] best_lay_odds: &BigUint
+    );
+
+    #[event("bet_matched")]
+    fn bet_matched_event(
+        &self,
+        #[indexed] market_id: u64,
+        #[indexed] selection_id: u64,
+        #[indexed] bet_id: u64,
+        #[indexed] matched_amount: &BigUint,
+        #[indexed] remaining_unmatched: &BigUint
     );
 
 }
