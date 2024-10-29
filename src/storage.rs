@@ -30,8 +30,17 @@ pub trait StorageModule {
     #[storage_mapper("market_queues")]
     fn market_queues(&self, market_id: u64) -> SingleValueMapper<Tracker<Self::Api>>;
 
+    #[view(getBetScheduler)]
     #[storage_mapper("bet_scheduler")]
     fn bet_scheduler(&self) -> SingleValueMapper<Tracker<Self::Api>>;
+
+    // Storage mapper pentru scheduler per selection
+    #[storage_mapper("selection_scheduler")]
+    fn selection_scheduler(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> SingleValueMapper<Tracker<Self::Api>>;
 
 }
 

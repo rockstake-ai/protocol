@@ -28,7 +28,11 @@ pub trait TrackerModule:
     }    
 
     fn match_bet(&self, bet: Bet<Self::Api>) -> (BigUint, BigUint, Bet<Self::Api>) {
-        let mut scheduler = self.bet_scheduler().get();
+        let mut scheduler = self.selection_scheduler(
+            bet.event,
+            bet.selection.selection_id
+        ).get();
+        
         let old_status = bet.status.clone();
         let (matching_bets, matched_amount, unmatched_amount) = self.get_matching_bets(bet.clone());
         
@@ -46,12 +50,44 @@ pub trait TrackerModule:
         self.process_matching_bets(&mut scheduler, matching_bets);
     
         if updated_bet.unmatched_amount > BigUint::zero() {
-            self.add(updated_bet.clone());
+            self.add_to_scheduler(&mut scheduler, updated_bet.clone());
         }
     
-        self.bet_scheduler().set(scheduler);
+        // Salvăm starea actualizată
+        self.selection_scheduler(
+            updated_bet.event,
+            updated_bet.selection.selection_id
+        ).set(&scheduler);
+        
         (matched_amount, unmatched_amount, updated_bet)
     }
+
+    fn add_to_scheduler(&self, scheduler: &mut Tracker<Self::Api>, bet: Bet<Self::Api>) {
+        let old_status = bet.status.clone();
+        let mut new_bet = bet;
+        new_bet.status = BetStatus::Unmatched;
+        
+        self.update_status_counters(scheduler, &old_status, &new_bet.status);
+
+        match new_bet.bet_type {
+            BetType::Back => {
+                let mut queue = scheduler.back_bets.clone();
+                self.insert_bet(&mut queue, new_bet.clone());
+                scheduler.back_bets = queue;
+                scheduler.back_liquidity += &new_bet.stake_amount;
+                self.update_best_back_odds(scheduler);
+            },
+            BetType::Lay => {
+                let mut queue = scheduler.lay_bets.clone();
+                self.insert_bet(&mut queue, new_bet.clone());
+                scheduler.lay_bets = queue;
+                scheduler.lay_liquidity += &new_bet.liability;
+                self.update_best_lay_odds(scheduler);
+            },
+        };
+    }
+
+
 
     fn add(&self, bet: Bet<Self::Api>) {
         let mut scheduler = self.bet_scheduler().get();
@@ -296,42 +332,6 @@ pub trait TrackerModule:
         }
     }
 
-    fn update_status_counters(
-        &self,
-        scheduler: &mut Tracker<Self::Api>,
-        old_status: &BetStatus,
-        new_status: &BetStatus
-    ) {
-        match old_status {
-            BetStatus::Matched => scheduler.matched_count = scheduler.matched_count.saturating_sub(1),
-            BetStatus::Unmatched => scheduler.unmatched_count = scheduler.unmatched_count.saturating_sub(1),
-            BetStatus::PartiallyMatched => scheduler.partially_matched_count = scheduler.partially_matched_count.saturating_sub(1),
-            BetStatus::Win => scheduler.win_count = scheduler.win_count.saturating_sub(1),
-            BetStatus::Lost => scheduler.lost_count = scheduler.lost_count.saturating_sub(1),
-            BetStatus::Canceled => scheduler.canceled_count = scheduler.canceled_count.saturating_sub(1),
-        }
-
-        match new_status {
-            BetStatus::Matched => scheduler.matched_count += 1,
-            BetStatus::Unmatched => scheduler.unmatched_count += 1,
-            BetStatus::PartiallyMatched => scheduler.partially_matched_count += 1,
-            BetStatus::Win => scheduler.win_count += 1,
-            BetStatus::Lost => scheduler.lost_count += 1,
-            BetStatus::Canceled => scheduler.canceled_count += 1,
-        }
-
-        self.bet_counter_update_event(
-            old_status,
-            new_status,
-            scheduler.matched_count as u64,
-            scheduler.unmatched_count as u64,
-            scheduler.partially_matched_count as u64,
-            scheduler.win_count as u64,
-            scheduler.lost_count as u64,
-            scheduler.canceled_count as u64,
-        );
-    }
-
     fn update_best_back_odds(&self, scheduler: &mut Tracker<Self::Api>) {
         if scheduler.back_bets.is_empty() {
             scheduler.best_back_odds = BigUint::zero();
@@ -348,6 +348,110 @@ pub trait TrackerModule:
         }
     }
 
+    fn update_status_counters(
+        &self,
+        scheduler: &mut Tracker<Self::Api>,
+        old_status: &BetStatus,
+        new_status: &BetStatus
+    ) {
+        // Primul pariu sau schimbare de status
+        if *old_status == BetStatus::Unmatched && *new_status == BetStatus::Unmatched {
+            // Este un pariu nou, doar incrementăm unmatched
+            scheduler.unmatched_count += 1;
+        } else {
+            // Pentru orice altă tranziție
+            match old_status {
+                BetStatus::Matched => {
+                    if scheduler.matched_count > 0 {
+                        scheduler.matched_count -= 1;
+                    }
+                },
+                BetStatus::Unmatched => {
+                    if scheduler.unmatched_count > 0 {
+                        scheduler.unmatched_count -= 1;
+                    }
+                },
+                BetStatus::PartiallyMatched => {
+                    if scheduler.partially_matched_count > 0 {
+                        scheduler.partially_matched_count -= 1;
+                    }
+                },
+                BetStatus::Win => {
+                    if scheduler.win_count > 0 {
+                        scheduler.win_count -= 1;
+                    }
+                },
+                BetStatus::Lost => {
+                    if scheduler.lost_count > 0 {
+                        scheduler.lost_count -= 1;
+                    }
+                },
+                BetStatus::Canceled => {
+                    if scheduler.canceled_count > 0 {
+                        scheduler.canceled_count -= 1;
+                    }
+                },
+            }
+    
+            // Incrementăm noul status
+            match new_status {
+                BetStatus::Matched => scheduler.matched_count += 1,
+                BetStatus::Unmatched => scheduler.unmatched_count += 1,
+                BetStatus::PartiallyMatched => scheduler.partially_matched_count += 1,
+                BetStatus::Win => scheduler.win_count += 1,
+                BetStatus::Lost => scheduler.lost_count += 1,
+                BetStatus::Canceled => scheduler.canceled_count += 1,
+            }
+        }
+    
+        // Emitem evenimentul cu noile valori
+        self.bet_counter_update_event(
+            old_status,
+            new_status,
+            scheduler.matched_count as u64,
+            scheduler.unmatched_count as u64,
+            scheduler.partially_matched_count as u64,
+            scheduler.win_count as u64,
+            scheduler.lost_count as u64,
+            scheduler.canceled_count as u64,
+        );
+    }
+    
+    // Adaugă această metodă pentru debugging
+    #[view(getCurrentSchedulerState)]
+    fn get_current_scheduler_state(&self) -> Tracker<Self::Api> {
+        self.bet_scheduler().get()
+    }
+    
+    // Modifică get_bet_counts pentru a include debugging info
+    #[view(getBetCounts)]
+    fn get_bet_counts(
+        &self, 
+        market_id: u64, 
+        selection_id: u64
+    ) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
+        let scheduler = self.get_scheduler_state(market_id, selection_id);
+        
+        // Debug event pentru a vedea valorile exacte
+        self.bet_counter_debug_event(
+            &scheduler.matched_count,
+            &scheduler.unmatched_count,
+            &scheduler.partially_matched_count,
+            &scheduler.win_count,
+            &scheduler.lost_count,
+            &scheduler.canceled_count
+        );
+        
+        (
+            BigUint::from(scheduler.matched_count),
+            BigUint::from(scheduler.unmatched_count),
+            BigUint::from(scheduler.partially_matched_count),
+            BigUint::from(scheduler.win_count),
+            BigUint::from(scheduler.lost_count),
+            BigUint::from(scheduler.canceled_count)
+        ).into()
+    }
+
     #[view(getSchedulerState)]
     fn get_scheduler_state(&self, market_id: u64, selection_id: u64) -> Tracker<Self::Api> {
         let market = self.markets(&market_id).get();
@@ -358,19 +462,6 @@ pub trait TrackerModule:
             .expect("Selection not found");
         
         selection.priority_queue.clone()
-    }
-
-    #[view(getBetCounts)]
-    fn get_bet_counts(&self, market_id: u64, selection_id: u64) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
-        let scheduler = self.get_scheduler_state(market_id, selection_id);
-        (
-            BigUint::from(scheduler.matched_count),
-            BigUint::from(scheduler.unmatched_count),
-            BigUint::from(scheduler.partially_matched_count),
-            BigUint::from(scheduler.win_count),
-            BigUint::from(scheduler.lost_count),
-            BigUint::from(scheduler.canceled_count)
-        ).into()
     }
 
     #[view(getMarketLiquidity)]

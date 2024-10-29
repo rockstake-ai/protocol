@@ -88,7 +88,15 @@ pub trait BetManagerModule: crate::storage::StorageModule
         let (matched_amount, unmatched_amount, updated_bet) = self.match_bet(bet);
         
         // Actualizăm selection cu noua stare
-        selection.priority_queue = self.bet_scheduler().get();
+        let updated_scheduler = self.bet_scheduler().get();
+
+        self.counter_debug_event(
+            &updated_scheduler.matched_count,
+            &updated_scheduler.unmatched_count,
+            &updated_scheduler.partially_matched_count
+        );
+
+        selection.priority_queue = updated_scheduler;
         
         let bet_nft_nonce = self.mint_bet_nft(&updated_bet);
         self.bet_by_id(bet_id).set(&updated_bet);

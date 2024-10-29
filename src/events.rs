@@ -112,4 +112,23 @@ pub trait EventsModule {
         #[indexed] canceled_count: u64,
     );
 
+    #[event("counter_debug")]
+    fn counter_debug_event(
+        &self,
+        #[indexed] matched: &usize,
+        #[indexed] unmatched: &usize,
+        #[indexed] partially_matched: &usize,
+    );
+
+    #[event("bet_counter_debug")]
+fn bet_counter_debug_event(
+    &self,
+    #[indexed] matched: &usize,
+    #[indexed] unmatched: &usize,
+    #[indexed] partially: &usize,
+    #[indexed] win: &usize,
+    #[indexed] lost: &usize,
+    #[indexed] canceled: &usize,
+);
+
 }

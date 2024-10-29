@@ -28,7 +28,7 @@ pub trait MarketManagerModule:
         let market_id = self.get_and_increment_market_counter();
         require!(self.markets(&market_id).is_empty(), "Market already exists");
 
-        let selections = self.create_selections(selection_descriptions)?;
+        let selections = self.create_selections(market_id,selection_descriptions)?;
         let market = self.create_market_struct(
             market_id,
             event_id,
@@ -60,13 +60,19 @@ pub trait MarketManagerModule:
 
     fn create_selections(
         &self,
+        market_id: u64,
         descriptions: ManagedVec<ManagedBuffer>
     ) -> SCResult<ManagedVec<Selection<Self::Api>>> {
         let mut selections = ManagedVec::new();
         for (index, desc) in descriptions.iter().enumerate() {
+            let selection_id = (index + 1) as u64;
             let scheduler = self.init_bet_scheduler();
+            
+            // Inițializăm scheduler-ul în storage
+            self.selection_scheduler(market_id, selection_id).set(&scheduler);
+            
             selections.push(Selection {
-                selection_id: (index + 1) as u64,
+                selection_id,
                 description: desc.as_ref().clone_value(),
                 priority_queue: scheduler,
             });
