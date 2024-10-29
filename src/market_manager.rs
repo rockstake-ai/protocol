@@ -181,7 +181,6 @@ pub trait MarketManagerModule:
         Ok(())
     }
 
-    // Internal Functions
     fn get_and_increment_market_counter(&self) -> u64 {
         let mut counter = self.market_counter().get();
         counter += 1;

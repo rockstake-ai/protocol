@@ -7,41 +7,8 @@ use crate::types::{Bet, BetScheduler, BetStatus, BetType};
 #[multiversx_sc::module]
 pub trait BetSchedulerModule:
     crate::storage::StorageModule +
-    crate::events::EventsModule 
-{
-    // View Functions
-    #[view(getSchedulerState)]
-    fn get_scheduler_state(&self, market_id: u64, selection_id: u64) -> BetScheduler<Self::Api> {
-        let market = self.markets(&market_id).get();
-        let selection = market
-            .selections
-            .iter()
-            .find(|s| s.selection_id == selection_id)
-            .expect("Selection not found");
-        
-        selection.priority_queue.clone()
-    }
-
-    #[view(getBetCounts)]
-    fn get_bet_counts(&self, market_id: u64, selection_id: u64) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
-        let scheduler = self.get_scheduler_state(market_id, selection_id);
-        (
-            BigUint::from(scheduler.matched_count),
-            BigUint::from(scheduler.unmatched_count),
-            BigUint::from(scheduler.partially_matched_count),
-            BigUint::from(scheduler.win_count),
-            BigUint::from(scheduler.lost_count),
-            BigUint::from(scheduler.canceled_count)
-        ).into()
-    }
-
-    #[view(getMarketLiquidity)]
-    fn get_market_liquidity(&self, market_id: u64, selection_id: u64) -> MultiValue2<BigUint, BigUint> {
-        let scheduler = self.get_scheduler_state(market_id, selection_id);
-        (scheduler.back_liquidity, scheduler.lay_liquidity).into()
-    }
-
-    // Public Endpoints
+    crate::events::EventsModule
+    {
     #[endpoint(updateBetStatus)]
     fn update_bet_status(
         &self,
@@ -81,7 +48,7 @@ pub trait BetSchedulerModule:
     }
 
     #[endpoint(matchBet)]
-    fn match_bet(&self, bet: Bet<Self::Api>) -> SCResult<(BigUint, BigUint, Bet<Self::Api>)> {
+    fn match_bet(&self, bet: Bet<Self::Api>) -> (BigUint, BigUint, Bet<Self::Api>) {
         let mut scheduler = self.bet_scheduler().get();
         let old_status = bet.status.clone();
         let (matching_bets, matched_amount, unmatched_amount) = self.get_matching_bets(bet.clone());
@@ -104,10 +71,9 @@ pub trait BetSchedulerModule:
         }
     
         self.bet_scheduler().set(scheduler);
-        Ok((matched_amount, unmatched_amount, updated_bet))
+        (matched_amount, unmatched_amount, updated_bet)
     }
 
-    // Internal Functions
     fn init_bet_scheduler(&self) -> BetScheduler<Self::Api> {
         BetScheduler {
             back_bets: ManagedVec::new(),
@@ -255,7 +221,6 @@ pub trait BetSchedulerModule:
         *queue = new_queue;
     }
 
-    // Helper Functions
     fn should_insert_before(
         &self,
         new_bet: &Bet<Self::Api>,
@@ -420,5 +385,36 @@ pub trait BetSchedulerModule:
             BigUint::from(scheduler.lost_count),
             BigUint::from(scheduler.canceled_count)
         ).into()
+    }
+
+    #[view(getSchedulerState)]
+    fn get_scheduler_state(&self, market_id: u64, selection_id: u64) -> BetScheduler<Self::Api> {
+        let market = self.markets(&market_id).get();
+        let selection = market
+            .selections
+            .iter()
+            .find(|s| s.selection_id == selection_id)
+            .expect("Selection not found");
+        
+        selection.priority_queue.clone()
+    }
+
+    #[view(getBetCounts)]
+    fn get_bet_counts(&self, market_id: u64, selection_id: u64) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
+        let scheduler = self.get_scheduler_state(market_id, selection_id);
+        (
+            BigUint::from(scheduler.matched_count),
+            BigUint::from(scheduler.unmatched_count),
+            BigUint::from(scheduler.partially_matched_count),
+            BigUint::from(scheduler.win_count),
+            BigUint::from(scheduler.lost_count),
+            BigUint::from(scheduler.canceled_count)
+        ).into()
+    }
+
+    #[view(getMarketLiquidity)]
+    fn get_market_liquidity(&self, market_id: u64, selection_id: u64) -> MultiValue2<BigUint, BigUint> {
+        let scheduler = self.get_scheduler_state(market_id, selection_id);
+        (scheduler.back_liquidity, scheduler.lay_liquidity).into()
     }
 }

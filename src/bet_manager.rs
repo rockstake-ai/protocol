@@ -110,7 +110,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             &BigUint::from(1u64)
         );
     
-        self.bet_placed_event(
+        self.place_bet_event(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
             &market_id,
