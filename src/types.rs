@@ -112,3 +112,35 @@ pub struct SchedulerDebugView<M: ManagedTypeApi> {
     pub canceled_count: u32
 }
 
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct BetQueueView<M: ManagedTypeApi> {
+    pub odd: BigUint<M>,
+    pub amount: BigUint<M>,
+    pub status: BetStatus
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode)]
+pub struct DetailedSchedulerView<M: ManagedTypeApi> {
+    // Counters
+    pub back_bets_count: usize,
+    pub lay_bets_count: usize,
+    
+    // Liquidities
+    pub total_back_liquidity: BigUint<M>,
+    pub total_lay_liquidity: BigUint<M>,
+    
+    // Best odds
+    pub best_back_odds: BigUint<M>,
+    pub best_lay_odds: BigUint<M>,
+    
+    // Status counters
+    pub matched_count: u32,
+    pub unmatched_count: u32,
+    pub partially_matched_count: u32,
+    
+    // Queue contents
+    pub back_queue: ManagedVec<M, BetQueueView<M>>,
+    pub lay_queue: ManagedVec<M, BetQueueView<M>>
+}
+
+

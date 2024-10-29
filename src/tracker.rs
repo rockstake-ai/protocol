@@ -2,7 +2,7 @@ use multiversx_sc::codec::multi_types::MultiValue6;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-use crate::types::{Bet, BetStatus, BetType, SchedulerDebugView, Tracker};
+use crate::types::{Bet, BetQueueView, BetStatus, BetType, DetailedSchedulerView, SchedulerDebugView, Tracker};
 
 #[multiversx_sc::module]
 pub trait TrackerModule:
@@ -166,52 +166,6 @@ pub trait TrackerModule:
         }
     }
 
-    fn get_matching_bets(
-        &self,
-        bet: Bet<Self::Api>
-    ) -> (ManagedVec<Self::Api, Bet<Self::Api>>, BigUint, BigUint) {
-        let scheduler = self.selection_scheduler(
-            bet.event,
-            bet.selection.selection_id
-        ).get();
-
-        let mut matched_amount = BigUint::zero();
-        let mut unmatched_amount = match bet.bet_type {
-            BetType::Back => bet.stake_amount.clone(),
-            BetType::Lay => bet.liability.clone(),
-        };
-        let mut matching_bets = ManagedVec::new();
-        let source = match bet.bet_type {
-            BetType::Back => &scheduler.lay_bets,
-            BetType::Lay => &scheduler.back_bets,
-        };
-    
-    
-        for i in 0..source.len() {
-            let existing_bet = source.get(i);
-            let is_match = self.is_matching_bet(&bet, &existing_bet);
-    
-            if is_match {
-                let match_amount = self.calculate_match_amount(&bet, &existing_bet, &unmatched_amount);
-    
-                matched_amount += &match_amount;
-                unmatched_amount -= &match_amount;
-    
-                let mut updated_bet = existing_bet.clone();
-                self.update_matched_bet(&mut updated_bet, &match_amount, &bet);
-                matching_bets.push(updated_bet);
-    
-                if unmatched_amount == BigUint::zero() {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-    
-        (matching_bets, matched_amount, unmatched_amount)
-    }
-
     fn insert_bet(&self, queue: &mut ManagedVec<Self::Api, Bet<Self::Api>>, bet: Bet<Self::Api>) {
         let mut insert_index = queue.len();
         for i in 0..queue.len() {
@@ -319,6 +273,55 @@ pub trait TrackerModule:
         }
     }
 
+    fn get_matching_bets(
+        &self,
+        bet: Bet<Self::Api>
+    ) -> (ManagedVec<Self::Api, Bet<Self::Api>>, BigUint, BigUint) {
+        // Folosim mutable pentru că vom modifica și salva
+        let mut scheduler = self.selection_scheduler(
+            bet.event,
+            bet.selection.selection_id
+        ).get();
+    
+        let mut matched_amount = BigUint::zero();
+        let mut unmatched_amount = match bet.bet_type {
+            BetType::Back => bet.stake_amount.clone(),
+            BetType::Lay => bet.liability.clone(),
+        };
+        let mut matching_bets = ManagedVec::new();
+        let source = match bet.bet_type {
+            BetType::Back => &scheduler.lay_bets,
+            BetType::Lay => &scheduler.back_bets,
+        };
+    
+        for i in 0..source.len() {
+            let existing_bet = source.get(i);
+            let is_match = self.is_matching_bet(&bet, &existing_bet);
+    
+            if is_match {
+                let match_amount = self.calculate_match_amount(&bet, &existing_bet, &unmatched_amount);
+    
+                matched_amount += &match_amount;
+                unmatched_amount -= &match_amount;
+    
+                let mut updated_bet = existing_bet.clone();
+                self.update_matched_bet(&mut updated_bet, &match_amount, &bet);
+                matching_bets.push(updated_bet);
+    
+                if unmatched_amount == BigUint::zero() {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+    
+        // Salvăm starea actualizată
+        self.selection_scheduler(bet.event, bet.selection.selection_id).set(&scheduler);
+        
+        (matching_bets, matched_amount, unmatched_amount)
+    }
+    
     fn process_matching_bets(
         &self,
         scheduler: &mut Tracker<Self::Api>,
@@ -340,7 +343,8 @@ pub trait TrackerModule:
             updated_matched_bet.status = new_matched_status;
     
             if updated_matched_bet.unmatched_amount > BigUint::zero() {
-                self.add(updated_matched_bet);
+                // Folosim add_to_scheduler în loc de add
+                self.add_to_scheduler(scheduler, updated_matched_bet);
             }
         }
     }
@@ -502,43 +506,45 @@ pub trait TrackerModule:
             canceled_count: scheduler.canceled_count as u32
         }
     }
+
+    #[view(getDetailedSchedulerView)]
+fn get_detailed_scheduler_view(
+    &self,
+    market_id: u64,
+    selection_id: u64
+) -> DetailedSchedulerView<Self::Api> {
+    let scheduler = self.get_scheduler_state(market_id, selection_id);
+    
+    let mut back_queue = ManagedVec::new();
+    for bet in scheduler.back_bets.iter() {
+        back_queue.push(BetQueueView {
+            odd: bet.odd,
+            amount: bet.unmatched_amount,
+            status: bet.status
+        });
+    }
+    
+    let mut lay_queue = ManagedVec::new();
+    for bet in scheduler.lay_bets.iter() {
+        lay_queue.push(BetQueueView {
+            odd: bet.odd,
+            amount: bet.unmatched_amount,
+            status: bet.status
+        });
+    }
+    
+    DetailedSchedulerView {
+        back_bets_count: scheduler.back_bets.len(),
+        lay_bets_count: scheduler.lay_bets.len(),
+        total_back_liquidity: scheduler.back_liquidity,
+        total_lay_liquidity: scheduler.lay_liquidity,
+        best_back_odds: scheduler.best_back_odds,
+        best_lay_odds: scheduler.best_lay_odds,
+        matched_count: scheduler.matched_count as u32,
+        unmatched_count: scheduler.unmatched_count as u32,
+        partially_matched_count: scheduler.partially_matched_count as u32,
+        back_queue,
+        lay_queue
+    }
 }
-
-
-// #[endpoint(updateBetStatus)]
-// fn update_bet_status(
-//     &self,
-//     market_id: u64,
-//     selection_id: u64,
-//     bet_id: u64,
-//     new_status: BetStatus
-// ) -> SCResult<()> {
-//     let mut market = self.markets(&market_id).get();
-//     let selection_index = market
-//         .selections
-//         .iter()
-//         .position(|s| s.selection_id == selection_id)
-//         .ok_or("Selection not found")?;
-
-//     let mut selection = market.selections.get(selection_index);
-//     let mut scheduler = selection.priority_queue.clone();
-    
-//     let bet = self.bet_by_id(bet_id).get();
-//     let old_status = bet.status.clone();
-    
-//     self.update_status_counters(&mut scheduler, &old_status, &new_status);
-    
-//     selection.priority_queue = scheduler;
-//     let _ = market.selections.set(selection_index, &selection);
-//     self.markets(&market_id).set(&market);
-
-//     self.bet_status_updated_event(
-//         market_id,
-//         selection_id,
-//         bet_id,
-//         &old_status,
-//         &new_status
-//     );
-
-//     Ok(())
-// }
+}
