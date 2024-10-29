@@ -62,32 +62,6 @@ pub trait TrackerModule:
         (matched_amount, unmatched_amount, updated_bet)
     }
 
-    fn add_to_scheduler(&self, scheduler: &mut Tracker<Self::Api>, bet: Bet<Self::Api>) {
-        let old_status = bet.status.clone();
-        let mut new_bet = bet;
-        new_bet.status = BetStatus::Unmatched;
-        
-        self.update_status_counters(scheduler, &old_status, &new_bet.status);
-
-        match new_bet.bet_type {
-            BetType::Back => {
-                let mut queue = scheduler.back_bets.clone();
-                self.insert_bet(&mut queue, new_bet.clone());
-                scheduler.back_bets = queue;
-                scheduler.back_liquidity += &new_bet.stake_amount;
-                self.update_best_back_odds(scheduler);
-            },
-            BetType::Lay => {
-                let mut queue = scheduler.lay_bets.clone();
-                self.insert_bet(&mut queue, new_bet.clone());
-                scheduler.lay_bets = queue;
-                scheduler.lay_liquidity += &new_bet.liability;
-                self.update_best_lay_odds(scheduler);
-            },
-        };
-    }
-
-
 
     fn add(&self, bet: Bet<Self::Api>) {
         let selection_id = bet.selection.selection_id;
@@ -277,7 +251,6 @@ pub trait TrackerModule:
         &self,
         bet: Bet<Self::Api>
     ) -> (ManagedVec<Self::Api, Bet<Self::Api>>, BigUint, BigUint) {
-        // Folosim mutable pentru că vom modifica și salva
         let mut scheduler = self.selection_scheduler(
             bet.event,
             bet.selection.selection_id
@@ -289,9 +262,11 @@ pub trait TrackerModule:
             BetType::Lay => bet.liability.clone(),
         };
         let mut matching_bets = ManagedVec::new();
+        
+        // Important: păstrăm referința corectă la queue-ul opus
         let source = match bet.bet_type {
-            BetType::Back => &scheduler.lay_bets,
-            BetType::Lay => &scheduler.back_bets,
+            BetType::Back => scheduler.lay_bets.clone(), // folosim clone() pentru a nu consuma queue-ul
+            BetType::Lay => scheduler.back_bets.clone(),
         };
     
         for i in 0..source.len() {
@@ -306,6 +281,10 @@ pub trait TrackerModule:
     
                 let mut updated_bet = existing_bet.clone();
                 self.update_matched_bet(&mut updated_bet, &match_amount, &bet);
+                
+                // Important: Ne asigurăm că păstrăm tipul original al pariului
+                updated_bet.bet_type = existing_bet.bet_type.clone();
+                
                 matching_bets.push(updated_bet);
     
                 if unmatched_amount == BigUint::zero() {
@@ -316,10 +295,34 @@ pub trait TrackerModule:
             }
         }
     
-        // Salvăm starea actualizată
         self.selection_scheduler(bet.event, bet.selection.selection_id).set(&scheduler);
-        
         (matching_bets, matched_amount, unmatched_amount)
+    }
+    
+    fn add_to_scheduler(&self, scheduler: &mut Tracker<Self::Api>, bet: Bet<Self::Api>) {
+        let old_status = bet.status.clone();
+        let mut new_bet = bet.clone(); // Folosim clone() pentru a păstra toate proprietățile
+        new_bet.status = BetStatus::Unmatched;
+        
+        self.update_status_counters(scheduler, &old_status, &new_bet.status);
+    
+        // Important: Verificăm explicit tipul pariului
+        match new_bet.bet_type {
+            BetType::Back => {
+                let mut queue = scheduler.back_bets.clone();
+                self.insert_bet(&mut queue, new_bet.clone());
+                scheduler.back_bets = queue;
+                scheduler.back_liquidity += &new_bet.stake_amount;
+                self.update_best_back_odds(scheduler);
+            },
+            BetType::Lay => {
+                let mut queue = scheduler.lay_bets.clone();
+                self.insert_bet(&mut queue, new_bet.clone());
+                scheduler.lay_bets = queue;
+                scheduler.lay_liquidity += &new_bet.liability;
+                self.update_best_lay_odds(scheduler);
+            },
+        };
     }
     
     fn process_matching_bets(
@@ -331,7 +334,9 @@ pub trait TrackerModule:
             let old_matched_status = matched_bet.status.clone();
             self.remove(matched_bet.clone());
             
-            let mut updated_matched_bet = matched_bet;
+            let mut updated_matched_bet = matched_bet.clone();
+            updated_matched_bet.bet_type = matched_bet.bet_type.clone(); // Păstrăm explicit tipul
+            
             let new_matched_status = self.calculate_bet_status(
                 &updated_matched_bet,
                 &updated_matched_bet.matched_amount
@@ -343,11 +348,11 @@ pub trait TrackerModule:
             updated_matched_bet.status = new_matched_status;
     
             if updated_matched_bet.unmatched_amount > BigUint::zero() {
-                // Folosim add_to_scheduler în loc de add
                 self.add_to_scheduler(scheduler, updated_matched_bet);
             }
         }
     }
+    
 
     fn update_best_back_odds(&self, scheduler: &mut Tracker<Self::Api>) {
         if scheduler.back_bets.is_empty() {
