@@ -1,4 +1,4 @@
-use crate::{types::BetScheduler, types::{Bet, BetType, Market}};
+use crate::{types::Tracker, types::{Bet, Market}};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -25,13 +25,13 @@ pub trait StorageModule {
 
     #[view(getUnmatchedBets)]
     #[storage_mapper("unmatched_bets")]
-    fn unmatched_bets(&self, market_id: u64) -> SingleValueMapper<BetScheduler<Self::Api>>;
+    fn unmatched_bets(&self, market_id: u64) -> SingleValueMapper<Tracker<Self::Api>>;
 
     #[storage_mapper("market_queues")]
-    fn market_queues(&self, market_id: u64) -> SingleValueMapper<BetScheduler<Self::Api>>;
-    
+    fn market_queues(&self, market_id: u64) -> SingleValueMapper<Tracker<Self::Api>>;
+
     #[storage_mapper("bet_scheduler")]
-    fn bet_scheduler(&self) -> SingleValueMapper<BetScheduler<Self::Api>>;
+    fn bet_scheduler(&self) -> SingleValueMapper<Tracker<Self::Api>>;
 
 }
 

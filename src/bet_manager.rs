@@ -6,7 +6,7 @@ multiversx_sc::derive_imports!();
 pub trait BetManagerModule: crate::storage::StorageModule 
     + crate::events::EventsModule 
     + crate::nft_manager::NftManagerModule
-    + crate::bet_scheduler::BetSchedulerModule {
+    + crate::tracker::TrackerModule {
 
     #[payable("*")]
     #[endpoint(placeBet)]

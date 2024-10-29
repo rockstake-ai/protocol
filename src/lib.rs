@@ -9,7 +9,7 @@ pub mod nft_manager;
 pub mod fund_manager;
 pub mod market_manager;
 pub mod validation;
-pub mod bet_scheduler;
+pub mod tracker;
 pub mod types;
 
 multiversx_sc::imports!();
@@ -22,7 +22,7 @@ storage::StorageModule
 + fund_manager::FundManagerModule
 + bet_manager::BetManagerModule
 + market_manager::MarketManagerModule
-+ bet_scheduler::BetSchedulerModule{
++ tracker::TrackerModule{
     #[upgrade]
     fn upgrade(&self) {}
 

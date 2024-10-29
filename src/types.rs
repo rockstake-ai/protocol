@@ -77,7 +77,7 @@ pub struct Market<M: ManagedTypeApi> {
 pub struct Selection<M: ManagedTypeApi> {
     pub selection_id: u64,
     pub description: ManagedBuffer<M>,
-    pub priority_queue: BetScheduler<M>,
+    pub priority_queue: Tracker<M>,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
@@ -115,7 +115,7 @@ pub struct DetailedBetEntry<M: ManagedTypeApi> {
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
-pub struct BetScheduler<M: ManagedTypeApi> {
+pub struct Tracker<M: ManagedTypeApi> {
     pub back_bets: ManagedVec<M, Bet<M>>,
     pub lay_bets: ManagedVec<M, Bet<M>>,
     pub best_back_odds: BigUint<M>,

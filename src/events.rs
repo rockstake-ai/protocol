@@ -1,4 +1,4 @@
-use crate::types::{BetStatus, BetType, EventResult};
+use crate::types::{BetStatus, BetType};
 
 multiversx_sc::imports!();
 
@@ -57,16 +57,6 @@ pub trait EventsModule {
         amount: &BigUint,
     );
 
-    #[event("market_created")]
-    fn market_created_event(
-        &self,
-        #[indexed] market_id: u64,
-        #[indexed] event_id: u64,
-        #[indexed] description: &ManagedBuffer,
-        #[indexed] close_timestamp: u64,
-        #[indexed] created_at: u64,
-    );
-
     #[event("market_query")]
     fn market_query_event(
         &self,
@@ -107,6 +97,19 @@ pub trait EventsModule {
         #[indexed] bet_id: u64,
         #[indexed] old_status: &BetStatus,
         #[indexed] new_status: &BetStatus,
+    );
+
+    #[event("bet_counter_update")]
+    fn bet_counter_update_event(
+        &self,
+        #[indexed] old_status: &BetStatus,
+        #[indexed] new_status: &BetStatus,
+        #[indexed] matched_count: u64,
+        #[indexed] unmatched_count: u64,
+        #[indexed] partially_matched_count: u64,
+        #[indexed] win_count: u64,
+        #[indexed] lost_count: u64,
+        #[indexed] canceled_count: u64,
     );
 
 }

@@ -2,52 +2,31 @@ use multiversx_sc::codec::multi_types::MultiValue6;
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-use crate::types::{Bet, BetScheduler, BetStatus, BetType};
+use crate::types::{Bet, Tracker, BetStatus, BetType};
 
 #[multiversx_sc::module]
-pub trait BetSchedulerModule:
+pub trait TrackerModule:
     crate::storage::StorageModule +
     crate::events::EventsModule
     {
-    #[endpoint(updateBetStatus)]
-    fn update_bet_status(
-        &self,
-        market_id: u64,
-        selection_id: u64,
-        bet_id: u64,
-        new_status: BetStatus
-    ) -> SCResult<()> {
-        let mut market = self.markets(&market_id).get();
-        let selection_index = market
-            .selections
-            .iter()
-            .position(|s| s.selection_id == selection_id)
-            .ok_or("Selection not found")?;
 
-        let mut selection = market.selections.get(selection_index);
-        let mut scheduler = selection.priority_queue.clone();
-        
-        let bet = self.bet_by_id(bet_id).get();
-        let old_status = bet.status.clone();
-        
-        self.update_status_counters(&mut scheduler, &old_status, &new_status);
-        
-        selection.priority_queue = scheduler;
-        let _ = market.selections.set(selection_index, &selection);
-        self.markets(&market_id).set(&market);
+    fn init_bet_scheduler(&self) -> Tracker<Self::Api> {
+        Tracker {
+            back_bets: ManagedVec::new(),
+            lay_bets: ManagedVec::new(),
+            best_back_odds: BigUint::zero(),
+            best_lay_odds: BigUint::zero(),
+            back_liquidity: BigUint::zero(),
+            lay_liquidity: BigUint::zero(),
+            matched_count: 0,
+            unmatched_count: 0,
+            partially_matched_count: 0,
+            win_count: 0,
+            lost_count: 0,
+            canceled_count: 0,
+        }
+    }    
 
-        self.bet_status_updated_event(
-            market_id,
-            selection_id,
-            bet_id,
-            &old_status,
-            &new_status
-        );
-
-        Ok(())
-    }
-
-    #[endpoint(matchBet)]
     fn match_bet(&self, bet: Bet<Self::Api>) -> (BigUint, BigUint, Bet<Self::Api>) {
         let mut scheduler = self.bet_scheduler().get();
         let old_status = bet.status.clone();
@@ -72,23 +51,6 @@ pub trait BetSchedulerModule:
     
         self.bet_scheduler().set(scheduler);
         (matched_amount, unmatched_amount, updated_bet)
-    }
-
-    fn init_bet_scheduler(&self) -> BetScheduler<Self::Api> {
-        BetScheduler {
-            back_bets: ManagedVec::new(),
-            lay_bets: ManagedVec::new(),
-            best_back_odds: BigUint::zero(),
-            best_lay_odds: BigUint::zero(),
-            back_liquidity: BigUint::zero(),
-            lay_liquidity: BigUint::zero(),
-            matched_count: 0,
-            unmatched_count: 0,
-            partially_matched_count: 0,
-            win_count: 0,
-            lost_count: 0,
-            canceled_count: 0,
-        }
     }
 
     fn add(&self, bet: Bet<Self::Api>) {
@@ -228,12 +190,23 @@ pub trait BetSchedulerModule:
         is_back: bool
     ) -> bool {
         if is_back {
-            new_bet.odd > existing_bet.odd || 
-            (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
+            // Pentru back, cotele mai mari au prioritate
+            if new_bet.odd > existing_bet.odd {
+                return true;
+            } else if new_bet.odd < existing_bet.odd {
+                return false;
+            }
         } else {
-            new_bet.odd < existing_bet.odd || 
-            (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
+            // Pentru lay, cotele mai mici au prioritate
+            if new_bet.odd < existing_bet.odd {
+                return true;
+            } else if new_bet.odd > existing_bet.odd {
+                return false;
+            }
         }
+        
+        // La cote egale, folosim FIFO
+        new_bet.created_at < existing_bet.created_at
     }
 
     fn is_matching_bet(&self, bet: &Bet<Self::Api>, existing_bet: &Bet<Self::Api>) -> bool {
@@ -299,7 +272,7 @@ pub trait BetSchedulerModule:
 
     fn process_matching_bets(
         &self,
-        scheduler: &mut BetScheduler<Self::Api>,
+        scheduler: &mut Tracker<Self::Api>,
         matching_bets: ManagedVec<Self::Api, Bet<Self::Api>>
     ) {
         for matched_bet in matching_bets.iter() {
@@ -325,7 +298,7 @@ pub trait BetSchedulerModule:
 
     fn update_status_counters(
         &self,
-        scheduler: &mut BetScheduler<Self::Api>,
+        scheduler: &mut Tracker<Self::Api>,
         old_status: &BetStatus,
         new_status: &BetStatus
     ) {
@@ -350,16 +323,16 @@ pub trait BetSchedulerModule:
         self.bet_counter_update_event(
             old_status,
             new_status,
-            scheduler.matched_count as usize,
-            scheduler.unmatched_count as usize,
-            scheduler.partially_matched_count as usize,
-            scheduler.win_count as usize,
-            scheduler.lost_count as usize,
-            scheduler.canceled_count as usize,
+            scheduler.matched_count as u64,
+            scheduler.unmatched_count as u64,
+            scheduler.partially_matched_count as u64,
+            scheduler.win_count as u64,
+            scheduler.lost_count as u64,
+            scheduler.canceled_count as u64,
         );
     }
 
-    fn update_best_back_odds(&self, scheduler: &mut BetScheduler<Self::Api>) {
+    fn update_best_back_odds(&self, scheduler: &mut Tracker<Self::Api>) {
         if scheduler.back_bets.is_empty() {
             scheduler.best_back_odds = BigUint::zero();
         } else {
@@ -367,7 +340,7 @@ pub trait BetSchedulerModule:
         }
     }
 
-    fn update_best_lay_odds(&self, scheduler: &mut BetScheduler<Self::Api>) {
+    fn update_best_lay_odds(&self, scheduler: &mut Tracker<Self::Api>) {
         if scheduler.lay_bets.is_empty() {
             scheduler.best_lay_odds = BigUint::zero();
         } else {
@@ -375,20 +348,8 @@ pub trait BetSchedulerModule:
         }
     }
 
-    #[view(getBetSchedulerCounts)]
-    fn get_bet_scheduler_counts(&self, scheduler: &BetScheduler<Self::Api>) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
-        (
-            BigUint::from(scheduler.matched_count),
-            BigUint::from(scheduler.unmatched_count),
-            BigUint::from(scheduler.partially_matched_count),
-            BigUint::from(scheduler.win_count),
-            BigUint::from(scheduler.lost_count),
-            BigUint::from(scheduler.canceled_count)
-        ).into()
-    }
-
     #[view(getSchedulerState)]
-    fn get_scheduler_state(&self, market_id: u64, selection_id: u64) -> BetScheduler<Self::Api> {
+    fn get_scheduler_state(&self, market_id: u64, selection_id: u64) -> Tracker<Self::Api> {
         let market = self.markets(&market_id).get();
         let selection = market
             .selections
@@ -418,3 +379,42 @@ pub trait BetSchedulerModule:
         (scheduler.back_liquidity, scheduler.lay_liquidity).into()
     }
 }
+
+
+// #[endpoint(updateBetStatus)]
+// fn update_bet_status(
+//     &self,
+//     market_id: u64,
+//     selection_id: u64,
+//     bet_id: u64,
+//     new_status: BetStatus
+// ) -> SCResult<()> {
+//     let mut market = self.markets(&market_id).get();
+//     let selection_index = market
+//         .selections
+//         .iter()
+//         .position(|s| s.selection_id == selection_id)
+//         .ok_or("Selection not found")?;
+
+//     let mut selection = market.selections.get(selection_index);
+//     let mut scheduler = selection.priority_queue.clone();
+    
+//     let bet = self.bet_by_id(bet_id).get();
+//     let old_status = bet.status.clone();
+    
+//     self.update_status_counters(&mut scheduler, &old_status, &new_status);
+    
+//     selection.priority_queue = scheduler;
+//     let _ = market.selections.set(selection_index, &selection);
+//     self.markets(&market_id).set(&market);
+
+//     self.bet_status_updated_event(
+//         market_id,
+//         selection_id,
+//         bet_id,
+//         &old_status,
+//         &new_status
+//     );
+
+//     Ok(())
+// }

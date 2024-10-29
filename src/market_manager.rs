@@ -1,6 +1,6 @@
 use crate::types::{
-    Bet, BetOrderEntry, BetScheduler, BetStatus, BetType, 
-    DetailedBetEntry, Market, MarketStatus, OrderbookEntry, Selection
+    Bet, 
+    DetailedBetEntry, Market, MarketStatus, OrderbookEntry, Selection, Tracker
 };
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -11,114 +11,8 @@ pub trait MarketManagerModule:
     crate::events::EventsModule +
     crate::fund_manager::FundManagerModule +
     crate::nft_manager::NftManagerModule +
-    crate::bet_scheduler::BetSchedulerModule
-{
-    // View Functions
-    #[view(getMarket)]
-    fn get_market(&self, market_id: u64) -> SCResult<Market<Self::Api>> {
-        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
-        Ok(self.markets(&market_id).get())
-    }
-
-    #[view(getMarketStatus)]
-    fn get_market_status(&self, market_id: u64) -> SCResult<MarketStatus> {
-        let market = self.get_market(market_id)?;
-        Ok(market.market_status)
-    }
-
-    #[view(getMarketSelections)]
-    fn get_market_selections(&self, market_id: u64) -> SCResult<ManagedVec<Self::Api, Selection<Self::Api>>> {
-        let market = self.get_market(market_id)?;
-        Ok(market.selections)
-    }
-
-    #[view(getOrderbook)]
-    fn get_orderbook(
-        &self,
-        market_id: u64,
-        selection_id: u64
-    ) -> SCResult<MultiValue2<ManagedVec<OrderbookEntry<Self::Api>>, ManagedVec<OrderbookEntry<Self::Api>>>> {
-        let market = self.get_market(market_id)?;
-        let selection = self.get_selection(&market, selection_id)?;
-        
-        let back_orders = self.build_orderbook_entries(&selection.priority_queue.back_bets);
-        let lay_orders = self.build_orderbook_entries(&selection.priority_queue.lay_bets);
-        
-        Ok((back_orders, lay_orders).into())
-    }
-
-    #[view(getDetailedBetQueue)]
-    fn get_detailed_bet_queue(
-        &self,
-        market_id: u64,
-        selection_id: u64
-    ) -> SCResult<MultiValue2<ManagedVec<DetailedBetEntry<Self::Api>>, ManagedVec<DetailedBetEntry<Self::Api>>>> {
-        let market = self.get_market(market_id)?;
-        let selection = self.get_selection(&market, selection_id)?;
-        
-        let back_queue = self.build_detailed_entries(&selection.priority_queue.back_bets);
-        let lay_queue = self.build_detailed_entries(&selection.priority_queue.lay_bets);
-        
-        Ok((back_queue, lay_queue).into())
-    }
-
-    #[view(getBetCountsByStatus)]
-    fn get_bet_counts_by_status(&self, market_id: u64) -> SCResult<MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint>> {
-        let market = self.get_market(market_id)?;
-        
-        let mut total_matched = BigUint::zero();
-        let mut total_unmatched = BigUint::zero();
-        let mut total_partially_matched = BigUint::zero();
-        let mut total_win = BigUint::zero();
-        let mut total_lost = BigUint::zero();
-        let mut total_canceled = BigUint::zero();
-    
-        self.market_query_event(market_id, market.selections.len());
-    
-        for selection in market.selections.iter() {
-            let (matched, unmatched, partially_matched, win, lost, canceled) = 
-                self.get_bet_scheduler_counts(&selection.priority_queue).into_tuple();
-    
-            self.selection_counts_event(
-                market_id,
-                selection.selection_id,
-                &matched,
-                &unmatched,
-                &partially_matched,
-                &win,
-                &lost,
-                &canceled
-            );
-    
-            total_matched += matched;
-            total_unmatched += unmatched;
-            total_partially_matched += partially_matched;
-            total_win += win;
-            total_lost += lost;
-            total_canceled += canceled;
-        }
-    
-        self.total_counts_event(
-            market_id,
-            &total_matched,
-            &total_unmatched,
-            &total_partially_matched,
-            &total_win,
-            &total_lost,
-            &total_canceled
-        );
-    
-        Ok((
-            total_matched,
-            total_unmatched,
-            total_partially_matched,
-            total_win,
-            total_lost,
-            total_canceled
-        ).into())
-    }
-
-    // Public Endpoints
+    crate::tracker::TrackerModule
+    {
     #[only_owner]
     #[endpoint(createMarket)]
     fn create_market(
@@ -142,43 +36,8 @@ pub trait MarketManagerModule:
             selections,
             close_timestamp
         );
-
         self.markets(&market_id).set(&market);
-        
-        self.market_created_event(
-            market_id,
-            event_id,
-            &description,
-            close_timestamp,
-            market.created_at
-        );
-
         Ok(market_id)
-    }
-
-    #[only_owner]
-    #[endpoint(closeMarket)]
-    fn close_market(
-        &self,
-        market_id: u64,
-        winning_selection_id: Option<u64>
-    ) -> SCResult<()> {
-        let mut market = self.get_market(market_id)?;
-        require!(market.market_status == MarketStatus::Open, "Market not open");
-        
-        market.market_status = MarketStatus::Closed;
-        self.markets(&market_id).set(&market);
-
-        if let Some(winner_id) = winning_selection_id {
-            self.process_market_outcome(market_id, winner_id)?;
-        }
-
-        self.market_closed_event(
-            market_id.into(),
-            winning_selection_id.unwrap_or_default().into()
-        );
-
-        Ok(())
     }
 
     fn get_and_increment_market_counter(&self) -> u64 {
@@ -282,4 +141,116 @@ pub trait MarketManagerModule:
         
         current_timestamp < market.close_timestamp
     }
+
+    #[view(getMarket)]
+    fn get_market(&self, market_id: u64) -> SCResult<Market<Self::Api>> {
+        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
+        Ok(self.markets(&market_id).get())
+    }
+
+    #[view(getOrderbook)]
+    fn get_orderbook(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> SCResult<MultiValue2<ManagedVec<OrderbookEntry<Self::Api>>, ManagedVec<OrderbookEntry<Self::Api>>>> {
+        let market = self.get_market(market_id)?;
+        let selection = self.get_selection(&market, selection_id)?;
+        
+        let back_orders = self.build_orderbook_entries(&selection.priority_queue.back_bets);
+        let lay_orders = self.build_orderbook_entries(&selection.priority_queue.lay_bets);
+        
+        Ok((back_orders, lay_orders).into())
+    }
+
+    #[view(getMarketStats)]
+    fn get_market_stats(
+        &self,
+        market_id: u64,
+        selection_id: Option<u64>
+    ) -> SCResult<MultiValue6<
+        BigUint,    
+        BigUint,   
+        BigUint,   
+        BigUint,    
+        BigUint,    
+        BigUint     
+    >> {
+        let market = self.get_market(market_id)?;
+        
+        match selection_id {
+            // Stats for specific selection
+            Some(sel_id) => {
+                let selection = self.get_selection(&market, sel_id)?;
+                Ok(self.get_bet_scheduler_counts(&selection.priority_queue))
+            },
+            None => {
+                let mut total_matched = BigUint::zero();
+                let mut total_unmatched = BigUint::zero();
+                let mut total_partially_matched = BigUint::zero();
+                let mut total_win = BigUint::zero();
+                let mut total_lost = BigUint::zero();
+                let mut total_canceled = BigUint::zero();
+            
+                for selection in market.selections.iter() {
+                    let (matched, unmatched, partially_matched, win, lost, canceled) = 
+                        self.get_bet_scheduler_counts(&selection.priority_queue).into_tuple();
+            
+                    total_matched += matched;
+                    total_unmatched += unmatched;
+                    total_partially_matched += partially_matched;
+                    total_win += win;
+                    total_lost += lost;
+                    total_canceled += canceled;
+                }
+            
+                Ok((
+                    total_matched,
+                    total_unmatched,
+                    total_partially_matched,
+                    total_win,
+                    total_lost,
+                    total_canceled
+                ).into())
+            }
+        }
+    }
+
+    #[view(getBetSchedulerCounts)]
+    fn get_bet_scheduler_counts(&self, scheduler: &Tracker<Self::Api>) -> MultiValue6<BigUint, BigUint, BigUint, BigUint, BigUint, BigUint> {
+        (
+            BigUint::from(scheduler.matched_count),
+            BigUint::from(scheduler.unmatched_count),
+            BigUint::from(scheduler.partially_matched_count),
+            BigUint::from(scheduler.win_count),
+            BigUint::from(scheduler.lost_count),
+            BigUint::from(scheduler.canceled_count)
+        ).into()
+    }
 }
+
+
+// #[only_owner]
+//     #[endpoint(closeMarket)]
+//     fn close_market(
+//         &self,
+//         market_id: u64,
+//         winning_selection_id: Option<u64>
+//     ) -> SCResult<()> {
+//         let mut market = self.get_market(market_id)?;
+//         require!(market.market_status == MarketStatus::Open, "Market not open");
+        
+//         market.market_status = MarketStatus::Closed;
+//         self.markets(&market_id).set(&market);
+
+//         if let Some(winner_id) = winning_selection_id {
+//             self.process_market_outcome(market_id, winner_id)?;
+//         }
+
+//         self.market_closed_event(
+//             market_id.into(),
+//             winning_selection_id.unwrap_or_default().into()
+//         );
+
+//         Ok(())
+//     }
