@@ -90,7 +90,12 @@ pub trait TrackerModule:
 
 
     fn add(&self, bet: Bet<Self::Api>) {
-        let mut scheduler = self.bet_scheduler().get();
+        let selection_id = bet.selection.selection_id;
+        let event = bet.event;
+        let mut scheduler = self.selection_scheduler(
+            event,
+            selection_id,
+        ).get();
         let old_status = bet.status.clone();
         let mut new_bet = bet;
         new_bet.status = BetStatus::Unmatched;
@@ -112,11 +117,14 @@ pub trait TrackerModule:
                 self.update_best_lay_odds(&mut scheduler);
             },
         };
-        self.bet_scheduler().set(scheduler);
+        self.selection_scheduler(event.clone(), selection_id.clone()).set(&scheduler);
     }
 
     fn remove(&self, bet: Bet<Self::Api>) -> Option<Bet<Self::Api>> {
-        let mut scheduler = self.bet_scheduler().get();
+        let mut scheduler = self.selection_scheduler(
+            bet.event,
+            bet.selection.selection_id
+        ).get();
         let queue = match bet.bet_type {
             BetType::Back => &mut scheduler.back_bets,
             BetType::Lay => &mut scheduler.lay_bets,
@@ -151,7 +159,7 @@ pub trait TrackerModule:
                     self.update_best_lay_odds(&mut scheduler);
                 },
             }
-            self.bet_scheduler().set(scheduler);
+            self.selection_scheduler(bet.event, bet.selection.selection_id).set(&scheduler);
             Some(removed_bet)
         } else {
             None
@@ -162,7 +170,11 @@ pub trait TrackerModule:
         &self,
         bet: Bet<Self::Api>
     ) -> (ManagedVec<Self::Api, Bet<Self::Api>>, BigUint, BigUint) {
-        let scheduler = self.bet_scheduler().get();
+        let scheduler = self.selection_scheduler(
+            bet.event,
+            bet.selection.selection_id
+        ).get();
+
         let mut matched_amount = BigUint::zero();
         let mut unmatched_amount = match bet.bet_type {
             BetType::Back => bet.stake_amount.clone(),
@@ -173,6 +185,7 @@ pub trait TrackerModule:
             BetType::Back => &scheduler.lay_bets,
             BetType::Lay => &scheduler.back_bets,
         };
+    
     
         for i in 0..source.len() {
             let existing_bet = source.get(i);
@@ -454,14 +467,10 @@ pub trait TrackerModule:
 
     #[view(getSchedulerState)]
     fn get_scheduler_state(&self, market_id: u64, selection_id: u64) -> Tracker<Self::Api> {
-        let market = self.markets(&market_id).get();
-        let selection = market
-            .selections
-            .iter()
-            .find(|s| s.selection_id == selection_id)
-            .expect("Selection not found");
-        
-        selection.priority_queue.clone()
+        if self.selection_scheduler(market_id, selection_id).is_empty() {
+            return self.init_bet_scheduler();
+        }
+        self.selection_scheduler(market_id, selection_id).get()
     }
 
     #[view(getMarketLiquidity)]
