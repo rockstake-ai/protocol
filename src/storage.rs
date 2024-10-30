@@ -34,7 +34,6 @@ pub trait StorageModule {
     #[storage_mapper("bet_scheduler")]
     fn bet_scheduler(&self) -> SingleValueMapper<Tracker<Self::Api>>;
 
-    // Storage mapper pentru scheduler per selection
     #[storage_mapper("selection_scheduler")]
     fn selection_scheduler(
         &self,

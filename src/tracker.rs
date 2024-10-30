@@ -28,16 +28,42 @@ pub trait TrackerModule:
         }
     }
 
-    // Helper pentru debugging
-#[view(inspectQueues)]
-fn inspect_queues(
-    &self,
-    market_id: u64,
-    selection_id: u64
-) -> MultiValue2<ManagedVec<Self::Api, Bet<Self::Api>>, ManagedVec<Self::Api, Bet<Self::Api>>> {
-    let scheduler = self.selection_scheduler(market_id, selection_id).get();
-    (scheduler.back_bets, scheduler.lay_bets).into()
-}
+    #[view(inspectQueues)]
+    fn inspect_queues(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> MultiValue6<
+        usize,              // back_count
+        usize,              // lay_count
+        BigUint,            // total_back_liquidity
+        BigUint,            // total_lay_liquidity
+        ManagedVec<Self::Api, BigUint>,  // back_odds
+        ManagedVec<Self::Api, BigUint>   // lay_odds
+    > {
+        let scheduler = self.selection_scheduler(market_id, selection_id).get();
+        
+        let mut back_odds = ManagedVec::new();
+        let mut lay_odds = ManagedVec::new();
+        
+        for bet in scheduler.back_bets.iter() {
+            back_odds.push(bet.odd);
+        }
+        
+        for bet in scheduler.lay_bets.iter() {
+            lay_odds.push(bet.odd);
+        }
+        
+        (
+            scheduler.back_bets.len(),
+            scheduler.lay_bets.len(),
+            scheduler.back_liquidity,
+            scheduler.lay_liquidity,
+            back_odds,
+            lay_odds
+        ).into()
+    }
+
 
 fn process_bet(&self, bet: Bet<Self::Api>) -> (BigUint, BigUint, Bet<Self::Api>) {
     let event_id = bet.event;
