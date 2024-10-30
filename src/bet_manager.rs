@@ -17,7 +17,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
         odds: BigUint,
         bet_type: BetType
     ) -> SCResult<(u64, BigUint, BigUint)> {
-        // 1. Market validations
         let mut market = self.markets(&market_id).get();
         let created_at = self.blockchain().get_block_timestamp();
     
@@ -29,7 +28,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
             ERR_BET_ODDS
         );
     
-        // 2. Payment processing
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, total_amount) = self
             .call_value()
@@ -37,25 +35,23 @@ pub trait BetManagerModule: crate::storage::StorageModule
             .into_tuple();
         let bet_id = self.get_last_bet_id() + 1;
     
-        // 3. Calculate stake and liability
         let (stake, liability) = match bet_type {
-            BetType::Back => {
-                (total_amount.clone(), BigUint::zero())
-            },
+            BetType::Back => (total_amount.clone(), BigUint::zero()),
             BetType::Lay => {
-                let stake = self.calculate_stake_from_total(&total_amount, &odds);
-                let calculated_liability = self.calculate_potential_liability(&bet_type, &stake, &odds);
+                let odds_minus_one = &odds - &BigUint::from(100u32);
+                let liability = (&total_amount * &odds_minus_one) / &BigUint::from(100u32);
+                let stake = total_amount.clone();
                 
                 require!(
-                    stake.clone() + calculated_liability.clone() <= total_amount,
-                    "Invalid total amount for Lay bet"
+                    stake.clone() + liability.clone() <= total_amount,
+                    "Insufficient total amount for Lay bet"
                 );
                 
-                (stake, calculated_liability)
+                (stake, liability)
             }
         };
+
     
-        // 4. Get selection and initialize scheduler if needed
         let selection_index = market
             .selections
             .iter()
@@ -67,7 +63,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
             self.selection_scheduler(market_id, selection_id).set(&self.init_bet_scheduler());
         }
     
-        // 5. Create bet
         let bet = Bet {
             bettor: caller.clone(),
             event: market_id,
@@ -89,27 +84,22 @@ pub trait BetManagerModule: crate::storage::StorageModule
             created_at: created_at
         };
     
-        // 6. Process bet through tracker
         let (matched_amount, unmatched_amount, updated_bet) = self.process_bet(bet);
     
-        // 7. Update market state
         selection.priority_queue = self.selection_scheduler(market_id, selection_id).get();
         let _ = market.selections.set(selection_index, &selection);
         market.total_matched_amount += &matched_amount;
         self.markets(&market_id).set(&market);
     
-        // 8. Process NFT and store bet
         let bet_nft_nonce = self.mint_bet_nft(&updated_bet);
         self.bet_by_id(bet_id).set(&updated_bet);
     
-        // 9. Update locked funds
         let total_locked = match bet_type {
             BetType::Back => unmatched_amount.clone(),
             BetType::Lay => liability.clone(),
         };
         self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
     
-        // 10. Send NFT and emit event
         self.send().direct_esdt(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
@@ -133,38 +123,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
         );
     
         Ok((bet_id, odds, stake))
-    }
-
-
-    fn calculate_potential_profit(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
-        match bet_type {
-            BetType::Back => {
-                (odds - &BigUint::from(100u32)) * stake / &BigUint::from(100u32)
-            },
-            BetType::Lay => stake.clone()  // Pentru Lay, profitul este stake-ul
-        }
-    }
-    
-    fn calculate_stake_from_total(&self, total: &BigUint, odds: &BigUint) -> BigUint {
-        total * &BigUint::from(100u32) / odds
-    }
-    
-    fn calculate_potential_liability(&self, bet_type: &BetType, stake: &BigUint, odds: &BigUint) -> BigUint {
-        match bet_type {
-            BetType::Back => stake.clone(),
-            BetType::Lay => {
-                let odds_minus_100 = odds - &BigUint::from(100u32);
-                let result = (stake * &odds_minus_100) / &BigUint::from(100u32);
-                result
-            }
-        }
-    }
-    
-    fn calculate_win_amount(&self, bet_type: &BetType, stake_amount: &BigUint, odds: &BigUint) -> BigUint {
-        match bet_type {
-            BetType::Back => self.calculate_potential_profit(bet_type, stake_amount, odds),
-            BetType::Lay => self.calculate_potential_liability(bet_type, stake_amount, odds),
-        }
     }
 
     fn get_last_bet_id(&self) -> u64 {
