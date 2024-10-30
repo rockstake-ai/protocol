@@ -202,33 +202,45 @@ fn debug_queue_event(
         }
     }
 
-    // 5. QUEUE OPERATIONS
     fn add_to_queue(&self, scheduler: &mut Tracker<Self::Api>, bet: &Bet<Self::Api>) {
         match bet.bet_type {
             BetType::Back => {
                 self.insert_ordered(&mut scheduler.back_bets, bet.clone());
-                scheduler.back_liquidity += &bet.unmatched_amount;
+                scheduler.back_liquidity += &bet.stake_amount;
                 self.update_best_back_odds(scheduler);
             },
             BetType::Lay => {
-                self.insert_ordered(&mut scheduler.lay_bets, bet.clone());
-                scheduler.lay_liquidity += &bet.liability;
+                let lay_bet = bet.clone();
+                self.insert_ordered(&mut scheduler.lay_bets, lay_bet);
+                scheduler.lay_liquidity += &bet.stake_amount;  // Folosim stake_amount pentru lichiditate
                 self.update_best_lay_odds(scheduler);
             }
         }
+    
+        // Debug event pentru verificare
+        self.liquidity_debug_event(
+            &bet.bet_type,
+            &scheduler.back_liquidity,
+            &scheduler.lay_liquidity,
+            &scheduler.back_bets.len(),
+            &scheduler.lay_bets.len()
+        );
     }
-
+    
     fn remove_from_queue(&self, scheduler: &mut Tracker<Self::Api>, bet: &Bet<Self::Api>) {
         let queue = match bet.bet_type {
             BetType::Back => &mut scheduler.back_bets,
             BetType::Lay => &mut scheduler.lay_bets,
         };
-
+    
         if let Some(index) = self.find_bet_index(queue, bet) {
-            // Update liquidity before removal
             match bet.bet_type {
-                BetType::Back => scheduler.back_liquidity -= &bet.unmatched_amount,
-                BetType::Lay => scheduler.lay_liquidity -= &bet.liability,
+                BetType::Back => {
+                    scheduler.back_liquidity -= &bet.stake_amount;
+                },
+                BetType::Lay => {
+                    scheduler.lay_liquidity -= &bet.stake_amount;  // Folosim stake_amount și aici
+                }
             }
             
             // Remove bet from queue
@@ -243,7 +255,77 @@ fn debug_queue_event(
             // Update best odds
             match bet.bet_type {
                 BetType::Back => self.update_best_back_odds(scheduler),
-                BetType::Lay => self.update_best_lay_odds(scheduler),
+                BetType::Lay => self.update_best_lay_odds(scheduler)
+            }
+        }
+    }
+    
+    #[event("liquidity_debug")]
+    fn liquidity_debug_event(
+        &self,
+        #[indexed] bet_type: &BetType,
+        #[indexed] back_liquidity: &BigUint,
+        #[indexed] lay_liquidity: &BigUint,
+        #[indexed] back_count: &usize,
+        #[indexed] lay_count: &usize,
+    );
+    
+    #[event("queue_debug")]
+fn queue_debug_event(
+    &self,
+    #[indexed] step: &[u8],
+    #[indexed] bet_type: &BetType,
+    #[indexed] odd: &BigUint,
+    #[indexed] amount: &BigUint,
+);
+
+// Modificăm și insert_ordered pentru a avea mai mult debug
+fn insert_ordered(&self, queue: &mut ManagedVec<Self::Api, Bet<Self::Api>>, bet: Bet<Self::Api>) {
+    let typey = bet.bet_type.clone();
+    self.queue_debug_event(
+        b"start_insert",
+        &typey,
+        &bet.odd,
+        &BigUint::from(queue.len())
+    );
+    
+    let mut insert_index = queue.len();
+    for i in 0..queue.len() {
+        if self.should_insert_before(&bet, &queue.get(i)) {
+            insert_index = i;
+            break;
+        }
+    }
+    
+    let mut new_queue = ManagedVec::new();
+    for i in 0..insert_index {
+        new_queue.push(queue.get(i));
+    }
+    new_queue.push(bet);
+    for i in insert_index..queue.len() {
+        new_queue.push(queue.get(i));
+    }
+    *queue = new_queue.clone();
+    
+    self.queue_debug_event(
+        b"end_insert",
+        &typey,
+        &BigUint::from(insert_index),
+        &BigUint::from(new_queue.len())
+    );
+}
+
+    fn should_insert_before(&self, new_bet: &Bet<Self::Api>, existing_bet: &Bet<Self::Api>) -> bool {
+        match new_bet.bet_type {
+            BetType::Back => {
+                // Pentru Back, cotele mai mari au prioritate
+                new_bet.odd > existing_bet.odd || 
+                (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
+            },
+            BetType::Lay => {
+                // Pentru Lay, cotele mai mici au prioritate
+                new_bet.odd < existing_bet.odd || 
+                (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
             }
         }
     }
@@ -299,40 +381,6 @@ fn debug_queue_event(
             BetStatus::PartiallyMatched
         } else {
             BetStatus::Unmatched
-        }
-    }
-
-    fn insert_ordered(&self, queue: &mut ManagedVec<Self::Api, Bet<Self::Api>>, bet: Bet<Self::Api>) {
-        let mut insert_index = queue.len();
-        
-        for i in 0..queue.len() {
-            if self.should_insert_before(&bet, &queue.get(i)) {
-                insert_index = i;
-                break;
-            }
-        }
-        
-        let mut new_queue = ManagedVec::new();
-        for i in 0..insert_index {
-            new_queue.push(queue.get(i));
-        }
-        new_queue.push(bet);
-        for i in insert_index..queue.len() {
-            new_queue.push(queue.get(i));
-        }
-        *queue = new_queue;
-    }
-
-    fn should_insert_before(&self, new_bet: &Bet<Self::Api>, existing_bet: &Bet<Self::Api>) -> bool {
-        match new_bet.bet_type {
-            BetType::Back => {
-                new_bet.odd > existing_bet.odd || 
-                (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
-            },
-            BetType::Lay => {
-                new_bet.odd < existing_bet.odd || 
-                (new_bet.odd == existing_bet.odd && new_bet.created_at < existing_bet.created_at)
-            }
         }
     }
 
@@ -490,4 +538,15 @@ fn debug_queue_event(
             );
         }
     }
+
+    // Și o metodă helper pentru a vedea mai clar ce se întâmplă
+#[view(getQueueSizes)]
+fn get_queue_sizes(
+    &self,
+    market_id: u64,
+    selection_id: u64
+) -> MultiValue2<usize, usize> {
+    let scheduler = self.selection_scheduler(market_id, selection_id).get();
+    (scheduler.back_bets.len(), scheduler.lay_bets.len()).into()
+}
 }
