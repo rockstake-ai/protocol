@@ -15,7 +15,8 @@ pub trait BetManagerModule: crate::storage::StorageModule
         market_id: u64,
         selection_id: u64,
         odds: BigUint,
-        bet_type: BetType
+        bet_type: BetType,
+        liability: BigUint
     ) -> SCResult<(u64, BigUint, BigUint)> {
         // 1. Market validations
         let mut market = self.markets(&market_id).get();
@@ -35,25 +36,30 @@ pub trait BetManagerModule: crate::storage::StorageModule
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
+            
         let bet_id = self.get_last_bet_id() + 1;
     
-        let (stake, liability) = match bet_type {
-            BetType::Back => (total_amount.clone(), BigUint::zero()),
+            
+        let (final_stake, final_liability) = match bet_type {
+            BetType::Back => {
+                require!(liability == BigUint::zero(), "Liability must be zero for Back bets");
+                (total_amount.clone(), BigUint::zero())
+            },
             BetType::Lay => {
                 let odds_minus_one = &odds - &BigUint::from(100u32);
-                let liability = (&total_amount * &odds_minus_one) / &BigUint::from(100u32);
-                let stake = total_amount.clone();
+                let total_needed = &liability * &(&BigUint::from(200u32) + &odds_minus_one) / &odds_minus_one;
                 
                 require!(
-                    stake.clone() + liability.clone() <= total_amount,
-                    "Insufficient total amount for Lay bet"
+                    total_amount == total_needed,
+                    "Incorrect total amount for given liability"
                 );
                 
+                let stake = total_amount - &liability;
                 (stake, liability)
             }
         };
+        
 
-    
         // 4. Get selection and initialize scheduler if needed
         let selection_index = market
             .selections
@@ -71,14 +77,11 @@ pub trait BetManagerModule: crate::storage::StorageModule
             bettor: caller.clone(),
             event: market_id,
             selection: selection.clone(),
-            stake_amount: stake.clone(),
-            liability: match bet_type {
-                BetType::Back => BigUint::zero(),
-                BetType::Lay => liability.clone(),
-            },
+            stake_amount: final_stake.clone(),  // Use final_stake here
+            liability: final_liability.clone(),  // Use final_liability here
             matched_amount: BigUint::zero(),
-            unmatched_amount: stake.clone(),  
-            potential_profit: self.calculate_potential_profit(&bet_type, &stake, &odds),
+            unmatched_amount: final_stake.clone(),  // Use final_stake here
+            potential_profit: self.calculate_potential_profit(&bet_type, &final_stake, &odds),
             odd: odds.clone(),
             bet_type: bet_type.clone(),
             status: BetStatus::Unmatched,
@@ -104,7 +107,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
         // 9. Update locked funds
         let total_locked = match bet_type {
             BetType::Back => unmatched_amount.clone(),
-            BetType::Lay => liability.clone(),
+            BetType::Lay => final_liability.clone(),
         };
         self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
     
@@ -121,17 +124,17 @@ pub trait BetManagerModule: crate::storage::StorageModule
             self.bet_nft_token().get_token_id_ref(),
             &market_id,
             &selection_id,
-            &stake,
+            &final_stake,
             &odds,
             bet_type,
             &token_identifier,
             token_nonce,
             &matched_amount,
             &unmatched_amount,
-            &liability
+            &final_liability
         );
     
-        Ok((bet_id, odds, stake))
+        Ok((bet_id, odds, final_stake))
     }
 
 
