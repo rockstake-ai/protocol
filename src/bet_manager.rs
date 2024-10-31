@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_MARKET_CLOSED, ERR_INVALID_MARKET, ERR_MARKET_NOT_OPEN, ERR_BET_ODDS, ERR_SELECTION}, types::{Bet, BetStatus, BetType, MarketStatus}};
+use crate::{errors::{ERR_BET_ODDS, ERR_INVALID_MARKET, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_SELECTION}, types::{Bet, BetStatus, BetType, MarketStatus}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -39,17 +39,17 @@ pub trait BetManagerModule: crate::storage::StorageModule
             
         let (final_stake, final_liability) = match bet_type {
             BetType::Back => {
-                require!(liability == BigUint::zero(), "Liability must be zero for Back bets");
+                require!(liability == BigUint::zero(), ERR_LIABILITY_BACK_BET);
                 (total_amount.clone(), BigUint::zero())
             },
             BetType::Lay => {
-                require!(liability > BigUint::zero(), "Liability must be greater than zero for Lay bets");
+                require!(liability > BigUint::zero(), ERR_LIABILITY_ZERO);
                 let stake = &total_amount - &liability;    
                 let odds_minus_one = &odds - &BigUint::from(100u32);
                 let stake_check = (&liability * &BigUint::from(100u32)) / odds_minus_one;
                 require!(
                     stake == stake_check,
-                    "Liability parameter doesn't match the required liability for the given total amount"
+                    ERR_LIABILITY_TOTAL_AMOUNT
                 );
                 
                 (stake, liability)
