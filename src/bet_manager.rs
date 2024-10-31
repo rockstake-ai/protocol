@@ -18,7 +18,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
         bet_type: BetType,
         liability: BigUint
     ) -> SCResult<(u64, BigUint, BigUint)> {
-        // 1. Market validations
         let mut market = self.markets(&market_id).get();
         let created_at = self.blockchain().get_block_timestamp();
     
@@ -30,7 +29,6 @@ pub trait BetManagerModule: crate::storage::StorageModule
             ERR_BET_ODDS
         );
     
-        // 2. Payment processing
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, total_amount) = self
             .call_value()
@@ -46,21 +44,20 @@ pub trait BetManagerModule: crate::storage::StorageModule
                 (total_amount.clone(), BigUint::zero())
             },
             BetType::Lay => {
+                require!(liability > BigUint::zero(), "Liability must be greater than zero for Lay bets");
+                let stake = &total_amount - &liability;    
                 let odds_minus_one = &odds - &BigUint::from(100u32);
-                let total_needed = &liability * &(&BigUint::from(200u32) + &odds_minus_one) / &odds_minus_one;
-                
+                let stake_check = (&liability * &BigUint::from(100u32)) / odds_minus_one;
                 require!(
-                    total_amount == total_needed,
-                    "Incorrect total amount for given liability"
+                    stake == stake_check,
+                    "Liability parameter doesn't match the required liability for the given total amount"
                 );
                 
-                let stake = total_amount - &liability;
                 (stake, liability)
             }
         };
-        
 
-        // 4. Get selection and initialize scheduler if needed
+
         let selection_index = market
             .selections
             .iter()
