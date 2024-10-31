@@ -10,7 +10,7 @@ pub enum BetStatus {
     Canceled,
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem, Copy)]
 pub enum BetType {
     Back,
     Lay
@@ -88,12 +88,12 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub best_lay_odds: BigUint<M>,
     pub back_liquidity: BigUint<M>,
     pub lay_liquidity: BigUint<M>,
-    pub matched_count: usize,
-    pub unmatched_count: usize,
-    pub partially_matched_count: usize,
-    pub win_count: usize,
-    pub lost_count: usize,
-    pub canceled_count: usize,
+    pub matched_count: u64,
+    pub unmatched_count: u64,
+    pub partially_matched_count: u64,
+    pub win_count: u64,
+    pub lost_count: u64,
+    pub canceled_count: u64,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -109,12 +109,12 @@ pub struct QueueInspectView<M: ManagedTypeApi> {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct StatusCounts {
-    pub matched: usize,
-    pub unmatched: usize,
-    pub partially_matched: usize,
-    pub win: usize,
-    pub lost: usize,
-    pub canceled: usize
+    pub matched: u64,
+    pub unmatched: u64,
+    pub partially_matched: u64,
+    pub win: u64,
+    pub lost: u64,
+    pub canceled: u64
 }
 
 
