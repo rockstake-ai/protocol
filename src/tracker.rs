@@ -90,6 +90,21 @@ pub trait TrackerModule:
         (matched_amount, unmatched_amount, updated_bet)
     }
 
+    fn can_match(&self, bet: &Bet<Self::Api>, existing_bet: &Bet<Self::Api>) -> bool {
+        match bet.bet_type {
+            BetType::Back => {
+                // Un Back se poate matcha DOAR cu un Lay la aceeași cotă
+                bet.odd == existing_bet.odd && 
+                existing_bet.unmatched_amount > BigUint::zero()
+            },
+            BetType::Lay => {
+                // Un Lay se poate matcha DOAR cu un Back la aceeași cotă
+                bet.odd == existing_bet.odd && 
+                existing_bet.unmatched_amount > BigUint::zero()
+            }
+        }
+    }
+    
     fn find_matches(
         &self,
         scheduler: &mut Tracker<Self::Api>,
@@ -99,16 +114,19 @@ pub trait TrackerModule:
         let mut unmatched_amount = bet.stake_amount.clone();
         let mut matching_bets = ManagedVec::new();
         
-        // În loc să clonam queue-ul, lucrăm direct cu referințe
-        let queue_to_check = match bet.bet_type {
+        let queue = match bet.bet_type {
             BetType::Back => &mut scheduler.lay_bets,
             BetType::Lay => &mut scheduler.back_bets,
         };
         
-        // Creăm un nou queue pentru pariurile rămase nematchuite
-        let mut new_queue = ManagedVec::new();
-        
-        for existing_bet in queue_to_check.iter() {
+        let mut current_index = 0;
+        let mut write_index = 0;
+        let initial_len = queue.len();
+    
+        // Parcurgem queue-ul o singură dată, modificându-l in-place
+        while current_index < initial_len {
+            let existing_bet = queue.get(current_index);
+            
             if self.can_match(bet, &existing_bet) {
                 let match_amount = self.calculate_match_amount(bet, &existing_bet, &unmatched_amount);
                 
@@ -116,32 +134,77 @@ pub trait TrackerModule:
                     matched_amount += &match_amount;
                     unmatched_amount -= &match_amount;
                     
-                    let mut updated_bet = existing_bet.clone();
+                    let mut updated_bet = existing_bet;
                     self.update_matched_amounts(&mut updated_bet, &match_amount);
                     
-                    // Dacă mai rămâne ceva nematchuit, îl păstrăm în queue
+                    // Dacă mai rămâne sumă nematchuită, păstrăm pariul în queue
                     if updated_bet.unmatched_amount > BigUint::zero() {
-                        new_queue.push(updated_bet.clone());
+                        queue.set(write_index, &updated_bet);
+                        write_index += 1;
                     }
                     
                     matching_bets.push(updated_bet);
                     
                     if unmatched_amount == BigUint::zero() {
+                        // Copiem restul pariurilor nematchuite
+                        while current_index + 1 < initial_len {
+                            current_index += 1;
+                            queue.set(write_index, &queue.get(current_index));
+                            write_index += 1;
+                        }
                         break;
                     }
+                } else {
+                    // Păstrăm pariul nematched în queue
+                    if current_index != write_index {
+                        queue.set(write_index, &existing_bet);
+                    }
+                    write_index += 1;
                 }
             } else {
-                new_queue.push(existing_bet);
+                // Păstrăm pariul nematched în queue
+                if current_index != write_index {
+                    queue.set(write_index, &existing_bet);
+                }
+                write_index += 1;
             }
+            
+            current_index += 1;
+        }
+    
+        // Ajustăm dimensiunea queue-ului dacă am eliminat pariuri
+        while queue.len() > write_index {
+            queue.remove(queue.len() - 1);
         }
         
-        // Actualizăm queue-ul în scheduler
+        // Actualizăm lichiditatea
         match bet.bet_type {
-            BetType::Back => scheduler.lay_bets = new_queue,
-            BetType::Lay => scheduler.back_bets = new_queue,
+            BetType::Back => scheduler.lay_liquidity = self.calculate_queue_liquidity(queue),
+            BetType::Lay => scheduler.back_liquidity = self.calculate_queue_liquidity(queue),
         }
         
         (matched_amount, unmatched_amount, matching_bets)
+    }
+    
+    // Helper pentru calculul lichidității
+    fn calculate_queue_liquidity(&self, queue: &ManagedVec<Self::Api, Bet<Self::Api>>) -> BigUint {
+        let mut total = BigUint::zero();
+        for bet in queue.iter() {
+            total += &bet.unmatched_amount;
+        }
+        total
+    }
+    
+    // Funcția care determină statusul unui pariu
+    fn determine_status(&self, bet: &Bet<Self::Api>) -> BetStatus {
+        let total = self.get_matchable_amount(bet);
+        if bet.matched_amount == total {
+            BetStatus::Matched
+        } else if bet.matched_amount > BigUint::zero() {
+            BetStatus::PartiallyMatched
+        } else {
+            BetStatus::Unmatched
+        }
     }
 
     fn process_matches(
@@ -280,20 +343,6 @@ pub trait TrackerModule:
         }
     }
 
-    // 6. HELPER METHODS
-    fn can_match(&self, bet: &Bet<Self::Api>, existing_bet: &Bet<Self::Api>) -> bool {
-        match bet.bet_type {
-            BetType::Back => {
-                bet.odd >= existing_bet.odd && 
-                existing_bet.unmatched_amount > BigUint::zero()
-            },
-            BetType::Lay => {
-                bet.odd <= existing_bet.odd && 
-                existing_bet.stake_amount > BigUint::zero()
-            }
-        }
-    }
-
     fn calculate_match_amount(
         &self,
         bet: &Bet<Self::Api>,
@@ -320,17 +369,6 @@ pub trait TrackerModule:
         match bet.bet_type {
             BetType::Back => bet.stake_amount.clone(),
             BetType::Lay => bet.liability.clone()
-        }
-    }
-
-    fn determine_status(&self, bet: &Bet<Self::Api>) -> BetStatus {
-        let total = self.get_matchable_amount(bet);
-        if bet.matched_amount == total {
-            BetStatus::Matched
-        } else if bet.matched_amount > BigUint::zero() {
-            BetStatus::PartiallyMatched
-        } else {
-            BetStatus::Unmatched
         }
     }
 
