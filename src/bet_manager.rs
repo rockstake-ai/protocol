@@ -132,7 +132,7 @@ pub trait BetManagerModule: crate::storage::StorageModule
             BetType::Back => {
                 (odds - &BigUint::from(100u32)) * stake / &BigUint::from(100u32)
             },
-            BetType::Lay => stake.clone()  // Pentru Lay, profitul este stake-ul
+            BetType::Lay => stake.clone()
         }
     }
 
