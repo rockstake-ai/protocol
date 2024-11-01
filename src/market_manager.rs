@@ -45,13 +45,6 @@ pub trait MarketManagerModule:
         Ok(market_id)
     }
 
-    fn get_and_increment_market_counter(&self) -> u64 {
-        let mut counter = self.market_counter().get();
-        counter += 1;
-        self.market_counter().set(&counter);
-        counter
-    }
-
     fn create_selections(
         &self,
         market_id: u64,
@@ -63,24 +56,10 @@ pub trait MarketManagerModule:
             let selection_id = (index + 1) as u64;
             
             // Inițializăm storage-ul pentru selection
-            self.init_selection_storage(market_id, selection_id);
+            self.init_tracker(market_id, selection_id);
             
-            // Creăm un nou tracker
-            let tracker = Tracker {
-                back_levels: ManagedVec::new(),
-                lay_levels: ManagedVec::new(),
-                back_liquidity: BigUint::zero(),
-                lay_liquidity: BigUint::zero(),
-                matched_count: 0,
-                unmatched_count: 0,
-                partially_matched_count: 0,
-                win_count: 0,
-                lost_count: 0,
-                canceled_count: 0,
-            };
-
-            // Salvăm tracker-ul
-            self.selection_tracker(market_id, selection_id).set(&tracker);
+            // Obținem tracker-ul inițializat
+            let tracker = self.selection_tracker(market_id, selection_id).get();
 
             selections.push(Selection {
                 selection_id,
@@ -100,11 +79,11 @@ pub trait MarketManagerModule:
             .set(&ManagedVec::new());
 
         // Inițializăm contoarele și lichiditatea
-        self.back_liquidity().set(&BigUint::zero());
-        self.lay_liquidity().set(&BigUint::zero());
-        self.matched_count().set(&0u64);
-        self.unmatched_count().set(&0u64);
-        self.partially_matched_count().set(&0u64);
+        self.selection_back_liquidity().set(&BigUint::zero());
+        self.selection_lay_liquidity().set(&BigUint::zero());
+        self.selection_matched_count().set(&0u64);
+        self.selection_unmatched_count().set(&0u64);
+        self.selection_partially_matched_count().set(&0u64);
         self.win_count().set(&0u64);
         self.lost_count().set(&0u64);
         self.canceled_count().set(&0u64);
