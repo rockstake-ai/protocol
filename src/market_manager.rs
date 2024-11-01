@@ -43,21 +43,19 @@ pub trait MarketManagerModule:
 
         self.markets(market_id).set(&market);
 
+        // Emit event after successful market creation
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         Ok(market_id)
     }
 
+    // Simplified get_and_increment_market_counter that assumes counter is initialized
     fn get_and_increment_market_counter(&self) -> u64 {
-        if self.market_counter().is_empty() {
-            self.market_counter().set(1u64);
-            return 0;
-        }
-        
         let current_value = self.market_counter().get();
         self.market_counter().set(current_value + 1);
         current_value
     }
+
     
 
     fn create_selections(
