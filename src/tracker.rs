@@ -7,19 +7,6 @@ pub trait TrackerModule:
     crate::storage::StorageModule +
     crate::events::EventsModule
 {
-    fn init_tracker(&self, market_id: u64, selection_id: u64) {
-        // Initialize selection-specific storage
-        self.selection_back_levels(market_id, selection_id).set(&ManagedVec::new());
-        self.selection_lay_levels(market_id, selection_id).set(&ManagedVec::new());
-        self.selection_back_liquidity(market_id, selection_id).set(&BigUint::zero());
-        self.selection_lay_liquidity(market_id, selection_id).set(&BigUint::zero());
-        self.selection_matched_count(market_id, selection_id).set(&0u64);
-        self.selection_unmatched_count(market_id, selection_id).set(&0u64);
-        self.selection_partially_matched_count(market_id, selection_id).set(&0u64);
-        self.selection_win_count(market_id, selection_id).set(&0u64);
-        self.selection_lost_count(market_id, selection_id).set(&0u64);
-        self.selection_canceled_count(market_id, selection_id).set(&0u64);
-    }
 
     fn process_bet(&self, mut bet: Bet<Self::Api>) -> (BigUint, BigUint) {
         let mut matched_amount = BigUint::zero();

@@ -42,21 +42,19 @@ pub trait MarketManagerModule:
         };
 
         self.markets(market_id).set(&market);
-
+        
         // Emit event after successful market creation
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         Ok(market_id)
     }
 
-    // Simplified get_and_increment_market_counter that assumes counter is initialized
     fn get_and_increment_market_counter(&self) -> u64 {
-        let current_value = self.market_counter().get();
-        self.market_counter().set(current_value + 1);
-        current_value
+        let mut counter = self.market_counter().get();
+        counter += 1;
+        self.market_counter().set(&counter);
+        counter
     }
-
-    
 
     fn create_selections(
         &self,
@@ -68,20 +66,62 @@ pub trait MarketManagerModule:
         for (index, desc) in descriptions.iter().enumerate() {
             let selection_id = (index + 1) as u64;
             
-            // Inițializăm tracker-ul pentru această selecție
-            self.init_tracker(market_id, selection_id);
+            // Inițializăm storage-ul pentru selection
+            self.init_selection_storage(market_id, selection_id);
             
-            // Obținem tracker-ul inițializat pentru selection
+            // Obținem tracker-ul inițializat
             let tracker = self.selection_tracker(market_id, selection_id).get();
 
             selections.push(Selection {
                 selection_id,
                 description: desc.as_ref().clone_value(),
-                priority_queue: tracker,  // folosim tracker în loc de scheduler
+                priority_queue: tracker,
             });
         }
         
         Ok(selections)
+    }
+
+    fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
+        // Inițializăm un nou tracker
+        let tracker = Tracker {
+            back_levels: ManagedVec::new(),
+            lay_levels: ManagedVec::new(),
+            back_liquidity: BigUint::zero(),
+            lay_liquidity: BigUint::zero(),
+            matched_count: 0,
+            unmatched_count: 0,
+            partially_matched_count: 0,
+            win_count: 0,
+            lost_count: 0,
+            canceled_count: 0,
+        };
+
+        // Salvăm tracker-ul
+        self.selection_tracker(market_id, selection_id).set(&tracker);
+
+        // Inițializăm storage-ul pentru levels
+        self.selection_back_levels(market_id, selection_id)
+            .set(&ManagedVec::new());
+        self.selection_lay_levels(market_id, selection_id)
+            .set(&ManagedVec::new());
+
+        // Inițializăm lichiditatea
+        self.selection_back_liquidity(market_id, selection_id)
+            .set(&BigUint::zero());
+        self.selection_lay_liquidity(market_id, selection_id)
+            .set(&BigUint::zero());
+
+        // Inițializăm contoarele
+        self.selection_matched_count(market_id, selection_id).set(&0u64);
+        self.selection_unmatched_count(market_id, selection_id).set(&0u64);
+        self.selection_partially_matched_count(market_id, selection_id).set(&0u64);
+        self.selection_win_count(market_id, selection_id).set(&0u64);
+        self.selection_lost_count(market_id, selection_id).set(&0u64);
+        self.selection_canceled_count(market_id, selection_id).set(&0u64);
+
+        // Inițializăm total matched amount
+        self.total_matched_amount(market_id, selection_id).set(&BigUint::zero());
     }
 
     fn get_selection(
