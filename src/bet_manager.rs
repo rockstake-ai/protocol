@@ -26,10 +26,10 @@ pub trait BetManagerModule:
         bet_type: BetType,
         liability: BigUint
     ) -> SCResult<(u64, BigUint, BigUint)> {
-        let mut market = self.markets(&market_id).get();
+        let mut market = self.markets(market_id).get();
         let created_at = self.blockchain().get_block_timestamp();
     
-        require!(!self.markets(&market_id).is_empty(), ERR_INVALID_MARKET);
+        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
         require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
         require!(created_at < market.close_timestamp, ERR_MARKET_CLOSED);
         require!(
@@ -71,18 +71,9 @@ pub trait BetManagerModule:
             .expect(ERR_SELECTION);
         let mut selection = market.selections.get(selection_index);
         
-        // Initialize tracker if not exists
-        if self.selection_back_levels(market_id, selection_id).is_empty() {
-            self.selection_back_levels(market_id, selection_id).set(&ManagedVec::new());
-            self.selection_lay_levels(market_id, selection_id).set(&ManagedVec::new());
-            self.back_liquidity().set(&BigUint::zero());
-            self.lay_liquidity().set(&BigUint::zero());
-            self.matched_count().set(&0u64);
-            self.unmatched_count().set(&0u64);
-            self.partially_matched_count().set(&0u64);
-            self.win_count().set(&0u64);
-            self.lost_count().set(&0u64);
-            self.canceled_count().set(&0u64);
+        // Verificăm dacă tracker-ul există și îl inițializăm dacă nu
+        if self.selection_tracker(market_id, selection_id).is_empty() {
+            self.init_tracker(market_id, selection_id);
         }
     
         let bet = Bet {
@@ -103,7 +94,7 @@ pub trait BetManagerModule:
             created_at: created_at
         };
     
-        // Process bet using new tracker implementation
+        // Process bet using tracker
         let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
         
         // Update bet with results
@@ -120,33 +111,26 @@ pub trait BetManagerModule:
             BetStatus::Unmatched
         };
     
-        // Update selection and market
-        selection.priority_queue = Tracker {
-            back_levels: self.selection_back_levels(market_id, selection_id).get(),
-            lay_levels: self.selection_lay_levels(market_id, selection_id).get(),
-            back_liquidity: self.back_liquidity().get(),
-            lay_liquidity: self.lay_liquidity().get(),
-            matched_count: self.matched_count().get(),
-            unmatched_count: self.unmatched_count().get(),
-            partially_matched_count: self.partially_matched_count().get(),
-            win_count: self.win_count().get(),
-            lost_count: self.lost_count().get(),
-            canceled_count: self.canceled_count().get(),
-        };
+        // Update selection tracker
+        selection.priority_queue = self.selection_tracker(market_id, selection_id).get();
         
+        // Update market
         let _ = market.selections.set(selection_index, &selection);
         market.total_matched_amount += &matched_amount;
-        self.markets(&market_id).set(&market);
+        self.markets(market_id).set(&market);
     
+        // Create and save NFT
         let bet_nft_nonce = self.mint_bet_nft(&updated_bet);
         self.bet_by_id(bet_id).set(&updated_bet);
     
+        // Update locked funds
         let total_locked = match bet_type {
             BetType::Back => unmatched_amount.clone(),
             BetType::Lay => final_liability.clone(),
         };
         self.locked_funds(&caller).update(|current_locked| *current_locked += &total_locked);
     
+        // Send NFT to caller
         self.send().direct_esdt(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
@@ -154,6 +138,7 @@ pub trait BetManagerModule:
             &BigUint::from(1u64)
         );
     
+        // Emit event
         self.place_bet_event(
             &caller,
             self.bet_nft_token().get_token_id_ref(),
