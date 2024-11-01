@@ -45,43 +45,51 @@ pub trait TrackerModule:
                     level.total_stake -= &match_amount;
 
                     let mut updated_nonces = ManagedVec::new();
+                    let mut matched_any = false;
+
                     for nonce in level.bet_nonces.iter() {
                         let mut matched_bet = self.bet_by_id(nonce).get();
-                        let bet_match = matched_bet.unmatched_amount.clone().min(match_amount.clone());
                         
-                        if bet_match > BigUint::zero() {
-                            matched_bet.matched_amount += &bet_match;
-                            matched_bet.unmatched_amount -= &bet_match;
+                        if matched_bet.unmatched_amount > BigUint::zero() {
+                            let bet_match = matched_bet.unmatched_amount.clone().min(match_amount.clone());
                             
-                            matched_bet.status = if matched_bet.unmatched_amount == BigUint::zero() {
-                                self.matched_count().update(|val| *val += 1);
-                                BetStatus::Matched
-                            } else {
-                                self.partially_matched_count().update(|val| *val += 1);
-                                BetStatus::PartiallyMatched
-                            };
-                            
-                            self.bet_by_id(nonce).set(&matched_bet);
+                            if bet_match > BigUint::zero() {
+                                matched_bet.matched_amount += &bet_match;
+                                matched_bet.unmatched_amount -= &bet_match;
+                                matched_any = true;
+                                
+                                matched_bet.status = if matched_bet.unmatched_amount == BigUint::zero() {
+                                    self.matched_count().update(|val| *val += 1);
+                                    BetStatus::Matched
+                                } else {
+                                    self.partially_matched_count().update(|val| *val += 1);
+                                    BetStatus::PartiallyMatched
+                                };
+                                
+                                self.bet_by_id(nonce).set(&matched_bet);
 
-                            if matched_bet.unmatched_amount > BigUint::zero() {
-                                updated_nonces.push(nonce);
+                                if matched_bet.unmatched_amount > BigUint::zero() {
+                                    updated_nonces.push(nonce);
+                                }
                             }
                         }
                     }
 
-                    level.bet_nonces = updated_nonces;
-
-                    if level.total_stake > BigUint::zero() && !level.bet_nonces.is_empty() {
+                    // Only keep the level if there were actual matches and remaining unmatched amount
+                    if matched_any && !updated_nonces.is_empty() {
+                        level.bet_nonces = updated_nonces;
                         levels.set(i, &level);
                         i += 1;
                     } else {
+                        // Remove the level if no valid matches remain
                         if i < levels.len() - 1 {
                             let last = levels.get(levels.len() - 1);
                             levels.set(i, &last);
                         }
                         levels.remove(levels.len() - 1);
-                        continue;
                     }
+                } else {
+                    i += 1;
                 }
             } else {
                 i += 1;
@@ -99,10 +107,13 @@ pub trait TrackerModule:
         bet.unmatched_amount = remaining.clone();
         
         bet.status = if remaining == BigUint::zero() {
+            self.matched_count().update(|val| *val += 1);
             BetStatus::Matched
         } else if matched_amount > BigUint::zero() {
+            self.partially_matched_count().update(|val| *val += 1);
             BetStatus::PartiallyMatched
         } else {
+            self.unmatched_count().update(|val| *val += 1);
             BetStatus::Unmatched
         };
 
@@ -113,9 +124,6 @@ pub trait TrackerModule:
         // Add remaining amount to orderbook if any exists
         if remaining > BigUint::zero() {
             self.add_to_orderbook(&bet);
-            if bet.status == BetStatus::Unmatched {
-                self.unmatched_count().update(|val| *val += 1);
-            }
         }
 
         self.bet_by_id(bet.nft_nonce).set(&bet);
@@ -130,60 +138,66 @@ pub trait TrackerModule:
         };
 
         // Find existing level or insertion position
-        let mut found_level = false;
+        let mut level_index = Option::<usize>::None;
+        
         for i in 0..levels.len() {
-            let mut level = levels.get(i);
+            let level = levels.get(i);
             if level.odds == bet.odd {
-                // Add to existing level
-                level.total_stake += &bet.unmatched_amount;
-                level.bet_nonces.push(bet.nft_nonce);
-                levels.set(i, &level);
-                found_level = true;
+                level_index = Some(i);
                 break;
             }
         }
 
-        if !found_level {
-            // Create new level
-            let new_level = PriceLevel {
-                odds: bet.odd.clone(),
-                total_stake: bet.unmatched_amount.clone(),
-                bet_nonces: ManagedVec::from_single_item(bet.nft_nonce),
-            };
+        match level_index {
+            Some(i) => {
+                // Add to existing level
+                let mut level = levels.get(i);
+                level.total_stake += &bet.unmatched_amount;
+                level.bet_nonces.push(bet.nft_nonce);
+                levels.set(i, &level);
+            },
+            None => {
+                // Create new level
+                let new_level = PriceLevel {
+                    odds: bet.odd.clone(),
+                    total_stake: bet.unmatched_amount.clone(),
+                    bet_nonces: ManagedVec::from_single_item(bet.nft_nonce),
+                };
 
-            // Find insert position to maintain proper ordering
-            let mut insert_pos = levels.len();
-            for i in 0..levels.len() {
-                let level = levels.get(i);
-                match bet.bet_type {
-                    BetType::Back => {
-                        if bet.odd > level.odds {  // Highest odds first for Back
-                            insert_pos = i;
-                            break;
-                        }
-                    },
-                    BetType::Lay => {
-                        if bet.odd < level.odds {  // Lowest odds first for Lay
-                            insert_pos = i;
-                            break;
-                        }
-                    },
+                // Find insert position to maintain proper ordering
+                let mut insert_pos = levels.len();
+                for i in 0..levels.len() {
+                    let level = levels.get(i);
+                    match bet.bet_type {
+                        BetType::Back => {
+                            if bet.odd >= level.odds {
+                                insert_pos = i;
+                                break;
+                            }
+                        },
+                        BetType::Lay => {
+                            if bet.odd <= level.odds {
+                                insert_pos = i;
+                                break;
+                            }
+                        },
+                    }
                 }
-            }
 
-            // Insert new level
-            if insert_pos == levels.len() {
-                levels.push(new_level);
-            } else {
-                let mut temp_levels = ManagedVec::new();
-                for i in 0..insert_pos {
-                    temp_levels.push(levels.get(i));
+                // Insert new level
+                if insert_pos == levels.len() {
+                    levels.push(new_level);
+                } else {
+                    let mut temp_levels = ManagedVec::new();
+                    for i in 0..insert_pos {
+                        temp_levels.push(levels.get(i));
+                    }
+                    temp_levels.push(new_level);
+                    for i in insert_pos..levels.len() {
+                        temp_levels.push(levels.get(i));
+                    }
+                    levels = temp_levels;
                 }
-                temp_levels.push(new_level);
-                for i in insert_pos..levels.len() {
-                    temp_levels.push(levels.get(i));
-                }
-                levels = temp_levels;
             }
         }
 
@@ -215,7 +229,7 @@ pub trait TrackerModule:
         // Process back levels (descending order)
         let back_levels = self.back_levels().get();
         for level in back_levels.iter() {
-            if level.total_stake > BigUint::zero() {
+            if level.total_stake > BigUint::zero() && !level.bet_nonces.is_empty() {
                 result.push(OrderbookView {
                     price_level: level.odds.clone(),
                     total_amount: level.total_stake.clone(),
@@ -227,7 +241,7 @@ pub trait TrackerModule:
         // Process lay levels (ascending order)
         let lay_levels = self.lay_levels().get();
         for level in lay_levels.iter() {
-            if level.total_stake > BigUint::zero() {
+            if level.total_stake > BigUint::zero() && !level.bet_nonces.is_empty() {
                 result.push(OrderbookView {
                     price_level: level.odds.clone(),
                     total_amount: level.total_stake.clone(),
