@@ -67,5 +67,9 @@ pub trait StorageModule {
     #[storage_mapper("canceled_count")]
     fn canceled_count(&self) -> SingleValueMapper<u64>;
 
+    //
+    #[storage_mapper("total_matched_amount")]
+    fn total_matched_amount(&self, market_id: u64, selection_id: u64) -> SingleValueMapper<BigUint>;
+
 }
 

@@ -140,4 +140,12 @@ pub struct BetView<M: ManagedTypeApi> {
     pub status: BetStatus
 }
 
+#[derive(TypeAbi, TopEncode, TopDecode, ManagedVecItem, Debug)]
+pub struct OrderbookView<M: ManagedTypeApi> {
+    pub price_level: BigUint<M>,
+    pub total_amount: BigUint<M>,
+    pub bet_count: u32
+}
+
+
 
