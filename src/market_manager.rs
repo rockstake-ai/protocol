@@ -42,14 +42,23 @@ pub trait MarketManagerModule:
         };
 
         self.markets(market_id).set(&market);
+
+        self.market_created_event(market_id, event_id, &self.get_current_market_counter());
+
         Ok(market_id)
     }
 
     fn get_and_increment_market_counter(&self) -> u64 {
+        if self.market_counter().is_empty() {
+            self.market_counter().set(1u64);
+            return 0;
+        }
+        
         let current_value = self.market_counter().get();
         self.market_counter().set(current_value + 1);
         current_value
     }
+    
 
     fn create_selections(
         &self,
@@ -116,5 +125,18 @@ pub trait MarketManagerModule:
     fn get_selection_tracker(&self, market_id: u64, selection_id: u64) -> SCResult<Tracker<Self::Api>> {
         require!(!self.markets(market_id).is_empty(), "Market does not exist");
         Ok(self.selection_tracker(market_id, selection_id).get())
+    }
+
+    #[view(getCurrentMarketCounter)]
+    fn get_current_market_counter(&self) -> u64 {
+        if self.market_counter().is_empty() {
+            return 0;
+        }
+        self.market_counter().get()
+    }
+
+    #[view(checkMarketExists)]
+    fn check_market_exists(&self, market_id: u64) -> bool {
+        !self.markets(market_id).is_empty()
     }
 }

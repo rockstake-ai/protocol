@@ -149,4 +149,12 @@ fn bet_counter_debug_event(
      #[indexed] odds: &BigUint,
  );
 
+ #[event("marketCreated")]
+ fn market_created_event(
+     &self,
+     #[indexed] market_id: u64,
+     #[indexed] event_id: u64,
+     #[indexed] current_counter: &u64,
+ );
+
 }
