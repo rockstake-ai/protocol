@@ -32,42 +32,41 @@ pub trait StorageModule {
     fn selection_lay_levels(&self, market_id: u64, selection_id: u64) 
         -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
 
+    #[storage_mapper("selection_back_liquidity")]
+    fn selection_back_liquidity(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<BigUint<Self::Api>>;
+
+    #[storage_mapper("selection_lay_liquidity")]
+    fn selection_lay_liquidity(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<BigUint<Self::Api>>;
+
+    #[storage_mapper("selection_matched_count")]
+    fn selection_matched_count(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<u64>;
+
+    #[storage_mapper("selection_unmatched_count")]
+    fn selection_unmatched_count(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<u64>;
+
+    #[storage_mapper("selection_partially_matched_count")]
+    fn selection_partially_matched_count(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<u64>;
+
+    #[storage_mapper("selection_win_count")]
+    fn selection_win_count(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<u64>;
+
+    #[storage_mapper("selection_lost_count")]
+    fn selection_lost_count(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<u64>;
+
+    #[storage_mapper("selection_canceled_count")]
+    fn selection_canceled_count(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<u64>;
+
     #[storage_mapper("selection_tracker")]
     fn selection_tracker(&self, market_id: u64, selection_id: u64) 
         -> SingleValueMapper<Tracker<Self::Api>>;
-
-    //
-    #[storage_mapper("back_levels")]
-    fn back_levels(&self) -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
-
-    #[storage_mapper("lay_levels")]
-    fn lay_levels(&self) -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
-
-    #[storage_mapper("back_liquidity")]
-    fn back_liquidity(&self) -> SingleValueMapper<BigUint<Self::Api>>;
-
-    #[storage_mapper("lay_liquidity")]
-    fn lay_liquidity(&self) -> SingleValueMapper<BigUint<Self::Api>>;
-
-    #[storage_mapper("matched_count")]
-    fn matched_count(&self) -> SingleValueMapper<u64>;
-
-    #[storage_mapper("unmatched_count")]
-    fn unmatched_count(&self) -> SingleValueMapper<u64>;
-
-    #[storage_mapper("partially_matched_count")]
-    fn partially_matched_count(&self) -> SingleValueMapper<u64>;
-
-    #[storage_mapper("win_count")]
-    fn win_count(&self) -> SingleValueMapper<u64>;
-
-    #[storage_mapper("lost_count")]
-    fn lost_count(&self) -> SingleValueMapper<u64>;
-
-    #[storage_mapper("canceled_count")]
-    fn canceled_count(&self) -> SingleValueMapper<u64>;
-
-    //
     #[storage_mapper("total_matched_amount")]
     fn total_matched_amount(&self, market_id: u64, selection_id: u64) -> SingleValueMapper<BigUint>;
 
