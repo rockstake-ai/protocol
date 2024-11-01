@@ -140,4 +140,13 @@ fn bet_counter_debug_event(
      #[indexed] description: &ManagedBuffer,
  );
 
+ #[event("match")]
+ fn emit_match_event(
+     &self,
+     #[indexed] bettor: &ManagedAddress,
+     #[indexed] event_id: &u64,
+     #[indexed] matched_amount: &BigUint,
+     #[indexed] odds: &BigUint,
+ );
+
 }

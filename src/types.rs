@@ -84,7 +84,7 @@ pub struct Selection<M: ManagedTypeApi> {
 pub struct PriceLevel<M: ManagedTypeApi> {
     pub odds: BigUint<M>,
     pub total_stake: BigUint<M>,
-    pub bets: ManagedVec<M, Bet<M>>,
+    pub bet_nonces: ManagedVec<M, u64>,
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]

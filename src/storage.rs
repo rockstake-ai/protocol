@@ -1,4 +1,4 @@
-use crate::{types::Tracker, types::{Bet, Market}};
+use crate::types::{Bet, Market, PriceLevel, Tracker};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -23,23 +23,36 @@ pub trait StorageModule {
     #[storage_mapper("lockedFunds")]
     fn locked_funds(&self, user: &ManagedAddress) -> SingleValueMapper<BigUint<Self::Api>>;
 
-    #[view(getUnmatchedBets)]
-    #[storage_mapper("unmatched_bets")]
-    fn unmatched_bets(&self, market_id: u64) -> SingleValueMapper<Tracker<Self::Api>>;
+    //
+    #[storage_mapper("back_levels")]
+    fn back_levels(&self) -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
 
-    #[storage_mapper("market_queues")]
-    fn market_queues(&self, market_id: u64) -> SingleValueMapper<Tracker<Self::Api>>;
+    #[storage_mapper("lay_levels")]
+    fn lay_levels(&self) -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
 
-    #[view(getBetScheduler)]
-    #[storage_mapper("bet_scheduler")]
-    fn bet_scheduler(&self) -> SingleValueMapper<Tracker<Self::Api>>;
+    #[storage_mapper("back_liquidity")]
+    fn back_liquidity(&self) -> SingleValueMapper<BigUint<Self::Api>>;
 
-    #[storage_mapper("selection_scheduler")]
-    fn selection_scheduler(
-        &self,
-        market_id: u64,
-        selection_id: u64
-    ) -> SingleValueMapper<Tracker<Self::Api>>;
+    #[storage_mapper("lay_liquidity")]
+    fn lay_liquidity(&self) -> SingleValueMapper<BigUint<Self::Api>>;
+
+    #[storage_mapper("matched_count")]
+    fn matched_count(&self) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("unmatched_count")]
+    fn unmatched_count(&self) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("partially_matched_count")]
+    fn partially_matched_count(&self) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("win_count")]
+    fn win_count(&self) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("lost_count")]
+    fn lost_count(&self) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("canceled_count")]
+    fn canceled_count(&self) -> SingleValueMapper<u64>;
 
 }
 
