@@ -19,13 +19,16 @@ pub trait MarketManagerModule:
         selection_descriptions: ManagedVec<ManagedBuffer>,
         close_timestamp: u64
     ) -> SCResult<u64> {
-        require!(close_timestamp > self.blockchain().get_block_timestamp(), 
-            "Close timestamp must be in the future");
+        require!(
+            close_timestamp > self.blockchain().get_block_timestamp(),
+            "Close timestamp must be in the future"
+        );
 
         let market_id = self.get_and_increment_market_counter();
         require!(self.markets(&market_id).is_empty(), "Market already exists");
 
         let selections = self.create_selections(market_id, selection_descriptions)?;
+
         let market = Market {
             market_id,
             event_id,
@@ -37,7 +40,7 @@ pub trait MarketManagerModule:
             total_matched_amount: BigUint::zero(),
             created_at: self.blockchain().get_block_timestamp(),
         };
-        
+
         self.markets(&market_id).set(&market);
         Ok(market_id)
     }
@@ -55,20 +58,56 @@ pub trait MarketManagerModule:
         descriptions: ManagedVec<ManagedBuffer>
     ) -> SCResult<ManagedVec<Selection<Self::Api>>> {
         let mut selections = ManagedVec::new();
+        
         for (index, desc) in descriptions.iter().enumerate() {
             let selection_id = (index + 1) as u64;
-            let scheduler = self.init_bet_scheduler();
             
-            // Inițializăm scheduler-ul în storage
-            self.selection_scheduler(market_id, selection_id).set(&scheduler);
+            // Inițializăm storage-ul pentru selection
+            self.init_selection_storage(market_id, selection_id);
             
+            // Creăm un nou tracker
+            let tracker = Tracker {
+                back_levels: ManagedVec::new(),
+                lay_levels: ManagedVec::new(),
+                back_liquidity: BigUint::zero(),
+                lay_liquidity: BigUint::zero(),
+                matched_count: 0,
+                unmatched_count: 0,
+                partially_matched_count: 0,
+                win_count: 0,
+                lost_count: 0,
+                canceled_count: 0,
+            };
+
+            // Salvăm tracker-ul
+            self.selection_tracker(market_id, selection_id).set(&tracker);
+
             selections.push(Selection {
                 selection_id,
                 description: desc.as_ref().clone_value(),
-                priority_queue: scheduler,
+                priority_queue: tracker,
             });
         }
+        
         Ok(selections)
+    }
+
+    fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
+        // Inițializăm storage-ul pentru levels
+        self.selection_back_levels(market_id, selection_id)
+            .set(&ManagedVec::new());
+        self.selection_lay_levels(market_id, selection_id)
+            .set(&ManagedVec::new());
+
+        // Inițializăm contoarele și lichiditatea
+        self.back_liquidity().set(&BigUint::zero());
+        self.lay_liquidity().set(&BigUint::zero());
+        self.matched_count().set(&0u64);
+        self.unmatched_count().set(&0u64);
+        self.partially_matched_count().set(&0u64);
+        self.win_count().set(&0u64);
+        self.lost_count().set(&0u64);
+        self.canceled_count().set(&0u64);
     }
 
     fn get_selection(
@@ -87,10 +126,8 @@ pub trait MarketManagerModule:
         if self.markets(&market_id).is_empty() {
             return false;
         }
-        
         let market = self.markets(&market_id).get();
         let current_timestamp = self.blockchain().get_block_timestamp();
-        
         current_timestamp < market.close_timestamp
     }
 

@@ -24,6 +24,19 @@ pub trait StorageModule {
     fn locked_funds(&self, user: &ManagedAddress) -> SingleValueMapper<BigUint<Self::Api>>;
 
     //
+    #[storage_mapper("selection_back_levels")]
+    fn selection_back_levels(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
+
+    #[storage_mapper("selection_lay_levels")]
+    fn selection_lay_levels(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
+
+    #[storage_mapper("selection_tracker")]
+    fn selection_tracker(&self, market_id: u64, selection_id: u64) 
+        -> SingleValueMapper<Tracker<Self::Api>>;
+
+    //
     #[storage_mapper("back_levels")]
     fn back_levels(&self) -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
 
