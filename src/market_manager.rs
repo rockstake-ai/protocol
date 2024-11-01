@@ -25,7 +25,7 @@ pub trait MarketManagerModule:
         );
 
         let market_id = self.get_and_increment_market_counter();
-        require!(self.markets(&market_id).is_empty(), "Market already exists");
+        require!(self.markets(market_id).is_empty(), "Market already exists");
 
         let selections = self.create_selections(market_id, selection_descriptions)?;
 
@@ -41,7 +41,7 @@ pub trait MarketManagerModule:
             created_at: self.blockchain().get_block_timestamp(),
         };
 
-        self.markets(&market_id).set(&market);
+        self.markets(market_id).set(&market);
         Ok(market_id)
     }
 
@@ -55,38 +55,25 @@ pub trait MarketManagerModule:
         for (index, desc) in descriptions.iter().enumerate() {
             let selection_id = (index + 1) as u64;
             
-            // Inițializăm storage-ul pentru selection
+            // Initialize tracker for this selection
             self.init_tracker(market_id, selection_id);
             
-            // Obținem tracker-ul inițializat
-            let tracker = self.selection_tracker(market_id, selection_id).get();
-
+            // Create selection with initialized tracker
             selections.push(Selection {
                 selection_id,
                 description: desc.as_ref().clone_value(),
-                priority_queue: tracker,
+                priority_queue: self.selection_tracker(market_id, selection_id).get(),
             });
         }
         
         Ok(selections)
     }
 
-    fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
-        // Inițializăm storage-ul pentru levels
-        self.selection_back_levels(market_id, selection_id)
-            .set(&ManagedVec::new());
-        self.selection_lay_levels(market_id, selection_id)
-            .set(&ManagedVec::new());
-
-        // Inițializăm contoarele și lichiditatea
-        self.selection_back_liquidity().set(&BigUint::zero());
-        self.selection_lay_liquidity().set(&BigUint::zero());
-        self.selection_matched_count().set(&0u64);
-        self.selection_unmatched_count().set(&0u64);
-        self.selection_partially_matched_count().set(&0u64);
-        self.win_count().set(&0u64);
-        self.lost_count().set(&0u64);
-        self.canceled_count().set(&0u64);
+    fn get_and_increment_market_counter(&self) -> u64 {
+        let mut counter = self.market_counter().get();
+        counter += 1;
+        self.market_counter().set(&counter);
+        counter
     }
 
     fn get_selection(
@@ -102,17 +89,39 @@ pub trait MarketManagerModule:
 
     #[view(isMarketOpen)]
     fn is_market_open(&self, market_id: u64) -> bool {
-        if self.markets(&market_id).is_empty() {
+        if self.markets(market_id).is_empty() {
             return false;
         }
-        let market = self.markets(&market_id).get();
+        let market = self.markets(market_id).get();
         let current_timestamp = self.blockchain().get_block_timestamp();
         current_timestamp < market.close_timestamp
     }
 
     #[view(getMarket)]
     fn get_market(&self, market_id: u64) -> SCResult<Market<Self::Api>> {
-        require!(!self.markets(&market_id).is_empty(), "Market does not exist");
-        Ok(self.markets(&market_id).get())
+        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        Ok(self.markets(market_id).get())
+    }
+
+    // Optional views for market information
+    #[view(getMarketSelections)]
+    fn get_market_selections(&self, market_id: u64) -> SCResult<ManagedVec<Selection<Self::Api>>> {
+        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        let market = self.markets(market_id).get();
+        Ok(market.selections)
+    }
+
+    #[view(getMarketStatus)]
+    fn get_market_status(&self, market_id: u64) -> SCResult<MarketStatus> {
+        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        let market = self.markets(market_id).get();
+        Ok(market.market_status)
+    }
+
+    #[view(getMarketTotalMatched)]
+    fn get_market_total_matched(&self, market_id: u64) -> SCResult<BigUint<Self::Api>> {
+        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        let market = self.markets(market_id).get();
+        Ok(market.total_matched_amount)
     }
 }
