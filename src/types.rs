@@ -81,11 +81,16 @@ pub struct Selection<M: ManagedTypeApi> {
 }
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+pub struct PriceLevel<M: ManagedTypeApi> {
+    pub odds: BigUint<M>,
+    pub total_stake: BigUint<M>,
+    pub bets: ManagedVec<M, Bet<M>>,
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Tracker<M: ManagedTypeApi> {
-    pub back_bets: ManagedVec<M, Bet<M>>,
-    pub lay_bets: ManagedVec<M, Bet<M>>,
-    pub best_back_odds: BigUint<M>,
-    pub best_lay_odds: BigUint<M>,
+    pub back_levels: ManagedVec<M, PriceLevel<M>>,
+    pub lay_levels: ManagedVec<M, PriceLevel<M>>,
     pub back_liquidity: BigUint<M>,
     pub lay_liquidity: BigUint<M>,
     pub matched_count: u64,
@@ -95,27 +100,5 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub lost_count: u64,
     pub canceled_count: u64,
 }
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
-pub struct QueueInspectView<M: ManagedTypeApi> {
-    pub back_count: usize,
-    pub lay_count: usize,
-    pub back_liquidity: BigUint<M>,
-    pub lay_liquidity: BigUint<M>,
-    pub back_odds: ManagedVec<M, BigUint<M>>,
-    pub lay_odds: ManagedVec<M, BigUint<M>>,
-    pub status_counts: StatusCounts
-}
-
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
-pub struct StatusCounts {
-    pub matched: u64,
-    pub unmatched: u64,
-    pub partially_matched: u64,
-    pub win: u64,
-    pub lost: u64,
-    pub canceled: u64
-}
-
 
 
