@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, PriceLevel, Tracker};
+use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, MatchingDetails, PriceLevel, PriceLevelView, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -194,6 +194,78 @@ pub trait TrackerModule:
             BetType::Back => bet.odd >= *level_odds,
             BetType::Lay => bet.odd <= *level_odds,
         }
+    }
+
+    #[view(getBetMatchingState)]
+    fn get_bet_matching_state(
+        &self,
+        bet_nonce: u64
+    ) -> BetMatchingState<Self::Api> {
+        let bet = self.bet_by_id(bet_nonce).get();
+        
+        BetMatchingState {
+            bet_type: bet.bet_type,
+            original_stake: bet.stake_amount,
+            matched_amount: bet.matched_amount,
+            unmatched_amount: bet.unmatched_amount,
+            status: bet.status,
+            odds: bet.odd
+        }
+    }
+
+    // View detaliat pentru analiza completă a matching-ului
+    #[view(getMatchingDetails)]
+    fn get_matching_details(
+        &self,
+        market_id: u64,
+        selection_id: u64
+    ) -> MatchingDetails<Self::Api> {
+        // Get price levels
+        let back_levels = self.selection_back_levels(market_id, selection_id).get();
+        let lay_levels = self.selection_lay_levels(market_id, selection_id).get();
+
+        // Build response
+        MatchingDetails {
+            back_levels: self.process_price_levels(&back_levels),
+            lay_levels: self.process_price_levels(&lay_levels),
+            back_liquidity: self.back_liquidity().get(),
+            lay_liquidity: self.lay_liquidity().get(),
+            matched_count: self.matched_count().get(),
+            unmatched_count: self.unmatched_count().get(),
+            partially_matched_count: self.partially_matched_count().get()
+        }
+    }
+
+    fn process_price_levels(
+        &self,
+        levels: &ManagedVec<PriceLevel<Self::Api>>
+    ) -> ManagedVec<PriceLevelView<Self::Api>> {
+        let mut processed_levels = ManagedVec::new();
+        
+        for level in levels.iter() {
+            let mut bets_at_level = ManagedVec::new();
+            
+            // Process each bet at this level
+            for nonce in level.bet_nonces.iter() {
+                let bet = self.bet_by_id(nonce).get();
+                bets_at_level.push(BetView {
+                    nonce: bet.nft_nonce,
+                    bettor: bet.bettor,
+                    stake: bet.stake_amount,
+                    matched: bet.matched_amount,
+                    unmatched: bet.unmatched_amount,
+                    status: bet.status
+                });
+            }
+
+            processed_levels.push(PriceLevelView {
+                odds: level.odds,
+                total_stake: level.total_stake,
+                bets: bets_at_level
+            });
+        }
+        
+        processed_levels
     }
 
 }

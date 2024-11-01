@@ -101,4 +101,43 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub canceled_count: u64,
 }
 
+//Debugging
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct BetMatchingState<M: ManagedTypeApi> {
+    pub bet_type: BetType,
+    pub original_stake: BigUint<M>,
+    pub matched_amount: BigUint<M>,
+    pub unmatched_amount: BigUint<M>,
+    pub status: BetStatus,
+    pub odds: BigUint<M>
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct MatchingDetails<M: ManagedTypeApi> {
+    pub back_levels: ManagedVec<M,PriceLevelView<M>>,
+    pub lay_levels: ManagedVec<M,PriceLevelView<M>>,
+    pub back_liquidity: BigUint<M>,
+    pub lay_liquidity: BigUint<M>,
+    pub matched_count: u64,
+    pub unmatched_count: u64,
+    pub partially_matched_count: u64
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct PriceLevelView<M: ManagedTypeApi> {
+    pub odds: BigUint<M>,
+    pub total_stake: BigUint<M>,
+    pub bets: ManagedVec<M, BetView<M>>
+}
+
+#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct BetView<M: ManagedTypeApi> {
+    pub nonce: u64,
+    pub bettor: ManagedAddress<M>,
+    pub stake: BigUint<M>,
+    pub matched: BigUint<M>,
+    pub unmatched: BigUint<M>,
+    pub status: BetStatus
+}
+
 
