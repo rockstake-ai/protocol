@@ -45,6 +45,12 @@ pub trait MarketManagerModule:
         Ok(market_id)
     }
 
+    fn get_and_increment_market_counter(&self) -> u64 {
+        let current_value = self.market_counter().get();
+        self.market_counter().set(current_value + 1);
+        current_value
+    }
+
     fn create_selections(
         &self,
         market_id: u64,
@@ -55,25 +61,20 @@ pub trait MarketManagerModule:
         for (index, desc) in descriptions.iter().enumerate() {
             let selection_id = (index + 1) as u64;
             
-            // Initialize tracker for this selection
+            // Inițializăm tracker-ul pentru această selecție
             self.init_tracker(market_id, selection_id);
             
-            // Create selection with initialized tracker
+            // Obținem tracker-ul inițializat pentru selection
+            let tracker = self.selection_tracker(market_id, selection_id).get();
+
             selections.push(Selection {
                 selection_id,
                 description: desc.as_ref().clone_value(),
-                priority_queue: self.selection_tracker(market_id, selection_id).get(),
+                priority_queue: tracker,  // folosim tracker în loc de scheduler
             });
         }
         
         Ok(selections)
-    }
-
-    fn get_and_increment_market_counter(&self) -> u64 {
-        let mut counter = self.market_counter().get();
-        counter += 1;
-        self.market_counter().set(&counter);
-        counter
     }
 
     fn get_selection(
@@ -103,7 +104,7 @@ pub trait MarketManagerModule:
         Ok(self.markets(market_id).get())
     }
 
-    // Optional views for market information
+    // Views adiționale pentru informații despre market
     #[view(getMarketSelections)]
     fn get_market_selections(&self, market_id: u64) -> SCResult<ManagedVec<Selection<Self::Api>>> {
         require!(!self.markets(market_id).is_empty(), "Market does not exist");
@@ -111,17 +112,9 @@ pub trait MarketManagerModule:
         Ok(market.selections)
     }
 
-    #[view(getMarketStatus)]
-    fn get_market_status(&self, market_id: u64) -> SCResult<MarketStatus> {
+    #[view(getSelectionTracker)]
+    fn get_selection_tracker(&self, market_id: u64, selection_id: u64) -> SCResult<Tracker<Self::Api>> {
         require!(!self.markets(market_id).is_empty(), "Market does not exist");
-        let market = self.markets(market_id).get();
-        Ok(market.market_status)
-    }
-
-    #[view(getMarketTotalMatched)]
-    fn get_market_total_matched(&self, market_id: u64) -> SCResult<BigUint<Self::Api>> {
-        require!(!self.markets(market_id).is_empty(), "Market does not exist");
-        let market = self.markets(market_id).get();
-        Ok(market.total_matched_amount)
+        Ok(self.selection_tracker(market_id, selection_id).get())
     }
 }
