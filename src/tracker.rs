@@ -23,13 +23,13 @@ pub trait TrackerModule:
     fn process_bet(&self, mut bet: Bet<Self::Api>) -> (BigUint, BigUint) {
         let mut matched_amount = BigUint::zero();
         let mut remaining = bet.stake_amount.clone();
-
+    
         // Get opposite levels for matching
         let mut levels = match bet.bet_type {
             BetType::Back => self.lay_levels().get(),
             BetType::Lay => self.back_levels().get(),
         };
-
+    
         // Match against existing orders
         let mut i = 0;
         while i < levels.len() && remaining > BigUint::zero() {
@@ -43,21 +43,21 @@ pub trait TrackerModule:
                     matched_amount += &match_amount;
                     remaining -= &match_amount;
                     level.total_stake -= &match_amount;
-
+    
                     let mut updated_nonces = ManagedVec::new();
-                    let mut matched_any = false;
-
                     for nonce in level.bet_nonces.iter() {
                         let mut matched_bet = self.bet_by_id(nonce).get();
                         
+                        // Verificăm dacă pariul poate fi matchuit
                         if matched_bet.unmatched_amount > BigUint::zero() {
                             let bet_match = matched_bet.unmatched_amount.clone().min(match_amount.clone());
                             
                             if bet_match > BigUint::zero() {
+                                // Update matched bet
                                 matched_bet.matched_amount += &bet_match;
                                 matched_bet.unmatched_amount -= &bet_match;
-                                matched_any = true;
                                 
+                                // Update status based on remaining amount
                                 matched_bet.status = if matched_bet.unmatched_amount == BigUint::zero() {
                                     self.matched_count().update(|val| *val += 1);
                                     BetStatus::Matched
@@ -66,27 +66,30 @@ pub trait TrackerModule:
                                     BetStatus::PartiallyMatched
                                 };
                                 
+                                // Save updated bet
                                 self.bet_by_id(nonce).set(&matched_bet);
-
+    
+                                // Add to updated nonces if still has unmatched amount
                                 if matched_bet.unmatched_amount > BigUint::zero() {
                                     updated_nonces.push(nonce);
                                 }
                             }
                         }
                     }
-
-                    // Only keep the level if there were actual matches and remaining unmatched amount
-                    if matched_any && !updated_nonces.is_empty() {
+    
+                    // Update or remove the level
+                    if !updated_nonces.is_empty() {
                         level.bet_nonces = updated_nonces;
                         levels.set(i, &level);
                         i += 1;
                     } else {
-                        // Remove the level if no valid matches remain
+                        // Remove empty level
                         if i < levels.len() - 1 {
                             let last = levels.get(levels.len() - 1);
                             levels.set(i, &last);
                         }
                         levels.remove(levels.len() - 1);
+                        continue;
                     }
                 } else {
                     i += 1;
@@ -95,14 +98,14 @@ pub trait TrackerModule:
                 i += 1;
             }
         }
-
+    
         // Update opposite side levels
         match bet.bet_type {
             BetType::Back => self.lay_levels().set(&levels),
             BetType::Lay => self.back_levels().set(&levels),
         }
-
-        // Update bet state
+    
+        // Update current bet state
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = remaining.clone();
         
@@ -116,21 +119,53 @@ pub trait TrackerModule:
             self.unmatched_count().update(|val| *val += 1);
             BetStatus::Unmatched
         };
-
+    
+        // Update matched totals if needed
         if matched_amount > BigUint::zero() {
             self.update_total_matched(bet.event, bet.selection.selection_id, &matched_amount);
         }
         
-        // Add remaining amount to orderbook if any exists
+        // Add remaining amount to orderbook only if not fully matched
         if remaining > BigUint::zero() {
             self.add_to_orderbook(&bet);
         }
-
+    
+        // Save current bet
         self.bet_by_id(bet.nft_nonce).set(&bet);
-
+    
         (matched_amount, remaining)
     }
-
+    
+    // Helper function to update liquidity
+    fn update_liquidity(&self, bet_type: BetType) {
+        match bet_type {
+            BetType::Back => {
+                let back_levels = self.back_levels().get();
+                self.back_liquidity().update(|val| {
+                    *val = back_levels.iter().fold(BigUint::zero(), |acc, level| {
+                        if level.total_stake > BigUint::zero() {
+                            acc + &level.total_stake
+                        } else {
+                            acc
+                        }
+                    })
+                });
+            },
+            BetType::Lay => {
+                let lay_levels = self.lay_levels().get();
+                self.lay_liquidity().update(|val| {
+                    *val = lay_levels.iter().fold(BigUint::zero(), |acc, level| {
+                        if level.total_stake > BigUint::zero() {
+                            acc + &level.total_stake
+                        } else {
+                            acc
+                        }
+                    })
+                });
+            }
+        }
+    }
+    
     fn add_to_orderbook(&self, bet: &Bet<Self::Api>) {
         let mut levels = match bet.bet_type {
             BetType::Back => self.back_levels().get(),
