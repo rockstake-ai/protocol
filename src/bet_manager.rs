@@ -71,11 +71,6 @@ pub trait BetManagerModule:
             .expect(ERR_SELECTION);
         let mut selection = market.selections.get(selection_index);
         
-        // Verificăm dacă tracker-ul există și îl inițializăm dacă nu
-        // if self.selection_tracker(market_id, selection_id).is_empty() {
-        //     self.init_tracker(market_id, selection_id);
-        // }
-    
         let bet = Bet {
             bettor: caller.clone(),
             event: market_id,

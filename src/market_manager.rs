@@ -1,4 +1,4 @@
-use crate::types::{Bet, Market, MarketStatus, Selection, Tracker};
+use crate::{errors::{ERR_INVALID_MARKET, ERR_INVALID_TIMESTAMP, ERR_MARKET_ALREADY_EXISTS}, types::{Bet, Market, MarketStatus, Selection, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -21,11 +21,11 @@ pub trait MarketManagerModule:
     ) -> SCResult<u64> {
         require!(
             close_timestamp > self.blockchain().get_block_timestamp(),
-            "Close timestamp must be in the future"
+            ERR_INVALID_TIMESTAMP
         );
 
         let market_id = self.get_and_increment_market_counter();
-        require!(self.markets(market_id).is_empty(), "Market already exists");
+        require!(self.markets(market_id).is_empty(), ERR_MARKET_ALREADY_EXISTS);
 
         let selections = self.create_selections(market_id, selection_descriptions)?;
 
@@ -66,10 +66,8 @@ pub trait MarketManagerModule:
         for (index, desc) in descriptions.iter().enumerate() {
             let selection_id = (index + 1) as u64;
             
-            // Inițializăm storage-ul pentru selection
             self.init_selection_storage(market_id, selection_id);
             
-            // Obținem tracker-ul inițializat
             let tracker = self.selection_tracker(market_id, selection_id).get();
 
             selections.push(Selection {
@@ -147,21 +145,21 @@ pub trait MarketManagerModule:
 
     #[view(getMarket)]
     fn get_market(&self, market_id: u64) -> SCResult<Market<Self::Api>> {
-        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
         Ok(self.markets(market_id).get())
     }
 
     // Views adiționale pentru informații despre market
     #[view(getMarketSelections)]
     fn get_market_selections(&self, market_id: u64) -> SCResult<ManagedVec<Selection<Self::Api>>> {
-        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
         let market = self.markets(market_id).get();
         Ok(market.selections)
     }
 
     #[view(getSelectionTracker)]
     fn get_selection_tracker(&self, market_id: u64, selection_id: u64) -> SCResult<Tracker<Self::Api>> {
-        require!(!self.markets(market_id).is_empty(), "Market does not exist");
+        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
         Ok(self.selection_tracker(market_id, selection_id).get())
     }
 
