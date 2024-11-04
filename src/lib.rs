@@ -22,7 +22,8 @@ storage::StorageModule
 + fund_manager::FundManagerModule
 + bet_manager::BetManagerModule
 + market_manager::MarketManagerModule
-+ tracker::TrackerModule{
++ tracker::TrackerModule
++ validation::ValidationModule{
     #[upgrade]
     fn upgrade(&self) {}
 
