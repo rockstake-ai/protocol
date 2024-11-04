@@ -182,7 +182,6 @@ pub trait TrackerModule:
             }
         }
 
-        // Update storage and liquidity
         match bet.bet_type {
             BetType::Back => {
                 self.selection_back_levels(bet.event, bet.selection.selection_id).set(&levels);

@@ -75,6 +75,12 @@ pub trait StorageModule {
 
     #[storage_mapper("locked_funds")]
     fn locked_funds(&self, address: &ManagedAddress) -> SingleValueMapper<BigUint<Self::Api>>;
+    
+    #[storage_mapper("user_exposure")]
+    fn user_total_exposure(
+        &self,
+        user: &ManagedAddress<Self::Api>
+    ) -> SingleValueMapper<BigUint>;
 
 }
 

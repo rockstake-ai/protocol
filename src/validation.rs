@@ -1,111 +1,107 @@
-// use crate::{types::{Bet, BetType, BetStatus}};
+use crate::constants::constants::{self, MAX_ODDS, MAX_STAKE, MIN_ODDS, MIN_STAKE};
+use crate::types::{Bet, BetType, MarketStatus};
 
 
-// multiversx_sc::imports!();
-// multiversx_sc::derive_imports!();
+multiversx_sc::imports!();
+multiversx_sc::derive_imports!();
 
-// // #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
-// // pub enum EventResult {
-// //     NotReported,
-// //     Reported(u64), // ID-ul selecției câștigătoare
-// // }
+#[multiversx_sc::module]
+pub trait BetValidationModule:
+crate::storage::StorageModule +
+crate::events::EventsModule +{
 
-// #[multiversx_sc::module]
-// pub trait BetValidationModule:
-//     crate::storage::StorageModule
-//     + crate::events::EventsModule
-//     + crate::nft_manager::NftManagerModule
-// {
-//     // Funcție pentru raportarea rezultatului unui eveniment
-//     #[only_owner]
-//     #[endpoint(reportEventResult)]
-//     fn report_event_result(&self, market_id: u64, winning_selection_id: u64) -> SCResult<()> {
-//         require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
-//         let mut market = self.markets(&market_id).get();
+    fn validate_bet_placement(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+        // Validare sumă mizată
+        require!(
+            bet.stake_amount >= BigUint::from(constants::MIN_STAKE) &&
+            bet.stake_amount <= BigUint::from(constants::MAX_STAKE),
+            "Stake amount outside allowed range"
+        );
+
+        // Validare cotă
+        require!(
+            bet.odd >= BigUint::from(constants::MIN_ODDS) &&
+            bet.odd <= BigUint::from(constants::MAX_ODDS),
+            "Odds outside allowed range"
+        );
+
+        // Validări specifice pentru Lay
+        if bet.bet_type == BetType::Lay {
+            // Verificare liability
+            require!(
+                bet.liability > BigUint::zero(),
+                "Liability must be greater than zero for Lay bets"
+            );
+
+            // Verificare relație corectă între stake și liability
+            let odds_minus_one = &bet.odd - &BigUint::from(100u64);
+            let expected_stake = (&bet.liability * &BigUint::from(100u64)) / &odds_minus_one;
+            require!(
+                bet.stake_amount == expected_stake,
+                "Invalid stake/liability ratio for Lay bet"
+            );
+        } else {
+            // Verificare pentru Back
+            require!(
+                bet.liability == BigUint::zero(),
+                "Back bets should not have liability"
+            );
+        }
+
+        // Validare market și selection
+        self.validate_market_selection(bet)?;
+
+        // Validare limită de expunere per utilizator
+        self.validate_user_exposure(&bet.bettor, &bet.stake_amount)?;
+
+        Ok(())
+    }
+
+    fn validate_market_selection(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+        let market = self.markets(bet.event).get();
         
-//         // require!(
-//         //     market.close_timestamp < self.blockchain().get_block_timestamp(),
-//         //     "Market is not closed yet"
-//         // );
+        // Verificare existență market
+        require!(self.markets(market).is_empty(), ERR_MARKET_ALREADY_EXISTS);
 
-//         let result_exists = market.selections.iter().any(|s| s.selection_id == winning_selection_id);
-//         require!(result_exists, "Invalid winning selection ID");
+        // Verificare status market
+        require!(
+            market.market_status == MarketStatus::Open,
+            "Market is not open for betting"
+        );
 
-//         self.event_results(&market_id).set(&EventResult::Reported(winning_selection_id));
+        // Verificare timpii de închidere
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        require!(
+            current_timestamp < market.close_timestamp,
+            "Market is closed for betting"
+        );
+
+        // Verificare selection validă
+        let selection_exists = market
+            .selections
+            .iter()
+            .any(|s| s.selection_id == bet.selection.selection_id);
+        require!(selection_exists, "Invalid selection ID");
+
+        Ok(())
+    }
+
+    fn validate_user_exposure(
+        &self,
+        user: &ManagedAddress<Self::Api>,
+        stake: &BigUint
+    ) -> SCResult<()> {
+        let current_exposure = self.user_total_exposure(user).get();
+        let new_exposure = &current_exposure + stake;
         
-//         Ok(())
-//     }
-
-//     // Funcție pentru procesarea pariurilor după raportarea rezultatului
-//     #[endpoint(processBets)]
-//     fn process_bets(&self, market_id: u64) -> SCResult<MultiValueEncoded<u64>> {
-//         require!(!self.markets(&market_id).is_empty(), "Market doesn't exist!");
-//         let mut market = self.markets(&market_id).get();
+        // Limită maximă de expunere per utilizator
+        const MAX_USER_EXPOSURE: u64 = 10_000_000_000_000_000_000; // 10 EGLD
         
-//         let event_result = self.event_results(&market_id).get();
-//         require!(event_result != EventResult::NotReported, "Event result not reported yet");
+        require!(
+            new_exposure <= BigUint::from(MAX_USER_EXPOSURE),
+            "Exceeds maximum user exposure limit"
+        );
 
-//         if let EventResult::Reported(winning_selection_id) = event_result {
-//             let mut processed_bets = MultiValueEncoded::new();
-
-//             for bet in market.selections {
-//                 if bet.status != BetStatus::Matched {
-//                     continue;
-//                 }
-
-//                 let is_winner = match bet.bet_type {
-//                     BetType::Back => bet.selection.selection_id == winning_selection_id,
-//                     BetType::Lay => bet.selection.selection_id != winning_selection_id,
-//                 };
-
-//                 let new_status = if is_winner { BetStatus::Win } else { BetStatus::Lost };
-//                 let mut updated_bet = bet.clone();
-//                 updated_bet.status = new_status;
-
-//                 // Actualizăm pariul în storage
-//                 self.bet_by_id(bet.nft_nonce).set(&updated_bet);
-
-//                 // Procesăm plățile pentru pariurile câștigătoare
-//                 if is_winner {
-//                     self.process_winning_bet(&updated_bet);
-//                 }
-
-//                 processed_bets.push(bet.nft_nonce);
-//             }
-
-//             // Actualizăm piața cu pariurile procesate
-//             self.markets(&market_id).set(&market);
-
-//             Ok(processed_bets)
-//         } else {
-//             sc_error!("Unexpected event result state")
-//         }
-//     }
-
-//     // Funcție auxiliară pentru procesarea plăților pentru pariurile câștigătoare
-//     fn process_winning_bet(&self, bet: &Bet<Self::Api>) {
-//         let bettor = &bet.bettor;
-//         let token_identifier = &bet.payment_token;
-//         let win_amount = &bet.potential_profit;
-
-//         // Transferăm suma câștigată către pariator
-//         self.send().direct(
-//             &bettor,
-//             &token_identifier,
-//             bet.payment_nonce,
-//             &win_amount,
-//         );
-
-//         // Emitem un eveniment pentru câștig
-//         self.bet_won_event(
-//             &bettor,
-//             &bet.nft_nonce,
-//             &bet.event,
-//             &bet.selection.selection_id,
-//             &win_amount,
-//             &token_identifier,
-//             bet.payment_nonce,
-//         );
-//     }
-  
-// }
+        Ok(())
+    }
+}
