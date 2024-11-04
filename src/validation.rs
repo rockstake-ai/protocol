@@ -113,11 +113,31 @@ pub trait ValidationModule:
     }
 
     fn validate_market_selection(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+        // Verificăm dacă există market-ul în storage
+        require!(!self.markets(bet.event).is_empty(), "Market does not exist");
+    
         let market = self.markets(bet.event).get();
-        require!(!market.is_empty(), "Market does not exist");
         
-        self.validate_market_open_status(&market)?;
-        self.validate_selection_exists(bet, &market)?;
+        // Verificare status market
+        require!(
+            market.market_status == MarketStatus::Open,
+            "Market is not open for betting"
+        );
+    
+        // Verificare timpii de închidere
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        require!(
+            current_timestamp < market.close_timestamp,
+            "Market is closed for betting"
+        );
+    
+        // Verificare selection validă
+        let selection_exists = market
+            .selections
+            .iter()
+            .any(|s| s.selection_id == bet.selection.selection_id);
+        require!(selection_exists, "Invalid selection ID");
+    
         Ok(())
     }
 
