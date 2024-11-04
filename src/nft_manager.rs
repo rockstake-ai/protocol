@@ -1,11 +1,6 @@
-use crate::{errors::{ERR_INVALID_NFT_TOKEN, ERR_INVALID_NFT_TOKEN_NONCE, ERR_INVALID_ROLE, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes}};
+use crate::{constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER}, errors::{ERR_INVALID_NFT_TOKEN, ERR_INVALID_NFT_TOKEN_NONCE, ERR_INVALID_ROLE, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes}};
 
 multiversx_sc::imports!();
-
-const TOKEN_NAME: &[u8] = b"BetcubeTickets";
-const TOKEN_TICKER: &[u8] = b"BET";
-
-const NFT_ROYALTIES: u64 = 0_00;
 
 #[multiversx_sc::module]
 pub trait NftManagerModule:
