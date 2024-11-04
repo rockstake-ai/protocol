@@ -11,6 +11,15 @@ pub mod constants {
     pub const MAX_ODDS: u64 = 1000; // 10.00
     pub const MIN_STAKE: u64 = 1_000_000_000_000_000; // 0.001 EGLD în atomic units
     pub const MAX_STAKE: u64 = 1_000_000_000_000_000_000; // 1 EGLD în atomic units
+
+    // Market constants
+    pub const MAX_MARKETS: u64 = 1_000_000;
+    pub const MAX_SELECTIONS: usize = 100;
+    pub const MAX_DESCRIPTION_LENGTH: usize = 100;
+    pub const MIN_DESCRIPTION_LENGTH: usize = 3;
+    
+    // User constants
+    pub const MAX_USER_EXPOSURE: u64 = 10_000_000_000_000_000_000; // 10 EGLD
 }
 
 

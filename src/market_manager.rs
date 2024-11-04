@@ -8,7 +8,8 @@ pub trait MarketManagerModule:
     crate::events::EventsModule +
     crate::fund_manager::FundManagerModule +
     crate::nft_manager::NftManagerModule +
-    crate::tracker::TrackerModule
+    crate::tracker::TrackerModule +
+    crate::validation::ValidationModule
 {
     #[only_owner]
     #[endpoint(createMarket)]
@@ -19,14 +20,13 @@ pub trait MarketManagerModule:
         selection_descriptions: ManagedVec<ManagedBuffer>,
         close_timestamp: u64
     ) -> SCResult<u64> {
-        require!(
-            close_timestamp > self.blockchain().get_block_timestamp(),
-            ERR_INVALID_TIMESTAMP
-        );
-
-        let market_id = self.get_and_increment_market_counter();
-        require!(self.markets(market_id).is_empty(), ERR_MARKET_ALREADY_EXISTS);
-
+        // Validări
+        self.validate_market_creation(close_timestamp, &selection_descriptions)?;
+        
+        // Obținem următorul ID valid
+        let market_id = self.get_and_validate_next_market_id()?;
+        
+        // Creăm selecțiile
         let selections = self.create_selections(market_id, selection_descriptions)?;
 
         let market = Market {
@@ -43,7 +43,7 @@ pub trait MarketManagerModule:
 
         self.markets(market_id).set(&market);
         
-        // Emit event after successful market creation
+        // Emit event
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         Ok(market_id)
