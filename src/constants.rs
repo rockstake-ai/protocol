@@ -1,5 +1,3 @@
-use multiversx_sc::{api::ManagedTypeApi, types::BigUint};
-
 pub mod constants {
 
     pub const IPFS_GATEWAY: &[u8] = "https://ipfs.io/ipfs/".as_bytes();

@@ -3,11 +3,11 @@
 pub mod storage;
 pub mod constants;
 pub mod events;
-pub mod bet_manager;
+pub mod bet;
 pub mod errors;
-pub mod nft_manager;
-pub mod fund_manager;
-pub mod market_manager;
+pub mod nft;
+pub mod fund;
+pub mod market;
 pub mod validation;
 pub mod tracker;
 pub mod types;
@@ -18,10 +18,10 @@ multiversx_sc::derive_imports!();
 pub trait Rockstake:
 storage::StorageModule
 + events::EventsModule
-+ nft_manager::NftManagerModule
-+ fund_manager::FundManagerModule
-+ bet_manager::BetManagerModule
-+ market_manager::MarketManagerModule
++ nft::NftModule
++ fund::FundModule
++ bet::BetModule
++ market::MarketModule
 + tracker::TrackerModule
 + validation::ValidationModule{
     #[upgrade]
@@ -29,6 +29,6 @@ storage::StorageModule
 
     #[init]
     fn init(&self) {
-        self.market_counter().set(1);
+        self.market_counter().set(0);
     }
 }

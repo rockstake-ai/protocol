@@ -3,7 +3,7 @@ use crate::{constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER}, err
 multiversx_sc::imports!();
 
 #[multiversx_sc::module]
-pub trait NftManagerModule:
+pub trait NftModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
 {

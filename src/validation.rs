@@ -1,5 +1,5 @@
 use crate::constants::constants;
-use crate::errors::{ERR_INVALID_STAKE_LIABILITY_LAY_BET, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_SELECTION_DESC_LENGTH, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
+use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_INVALID_STAKE_LIABILITY_LAY_BET, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_SELECTION_DESC_LENGTH, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
 use crate::types::{Bet, BetType, Market, MarketStatus};
 
 multiversx_sc::imports!();
@@ -13,20 +13,10 @@ pub trait ValidationModule:
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Bet Validation --------------------------------------------//
     //--------------------------------------------------------------------------------------------//    
-    
-    fn validate_bet_placement(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
-        self.validate_bet_amount(bet)?;
-        self.validate_bet_odds(bet)?;
-        self.validate_bet_type_specifics(bet)?;
-        self.validate_market_selection(bet)?;
-        self.validate_user_exposure(&bet.bettor, &bet.stake_amount)?;
-        Ok(())
-    }
 
-    fn validate_bet_amount(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
-        // Convertim la tokens împărțind la 10^18
+    fn validate_bet_amount(&self, total_amount: &BigUint) -> SCResult<()> {
         let one_token = BigUint::from(1_000_000_000_000_000_000u64);
-        let tokens = &bet.stake_amount / &one_token;
+        let tokens = total_amount / &one_token;
 
         require!(
             tokens >= BigUint::from(1u32) && tokens <= BigUint::from(10000u32),
@@ -35,10 +25,9 @@ pub trait ValidationModule:
         Ok(())
     }
 
-    fn validate_bet_odds(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+    fn validate_bet_odds(&self, odds: &BigUint) -> SCResult<()> {
         require!(
-            bet.odd >= BigUint::from(constants::MIN_ODDS) &&
-            bet.odd <= BigUint::from(constants::MAX_ODDS),
+            odds >= &BigUint::from(101u32) && odds <= &BigUint::from(100000u32),
             ERR_ODDS_OUT_OF_RANGE
         );
         Ok(())
@@ -75,7 +64,7 @@ pub trait ValidationModule:
     }
 
     //--------------------------------------------------------------------------------------------//
-    //-------------------------------- Market Validation -----------------------------------------//
+    //-------------------------------- Market Validation (FOR ADMIN) -----------------------------//
     //--------------------------------------------------------------------------------------------//
     
     fn validate_market_creation(
@@ -116,35 +105,6 @@ pub trait ValidationModule:
         Ok(())
     }
 
-    fn validate_market_selection(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
-        // Verificăm dacă există market-ul în storage
-        require!(!self.markets(bet.event).is_empty(), "Market does not exist");
-    
-        let market = self.markets(bet.event).get();
-        
-        // Verificare status market
-        require!(
-            market.market_status == MarketStatus::Open,
-            ERR_MARKET_NOT_OPEN
-        );
-    
-        // Verificare timpii de închidere
-        let current_timestamp = self.blockchain().get_block_timestamp();
-        require!(
-            current_timestamp < market.close_timestamp,
-            ERR_MARKET_CLOSED
-        );
-    
-        // Verificare selection validă
-        let selection_exists = market
-            .selections
-            .iter()
-            .any(|s| s.selection_id == bet.selection.selection_id);
-        require!(selection_exists, "Invalid selection ID");
-    
-        Ok(())
-    }
-
     fn validate_market_open_status(&self, market: &Market<Self::Api>) -> SCResult<()> {
         require!(
             market.market_status == MarketStatus::Open,
@@ -157,12 +117,29 @@ pub trait ValidationModule:
         Ok(())
     }
 
-    fn validate_selection_exists(&self, bet: &Bet<Self::Api>, market: &Market<Self::Api>) -> SCResult<()> {
+     //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Market Validation (FOR USER) -------------------------------//
+    //---------------------------------------------------------------------------------------------//
+
+    fn validate_market(&self, market_id: u64) -> SCResult<()> {
+        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
+        
+        let market = self.markets(market_id).get();
+        require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
+        
+        let created_at = self.blockchain().get_block_timestamp();
+        require!(created_at < market.close_timestamp, ERR_MARKET_CLOSED);
+        
+        Ok(())
+    }
+
+    fn validate_selection(&self, market_id: u64, selection_id: u64) -> SCResult<()> {
+        let market = self.markets(market_id).get();
         let selection_exists = market
             .selections
             .iter()
-            .any(|s| s.selection_id == bet.selection.selection_id);
-        require!(selection_exists, "Invalid selection ID");
+            .any(|s| s.selection_id == selection_id);
+        require!(selection_exists, ERR_INVALID_SELECTION);
         Ok(())
     }
 

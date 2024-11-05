@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, MatchingDetails, OrderbookView, PriceLevel, PriceLevelView, Tracker};
+use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, OrderbookView, PriceLevel};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -62,12 +62,12 @@ pub trait TrackerModule:
 
                     if !updated_nonces.is_empty() {
                         level.bet_nonces = updated_nonces;
-                        levels.set(i, &level);
+                        let _ = levels.set(i, &level);
                         i += 1;
                     } else {
                         if i < levels.len() - 1 {
                             let last = levels.get(levels.len() - 1);
-                            levels.set(i, &last);
+                            let _ = levels.set(i, &last);
                         }
                         levels.remove(levels.len() - 1);
                         continue;
@@ -138,7 +138,7 @@ pub trait TrackerModule:
                 let mut level = levels.get(i);
                 level.total_stake += &bet.unmatched_amount;
                 level.bet_nonces.push(bet.nft_nonce);
-                levels.set(i, &level);
+                let _ = levels.set(i, &level);
             },
             None => {
                 let new_level = PriceLevel {

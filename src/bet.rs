@@ -1,6 +1,6 @@
 use crate::{
     errors::{
-        ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO
+        ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO
     }, 
     types::{Bet, BetStatus, BetType}
 };
@@ -8,10 +8,10 @@ multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
 #[multiversx_sc::module]
-pub trait BetManagerModule: 
+pub trait BetModule: 
     crate::storage::StorageModule +
     crate::events::EventsModule +
-    crate::nft_manager::NftManagerModule +
+    crate::nft::NftModule +
     crate::tracker::TrackerModule +
     crate::validation::ValidationModule 
 {
@@ -30,7 +30,12 @@ pub trait BetManagerModule:
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
-            
+
+        self.validate_bet_amount(&total_amount)?;
+        self.validate_bet_odds(&odds)?;
+        self.validate_market(market_id)?;
+        self.validate_selection(market_id, selection_id)?;
+        
         // Calculăm stake și liability
         let (final_stake, final_liability) = self.calculate_stake_and_liability(
             &bet_type,
@@ -52,9 +57,6 @@ pub trait BetManagerModule:
             token_nonce
         )?;
 
-        // Validăm toate condițiile pentru pariu folosind ValidationModule
-        self.validate_bet_placement(&bet)?;
-
         // Procesăm pariul prin tracker
         let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
         
@@ -66,7 +68,6 @@ pub trait BetManagerModule:
             market_id,
             selection_id,
             &matched_amount,
-            updated_bet.clone()
         )?;
 
         // Gestionăm NFT și fonduri blocate
@@ -129,9 +130,8 @@ pub trait BetManagerModule:
         let selection = market.selections
             .iter()
             .find(|s| s.selection_id == selection_id)
-            .ok_or("Invalid selection")?
+            .ok_or(ERR_INVALID_SELECTION)?
             .clone();
-
         let bet_id = self.get_last_bet_id() + 1;
         
         Ok(Bet {
@@ -178,7 +178,6 @@ pub trait BetManagerModule:
         market_id: u64,
         selection_id: u64,
         matched_amount: &BigUint,
-        bet: Bet<Self::Api>
     ) -> SCResult<()> {
         let mut market = self.markets(market_id).get();
         let selection_index = market
@@ -205,18 +204,15 @@ pub trait BetManagerModule:
         liability: &BigUint,
         bet_type: BetType
     ) -> SCResult<()> {
-        // Create and save NFT
         let bet_nft_nonce = self.mint_bet_nft(bet);
         self.bet_by_id(bet.nft_nonce).set(bet);
 
-        // Update locked funds
         let total_locked = match bet_type {
             BetType::Back => unmatched_amount.clone(),
             BetType::Lay => liability.clone(),
         };
         self.locked_funds(caller).update(|current_locked| *current_locked += &total_locked);
 
-        // Send NFT to caller
         self.send().direct_esdt(
             caller,
             self.bet_nft_token().get_token_id_ref(),

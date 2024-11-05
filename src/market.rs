@@ -1,13 +1,13 @@
-use crate::{errors::{ERR_INVALID_MARKET, ERR_INVALID_TIMESTAMP, ERR_MARKET_ALREADY_EXISTS}, types::{Bet, Market, MarketStatus, Selection, Tracker}};
+use crate::{errors::ERR_INVALID_MARKET, types::{Market, MarketStatus, Selection, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
 #[multiversx_sc::module]
-pub trait MarketManagerModule:
+pub trait MarketModule:
     crate::storage::StorageModule +
     crate::events::EventsModule +
-    crate::fund_manager::FundManagerModule +
-    crate::nft_manager::NftManagerModule +
+    crate::fund::FundModule +
+    crate::nft::NftModule +
     crate::tracker::TrackerModule +
     crate::validation::ValidationModule
 {

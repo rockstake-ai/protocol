@@ -2,10 +2,10 @@ use crate::types::{BetType, BetStatus};
 multiversx_sc::imports!();
 
 #[multiversx_sc::module]
-pub trait FundManagerModule:
+pub trait FundModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
-    + crate::nft_manager::NftManagerModule {
+    + crate::nft::NftModule {
 
     #[only_owner]
     #[payable("*")]
@@ -14,7 +14,7 @@ pub trait FundManagerModule:
         &self,
         bet_id: u64,
     ) {
-        let mut bet = self.require_valid_bet_nft(bet_id);
+        let bet = self.require_valid_bet_nft(bet_id);
         require!(bet.status == BetStatus::Win, "Bet is not in winning state");
 
         let amount_to_distribute = match bet.bet_type {
