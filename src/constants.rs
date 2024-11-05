@@ -13,9 +13,6 @@ pub mod constants {
     pub const MIN_ODDS: u32 = 101;      // 1.01
     pub const MAX_ODDS: u32 = 100000;   // 1000.00
 
-    pub const MIN_STAKE: u32 = 1;       // 1 token
-    pub const MAX_STAKE: u32 = 10000;   // 10000 tokens
-
     // Market constants
     pub const MAX_MARKETS: u64 = 1_000_000;
     pub const MAX_SELECTIONS: usize = 100;
@@ -24,18 +21,5 @@ pub mod constants {
     
     // User constants
     pub const MAX_USER_EXPOSURE: u64 = 10_000_000_000_000_000_000; // 10 EGLD
-}
-
-#[multiversx_sc::module]
-pub trait StakeModule {
-    #[view(getMinStake)]
-    fn get_min_stake(&self) -> BigUint {
-        BigUint::from(0u64)
-    }
-
-    #[view(getMaxStake)]
-    fn get_max_stake(&self) -> BigUint {
-        BigUint::from(u64::MAX)
-    }
 }
 

@@ -1,4 +1,5 @@
 use crate::constants::constants;
+use crate::errors::{ERR_INVALID_STAKE_LIABILITY_LAY_BET, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_SELECTION_DESC_LENGTH, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
 use crate::types::{Bet, BetType, Market, MarketStatus};
 
 multiversx_sc::imports!();
@@ -29,7 +30,7 @@ pub trait ValidationModule:
 
         require!(
             tokens >= BigUint::from(1u32) && tokens <= BigUint::from(10000u32),
-            "Stake amount outside allowed range"
+            ERR_STAKE_OUT_OF_RANGE
         );
         Ok(())
     }
@@ -38,7 +39,7 @@ pub trait ValidationModule:
         require!(
             bet.odd >= BigUint::from(constants::MIN_ODDS) &&
             bet.odd <= BigUint::from(constants::MAX_ODDS),
-            "Odds outside allowed range"
+            ERR_ODDS_OUT_OF_RANGE
         );
         Ok(())
     }
@@ -53,14 +54,14 @@ pub trait ValidationModule:
     fn validate_lay_bet(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
         require!(
             bet.liability > BigUint::zero(),
-            "Liability must be greater than zero for Lay bets"
+            ERR_LIABILITY_ZERO
         );
 
         let odds_minus_one = &bet.odd - &BigUint::from(100u64);
         let expected_stake = (&bet.liability * &BigUint::from(100u64)) / &odds_minus_one;
         require!(
             bet.stake_amount == expected_stake,
-            "Invalid stake/liability ratio for Lay bet"
+            ERR_INVALID_STAKE_LIABILITY_LAY_BET
         );
         Ok(())
     }
@@ -68,7 +69,7 @@ pub trait ValidationModule:
     fn validate_back_bet(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
         require!(
             bet.liability == BigUint::zero(),
-            "Back bets should not have liability"
+            ERR_LIABILITY_BACK_BET
         );
         Ok(())
     }
@@ -90,7 +91,7 @@ pub trait ValidationModule:
     fn validate_market_timestamp(&self, close_timestamp: u64) -> SCResult<()> {
         require!(
             close_timestamp > self.blockchain().get_block_timestamp(),
-            "Invalid closing timestamp"
+            ERR_MARKET_TIMESTAMP
         );
         Ok(())
     }
@@ -102,14 +103,14 @@ pub trait ValidationModule:
         require!(!selection_descriptions.is_empty(), "No selections provided");
         require!(
             selection_descriptions.len() <= constants::MAX_SELECTIONS,
-            "Too many selections"
+            ERR_TOO_MANY_SELECTIONS
         );
 
         for desc in selection_descriptions.iter() {
             require!(
                 desc.len() >= constants::MIN_DESCRIPTION_LENGTH &&
                 desc.len() <= constants::MAX_DESCRIPTION_LENGTH,
-                "Invalid selection description length"
+                ERR_SELECTION_DESC_LENGTH
             );
         }
         Ok(())
@@ -124,14 +125,14 @@ pub trait ValidationModule:
         // Verificare status market
         require!(
             market.market_status == MarketStatus::Open,
-            "Market is not open for betting"
+            ERR_MARKET_NOT_OPEN
         );
     
         // Verificare timpii de închidere
         let current_timestamp = self.blockchain().get_block_timestamp();
         require!(
             current_timestamp < market.close_timestamp,
-            "Market is closed for betting"
+            ERR_MARKET_CLOSED
         );
     
         // Verificare selection validă
@@ -147,11 +148,11 @@ pub trait ValidationModule:
     fn validate_market_open_status(&self, market: &Market<Self::Api>) -> SCResult<()> {
         require!(
             market.market_status == MarketStatus::Open,
-            "Market is not open for betting"
+            ERR_MARKET_NOT_OPEN
         );
         require!(
             self.blockchain().get_block_timestamp() < market.close_timestamp,
-            "Market is closed for betting"
+            ERR_MARKET_CLOSED
         );
         Ok(())
     }

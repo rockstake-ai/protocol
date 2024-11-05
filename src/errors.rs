@@ -2,13 +2,19 @@ pub const ERR_INVALID_MARKET: &str = "Market doesn't exist!";
 pub const ERR_MARKET_NOT_OPEN: &str = "Market is not open for betting";
 pub const ERR_MARKET_CLOSED: &str = "Market is closed";
 pub const ERR_MARKET_ALREADY_EXISTS: &str = "Market already exists";
+pub const ERR_MARKET_TIMESTAMP: &str = "Invalid closing timestamp";
+
+pub const ERR_TOO_MANY_SELECTIONS: &str= "Too many selections";
+pub const ERR_SELECTION_DESC_LENGTH: &str= "Invalid selection description length";
+
+pub const ERR_STAKE_OUT_OF_RANGE : &str = "Stake amount outside allowed range";
+pub const ERR_ODDS_OUT_OF_RANGE: &str = "Odds outside allowed range";
+
 pub const ERR_LIABILITY_BACK_BET: &str = "Liability must be zero for Back bets";
 pub const ERR_LIABILITY_ZERO: &str = "Liability must be greater than zero for Lay bets";
 pub const ERR_LIABILITY_TOTAL_AMOUNT: &str = "Liability parameter doesn't match the required liability for the given total amount";
-pub const ERR_BET_ODDS: &str = "Odds must be between 1.01 and 1000.00";
-pub const ERR_USER_FUNDS: &str = "Insufficient funds for this bet";
-pub const ERR_BET_STATE: &str = "Bet is not in a state eligible for distribution";
-pub const ERR_SELECTION: &str = "Selection not found in this market";
+pub const ERR_INVALID_STAKE_LIABILITY_LAY_BET: &str = "Invalid stake/liability ratio for Lay bet";
+
 pub const ERR_TOKEN_ALREADY_ISSUED: &str = "Token already issued";
 pub const ERR_TOKEN_NOT_ISSUED: &str = "Token not issued";
 pub const ERR_INVALID_NFT_TOKEN: &str = "Invalid token";
