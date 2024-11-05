@@ -24,8 +24,8 @@ pub trait ValidationModule:
 
     fn validate_bet_amount(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
         require!(
-            bet.stake_amount >= BigUint::from(constants::MIN_STAKE) &&
-            bet.stake_amount <= BigUint::from(constants::MAX_STAKE),
+            bet.stake_amount >= constants::min_stake::<Self::Api>() &&
+            bet.stake_amount <= constants::max_stake::<Self::Api>(),
             "Stake amount outside allowed range"
         );
         Ok(())

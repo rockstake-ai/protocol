@@ -1,4 +1,6 @@
 pub mod constants {
+    use multiversx_sc::{api::ManagedTypeApi, types::BigUint};
+
     pub const IPFS_GATEWAY: &[u8] = "https://ipfs.io/ipfs/".as_bytes();
     pub const NFT_ISSUE_COST: u64 = 50_000_000_000_000_000; // 0.05 EGLD
     pub const NFT_ROYALTIES: u64 = 0_00;
@@ -8,9 +10,14 @@ pub mod constants {
     
     //Bet
     pub const MIN_ODDS: u64 = 101; // 1.01
-    pub const MAX_ODDS: u64 = 1000; // 10.00
-    pub const MIN_STAKE: u64 = 1_000_000_000_000_000; // 0.001 EGLD în atomic units
-    pub const MAX_STAKE: u64 = 1_000_000_000_000_000_000; // 1 EGLD în atomic units
+    pub const MAX_ODDS: u64 = 1000; // 100.00
+    pub fn min_stake<M: ManagedTypeApi>() -> BigUint<M> {
+        BigUint::from(1_000_000u64) // 1 USDC
+    }
+
+    pub fn max_stake<M: ManagedTypeApi>() -> BigUint<M> {
+        BigUint::from(10_000_000_000u64) // 10000 USDC
+    }
 
     // Market constants
     pub const MAX_MARKETS: u64 = 1_000_000;
