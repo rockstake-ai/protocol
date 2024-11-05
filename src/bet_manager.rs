@@ -1,7 +1,8 @@
 use crate::{
-    errors::*,
-    types::{Bet, BetStatus, BetType, MarketStatus},
-    validation::ValidationModule
+    errors::{
+        ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO
+    }, 
+    types::{Bet, BetStatus, BetType}
 };
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -12,7 +13,7 @@ pub trait BetManagerModule:
     crate::events::EventsModule +
     crate::nft_manager::NftManagerModule +
     crate::tracker::TrackerModule +
-    crate::validation::ValidationModule  
+    crate::validation::ValidationModule 
 {
     #[payable("*")]
     #[endpoint(placeBet)]
@@ -51,7 +52,7 @@ pub trait BetManagerModule:
             token_nonce
         )?;
 
-        // Validăm pariul
+        // Validăm toate condițiile pentru pariu folosind ValidationModule
         self.validate_bet_placement(&bet)?;
 
         // Procesăm pariul prin tracker
@@ -128,7 +129,7 @@ pub trait BetManagerModule:
         let selection = market.selections
             .iter()
             .find(|s| s.selection_id == selection_id)
-            .ok_or(ERR_SELECTION)?
+            .ok_or("Invalid selection")?
             .clone();
 
         let bet_id = self.get_last_bet_id() + 1;
@@ -184,7 +185,7 @@ pub trait BetManagerModule:
             .selections
             .iter()
             .position(|s| s.selection_id == selection_id)
-            .ok_or(ERR_SELECTION)?;
+            .ok_or("Invalid selection")?;
         
         let mut selection = market.selections.get(selection_index);
         selection.priority_queue = self.selection_tracker(market_id, selection_id).get();

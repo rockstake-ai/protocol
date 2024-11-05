@@ -23,9 +23,12 @@ pub trait ValidationModule:
     }
 
     fn validate_bet_amount(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+        // Convertim la tokens împărțind la 10^18
+        let one_token = BigUint::from(1_000_000_000_000_000_000u64);
+        let tokens = &bet.stake_amount / &one_token;
+
         require!(
-            bet.stake_amount >= constants::min_stake::<Self::Api>() &&
-            bet.stake_amount <= constants::max_stake::<Self::Api>(),
+            tokens >= BigUint::from(1u32) && tokens <= BigUint::from(10000u32),
             "Stake amount outside allowed range"
         );
         Ok(())
