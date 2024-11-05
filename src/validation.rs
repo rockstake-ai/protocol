@@ -1,6 +1,6 @@
 use crate::constants::constants;
-use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_INVALID_STAKE_LIABILITY_LAY_BET, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_SELECTION_DESC_LENGTH, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
-use crate::types::{Bet, BetType, Market, MarketStatus};
+use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_SELECTION_DESC_LENGTH, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
+use crate::types::{Market, MarketStatus};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -33,34 +33,29 @@ pub trait ValidationModule:
         Ok(())
     }
 
-    fn validate_bet_type_specifics(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
-        match bet.bet_type {
-            BetType::Lay => self.validate_lay_bet(bet),
-            BetType::Back => self.validate_back_bet(bet),
-        }
+    // fn validate_bet_type(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+    //     match bet.bet_type {
+    //         BetType::Lay => self.validate_lay_bet(bet),
+    //         BetType::Back => self.validate_back_bet(bet),
+    //     }
+    // }
+
+    fn validate_lay_bet(&self, liability: &BigUint,total_amount: &BigUint,odds: &BigUint) -> SCResult<(BigUint, BigUint)>{
+        require!(liability > &BigUint::zero(), ERR_LIABILITY_ZERO);
+
+        let stake = total_amount - liability;    
+        let odds_minus_one = odds - &BigUint::from(100u32);
+        let stake_check = (liability.clone() * &BigUint::from(100u32)) / odds_minus_one;
+        require!(stake == stake_check, ERR_LIABILITY_TOTAL_AMOUNT);
+        Ok((stake, liability.clone()))
     }
 
-    fn validate_lay_bet(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
+    fn validate_back_bet(&self, total_amount:&BigUint, liability: &BigUint) -> SCResult<(BigUint, BigUint)> {
         require!(
-            bet.liability > BigUint::zero(),
-            ERR_LIABILITY_ZERO
-        );
-
-        let odds_minus_one = &bet.odd - &BigUint::from(100u64);
-        let expected_stake = (&bet.liability * &BigUint::from(100u64)) / &odds_minus_one;
-        require!(
-            bet.stake_amount == expected_stake,
-            ERR_INVALID_STAKE_LIABILITY_LAY_BET
-        );
-        Ok(())
-    }
-
-    fn validate_back_bet(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
-        require!(
-            bet.liability == BigUint::zero(),
+            liability == &BigUint::zero(),
             ERR_LIABILITY_BACK_BET
         );
-        Ok(())
+        Ok((total_amount.clone(),BigUint::zero()))
     }
 
     //--------------------------------------------------------------------------------------------//

@@ -100,16 +100,10 @@ pub trait BetModule:
     ) -> SCResult<(BigUint, BigUint)> {
         match bet_type {
             BetType::Back => {
-                require!(liability == &BigUint::zero(), ERR_LIABILITY_BACK_BET);
-                Ok((total_amount.clone(), BigUint::zero()))
+                self.validate_back_bet(total_amount,liability)
             },
             BetType::Lay => {
-                require!(liability > &BigUint::zero(), ERR_LIABILITY_ZERO);
-                let stake = total_amount - liability;    
-                let odds_minus_one = odds - &BigUint::from(100u32);
-                let stake_check = (liability * &BigUint::from(100u32)) / odds_minus_one;
-                require!(stake == stake_check, ERR_LIABILITY_TOTAL_AMOUNT);
-                Ok((stake, liability.clone()))
+               self.validate_lay_bet(total_amount,liability,odds)
             }
         }
     }
@@ -184,7 +178,7 @@ pub trait BetModule:
             .selections
             .iter()
             .position(|s| s.selection_id == selection_id)
-            .ok_or("Invalid selection")?;
+            .ok_or(ERR_INVALID_SELECTION)?;
         
         let mut selection = market.selections.get(selection_index);
         selection.priority_queue = self.selection_tracker(market_id, selection_id).get();
