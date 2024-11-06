@@ -41,23 +41,21 @@ pub trait MarketModule:
             created_at: self.blockchain().get_block_timestamp(),
         };
 
-        self.markets(market_id).set(&market);    
+        self.markets(market_id).set(&market);
 
-        self.send()
-        .async_call()
-        .with_callback(self.callbacks().market_close_callback())
-        .call_and_exit_ignore_callback(
-            self.blockchain().get_sc_address(),
-            "closeMarket",
-            ManagedArgBuffer::new_from_single_item(market_id)
-        );
-    
+        self.close_market_proxy(self.blockchain().get_sc_address())
+            .close_market(market_id)
+            .async_call()
+            .with_callback(<Self as MarketModule>::callbacks(self).market_close_callback(market_id))
+            .call_and_exit();
         
         // Emit event
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         Ok(market_id)
     }
+    #[proxy]
+    fn close_market_proxy(&self, sc_address: ManagedAddress) -> close_market::Proxy<Self::Api>;
 
     #[callback]
     fn market_close_callback(
@@ -67,7 +65,6 @@ pub trait MarketModule:
     ) {
         match result {
             ManagedAsyncCallResult::Ok(_) => {
-                // Market-ul a fost închis cu succes
                 let _ = self.handle_expired_market(market_id);
                 self.market_auto_closed_event(
                     market_id,
@@ -75,7 +72,7 @@ pub trait MarketModule:
                 );
             },
             ManagedAsyncCallResult::Err(_) => {
-                // În caz de eroare, putem încerca din nou sau emite un eveniment de eroare
+                // Log error and emit event
                 self.market_close_failed_event(market_id);
             }
         }
@@ -236,5 +233,15 @@ pub trait MarketModule:
     #[view(checkMarketExists)]
     fn check_market_exists(&self, market_id: u64) -> bool {
         !self.markets(market_id).is_empty()
+    }
+}
+
+mod close_market {
+    multiversx_sc::imports!();
+    
+    #[multiversx_sc::proxy]
+    pub trait CloseMarket {
+        #[endpoint(closeMarket)]
+        fn close_market(&self, market_id: u64) -> SCResult<()>;
     }
 }
