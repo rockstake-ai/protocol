@@ -41,19 +41,77 @@ pub trait MarketModule:
             created_at: self.blockchain().get_block_timestamp(),
         };
 
-        self.markets(market_id).set(&market);
-        
-        // Verificăm timestamp-ul și procesăm automat dacă e cazul
-        let current_timestamp = self.blockchain().get_block_timestamp();
-        if current_timestamp >= close_timestamp {
-            self.handle_expired_market(market_id)?;
-        }
+        self.markets(market_id).set(&market);    
+
+        self.send()
+        .async_call()
+        .with_callback(self.callbacks().market_close_callback())
+        .call_and_exit_ignore_callback(
+            self.blockchain().get_sc_address(),
+            "closeMarket",
+            ManagedArgBuffer::new_from_single_item(market_id)
+        );
+    
         
         // Emit event
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         Ok(market_id)
     }
+
+    #[callback]
+    fn market_close_callback(
+        &self,
+        #[call_result] result: ManagedAsyncCallResult<()>,
+        market_id: u64
+    ) {
+        match result {
+            ManagedAsyncCallResult::Ok(_) => {
+                // Market-ul a fost închis cu succes
+                let _ = self.handle_expired_market(market_id);
+                self.market_auto_closed_event(
+                    market_id,
+                    self.blockchain().get_block_timestamp()
+                );
+            },
+            ManagedAsyncCallResult::Err(_) => {
+                // În caz de eroare, putem încerca din nou sau emite un eveniment de eroare
+                self.market_close_failed_event(market_id);
+            }
+        }
+    }
+
+    #[endpoint(closeMarket)]
+    fn close_market(&self, market_id: u64) -> SCResult<()> {
+        let market = self.markets(market_id).get();
+        
+        require!(
+            market.market_status == MarketStatus::Open,
+            "Market is not in open state"
+        );
+        
+        require!(
+            self.blockchain().get_block_timestamp() >= market.close_timestamp,
+            "Market has not reached close timestamp yet"
+        );
+
+        self.handle_expired_market(market_id)
+    }
+
+    // ... restul codului rămâne neschimbat ...
+
+    #[event("market_auto_closed")]
+    fn market_auto_closed_event(
+        &self,
+        #[indexed] market_id: u64,
+        #[indexed] timestamp: u64,
+    );
+
+    #[event("market_close_failed")]
+    fn market_close_failed_event(
+        &self,
+        #[indexed] market_id: u64,
+    );
 
     fn get_and_increment_market_counter(&self) -> u64 {
         let mut counter = self.market_counter().get();
