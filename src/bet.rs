@@ -1,7 +1,5 @@
 use crate::{
-    errors::{
-        ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO
-    }, 
+    errors::ERR_INVALID_SELECTION, 
     types::{Bet, BetStatus, BetType}
 };
 multiversx_sc::imports!();

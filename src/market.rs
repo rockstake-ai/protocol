@@ -43,6 +43,12 @@ pub trait MarketModule:
 
         self.markets(market_id).set(&market);
         
+        // Verificăm timestamp-ul și procesăm automat dacă e cazul
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        if current_timestamp >= close_timestamp {
+            self.handle_expired_market(market_id)?;
+        }
+        
         // Emit event
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
@@ -139,8 +145,7 @@ pub trait MarketModule:
             return false;
         }
         let market = self.markets(market_id).get();
-        let current_timestamp = self.blockchain().get_block_timestamp();
-        current_timestamp < market.close_timestamp
+        market.market_status == MarketStatus::Open
     }
 
     #[view(getMarket)]
@@ -149,7 +154,6 @@ pub trait MarketModule:
         Ok(self.markets(market_id).get())
     }
 
-    // Views adiționale pentru informații despre market
     #[view(getMarketSelections)]
     fn get_market_selections(&self, market_id: u64) -> SCResult<ManagedVec<Selection<Self::Api>>> {
         require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);

@@ -34,7 +34,7 @@ pub trait EventsModule {
     );
 
     #[event("market_closed")]
-    fn market_closed_event(&self, #[indexed] market_id: BigUint, #[indexed] winning_selection_id: BigUint);
+    fn market_closed_event(&self, #[indexed] market_id: u64, #[indexed] timestamp: u64);
 
   
     #[event("bet_won")]

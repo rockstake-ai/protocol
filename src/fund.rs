@@ -1,57 +1,175 @@
-use crate::types::{BetType, BetStatus};
+use crate::types::{Bet, BetType, BetStatus, Market, MarketStatus};
 multiversx_sc::imports!();
+multiversx_sc::derive_imports!();
 
 #[multiversx_sc::module]
 pub trait FundModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
-    + crate::nft::NftModule {
+    + crate::nft::NftModule
+{
+    fn handle_expired_market(&self, market_id: u64) -> SCResult<()> {
+        let mut market = self.markets(market_id).get();
+        
+        // Actualizăm statusul market-ului
+        market.market_status = MarketStatus::Closed;
+        self.markets(market_id).set(&market);
 
-    #[only_owner]
-    #[payable("*")]
-    #[endpoint(distributeRewards)]
-    fn distribute_rewards(
-        &self,
-        bet_id: u64,
-    ) {
-        let bet = self.require_valid_bet_nft(bet_id);
-        require!(bet.status == BetStatus::Win, "Bet is not in winning state");
+        // Distribuim recompensele pentru pariurile câștigătoare
+        self.process_winning_bets(market_id)?;
+        
+        // Procesăm toate pariurile unmatched
+        self.process_unmatched_bets(market_id)?;
 
+        // Emitem event pentru market expirat
+        self.market_closed_event(
+            market_id,
+            self.blockchain().get_block_timestamp()
+        );
+
+        Ok(())
+    }
+
+    fn process_winning_bets(&self, market_id: u64) -> SCResult<()> {
+        let market = self.markets(market_id).get();
+        
+        for selection in market.selections.iter() {
+            // Procesăm back bets câștigătoare
+            let back_levels = self.selection_back_levels(market_id, selection.selection_id).get();
+            for level in back_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    let bet = self.bet_by_id(bet_nonce).get();
+                    if bet.status == BetStatus::Win && bet.matched_amount > BigUint::zero() {
+                        self.distribute_bet_reward(&bet)?;
+                    }
+                }
+            }
+
+            // Procesăm lay bets câștigătoare
+            let lay_levels = self.selection_lay_levels(market_id, selection.selection_id).get();
+            for level in lay_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    let bet = self.bet_by_id(bet_nonce).get();
+                    if bet.status == BetStatus::Win && bet.matched_amount > BigUint::zero() {
+                        self.distribute_bet_reward(&bet)?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn process_unmatched_bets(&self, market_id: u64) -> SCResult<()> {
+        let market = self.markets(market_id).get();
+        
+        for selection in market.selections.iter() {
+            // Procesăm back bets unmatched
+            let back_levels = self.selection_back_levels(market_id, selection.selection_id).get();
+            for level in back_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    self.process_unmatched_bet(bet_nonce)?;
+                }
+            }
+
+            // Procesăm lay bets unmatched
+            let lay_levels = self.selection_lay_levels(market_id, selection.selection_id).get();
+            for level in lay_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    self.process_unmatched_bet(bet_nonce)?;
+                }
+            }
+
+            // Resetăm levels și lichiditate
+            self.selection_back_levels(market_id, selection.selection_id)
+                .set(&ManagedVec::new());
+            self.selection_lay_levels(market_id, selection.selection_id)
+                .set(&ManagedVec::new());
+            self.selection_back_liquidity(market_id, selection.selection_id)
+                .set(&BigUint::zero());
+            self.selection_lay_liquidity(market_id, selection.selection_id)
+                .set(&BigUint::zero());
+        }
+
+        Ok(())
+    }
+
+    fn process_unmatched_bet(&self, bet_nonce: u64) -> SCResult<()> {
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        
+        if bet.unmatched_amount > BigUint::zero() {
+            let refund_amount = match bet.bet_type {
+                BetType::Back => bet.unmatched_amount.clone(),
+                BetType::Lay => {
+                    let unmatched_liability = &bet.unmatched_amount * &(&bet.odd - 1u64);
+                    unmatched_liability
+                }
+            };
+
+            if refund_amount > BigUint::zero() {
+                let payment = EgldOrEsdtTokenPayment::new(
+                    bet.payment_token.clone(),
+                    bet.payment_nonce,
+                    refund_amount.clone(),
+                );
+
+                self.send().direct(
+                    &bet.bettor,
+                    &payment.token_identifier,
+                    payment.token_nonce,
+                    &payment.amount,
+                );
+
+                bet.status = BetStatus::Canceled;
+                bet.unmatched_amount = BigUint::zero();
+                self.bet_by_id(bet_nonce).set(&bet);
+
+                self.bet_refunded_event(
+                    bet_nonce,
+                    &bet.bettor,
+                    &refund_amount
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn distribute_bet_reward(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
         let amount_to_distribute = match bet.bet_type {
             BetType::Back => bet.potential_profit.clone(),
             BetType::Lay => &bet.liability - &bet.potential_profit,
         };
 
-        require!(amount_to_distribute > BigUint::zero(), "No winnings to distribute");
+        if amount_to_distribute > BigUint::zero() {
+            let payment = EgldOrEsdtTokenPayment::new(
+                bet.payment_token.clone(),
+                bet.payment_nonce,
+                amount_to_distribute.clone(),
+            );
 
-        let payment = EgldOrEsdtTokenPayment::new(
-            bet.payment_token,
-            bet.payment_nonce,
-            amount_to_distribute,
-        );
+            self.send().direct(
+                &bet.bettor,
+                &payment.token_identifier,
+                payment.token_nonce,
+                &payment.amount,
+            );
 
-        self.send().direct(
-            &bet.bettor,
-            &payment.token_identifier,
-            payment.token_nonce,
-            &payment.amount,
-        );
+            self.reward_distributed_event(
+                bet.nft_nonce,
+                &bet.bettor,
+                &amount_to_distribute
+            );
+        }
 
-        //TODO() - UPDATE
-        // let mut updated_bet = bet.clone();
-        // updated_bet.matched_amount = BigUint::zero();
-        // updated_bet.unmatched_amount = BigUint::zero();
-
-        self.emit_reward_distributed_event(bet_id, &bet.bettor, &payment.amount);
-
+        Ok(())
     }
 
-    fn emit_reward_distributed_event(
+    #[event("bet_refunded")]
+    fn bet_refunded_event(
         &self,
-        bet_id: u64,
-        bettor: &ManagedAddress,
-        amount: &BigUint,
-    ) {
-        self.reward_distributed_event(bet_id, bettor, amount);
-    }
+        #[indexed] bet_id: u64,
+        #[indexed] bettor: &ManagedAddress,
+        #[indexed] amount: &BigUint,
+    );
 }
