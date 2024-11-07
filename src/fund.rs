@@ -100,30 +100,27 @@ pub trait FundModule:
         if bet.unmatched_amount > BigUint::zero() {
             let refund_amount = match bet.bet_type {
                 BetType::Back => bet.unmatched_amount.clone(),
-                BetType::Lay => {
-                    let unmatched_liability = &bet.unmatched_amount * &(&bet.odd - 1u64);
-                    unmatched_liability
-                }
+                BetType::Lay => bet.unmatched_amount.clone() // Returnăm direct stake-ul unmatched
             };
-
+    
             if refund_amount > BigUint::zero() {
                 let payment = EgldOrEsdtTokenPayment::new(
                     bet.payment_token.clone(),
                     bet.payment_nonce,
                     refund_amount.clone(),
                 );
-
+    
                 self.send().direct(
                     &bet.bettor,
                     &payment.token_identifier,
                     payment.token_nonce,
                     &payment.amount,
                 );
-
+    
                 bet.status = BetStatus::Canceled;
                 bet.unmatched_amount = BigUint::zero();
                 self.bet_by_id(bet_nonce).set(&bet);
-
+    
                 self.bet_refunded_event(
                     bet_nonce,
                     &bet.bettor,
@@ -131,7 +128,7 @@ pub trait FundModule:
                 );
             }
         }
-
+    
         Ok(())
     }
 
