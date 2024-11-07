@@ -42,8 +42,6 @@ pub trait MarketModule:
         };
 
         self.markets(market_id).set(&market);
-
-       self.schedule_market_close(market_id);
         
         // Emit event
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
@@ -51,42 +49,8 @@ pub trait MarketModule:
         Ok(market_id)
     }
 
-    fn schedule_market_close(&self, market_id: u64) {        
-        self.send()
-            .contract_call::<()>(self.blockchain().get_sc_address(), "closeMarket")
-            .async_call()
-            .with_callback(<Self as MarketModule>::callbacks(self).market_close_callback(market_id))
-            .call_and_exit()
-    }
-
-    #[callback]
-    fn market_close_callback(
-        &self,
-        market_id: u64,
-        #[call_result] result: ManagedAsyncCallResult<()>,
-    ) {
-        match result {
-            ManagedAsyncCallResult::Ok(_) => {
-                let current_timestamp = self.blockchain().get_block_timestamp();
-                let market = self.markets(market_id).get();
-                
-                if current_timestamp >= market.close_timestamp {
-                    let _ = self.handle_expired_market(market_id);
-                    self.market_auto_closed_event(
-                        market_id,
-                        current_timestamp
-                    );
-                }
-            },
-            ManagedAsyncCallResult::Err(_) => {
-                // Retry logic could be implemented here
-                self.market_close_failed_event(market_id);
-            }
-        }
-    }
-
-    #[endpoint(closeMarket)]
-    fn close_market(&self, market_id: u64) -> SCResult<()> {
+    #[endpoint(processMarketClose)]
+    fn process_market_close(&self, market_id: u64) -> SCResult<()> {
         let market = self.markets(market_id).get();
         
         require!(
@@ -102,21 +66,6 @@ pub trait MarketModule:
         self.handle_expired_market(market_id)
     }
 
-
-    // ... restul codului rămâne neschimbat ...
-
-    #[event("market_auto_closed")]
-    fn market_auto_closed_event(
-        &self,
-        #[indexed] market_id: u64,
-        #[indexed] timestamp: u64,
-    );
-
-    #[event("market_close_failed")]
-    fn market_close_failed_event(
-        &self,
-        #[indexed] market_id: u64,
-    );
 
     fn get_and_increment_market_counter(&self) -> u64 {
         let mut counter = self.market_counter().get();
@@ -241,15 +190,5 @@ pub trait MarketModule:
     #[view(checkMarketExists)]
     fn check_market_exists(&self, market_id: u64) -> bool {
         !self.markets(market_id).is_empty()
-    }
-}
-
-mod close_market {
-    multiversx_sc::imports!();
-    
-    #[multiversx_sc::proxy]
-    pub trait CloseMarket {
-        #[endpoint(closeMarket)]
-        fn close_market(&self, market_id: u64) -> SCResult<()>;
     }
 }

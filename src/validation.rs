@@ -120,7 +120,7 @@ pub trait ValidationModule:
         require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
         
         let market = self.markets(market_id).get();
-        require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
+        // require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
         
         let created_at = self.blockchain().get_block_timestamp();
         require!(created_at < market.close_timestamp, ERR_MARKET_CLOSED);

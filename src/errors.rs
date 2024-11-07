@@ -1,6 +1,6 @@
 pub const ERR_INVALID_MARKET: &str = "Market doesn't exist!";
 pub const ERR_MARKET_NOT_OPEN: &str = "Market is not open for betting";
-pub const ERR_MARKET_CLOSED: &str = "Market is closed";
+pub const ERR_MARKET_CLOSED: &str = "Cannot place bets after event start time";
 pub const ERR_MARKET_ALREADY_EXISTS: &str = "Market already exists";
 pub const ERR_MARKET_TIMESTAMP: &str = "Invalid closing timestamp";
 
