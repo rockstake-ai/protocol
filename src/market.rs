@@ -43,36 +43,43 @@ pub trait MarketModule:
 
         self.markets(market_id).set(&market);
 
-        self.close_market_proxy(self.blockchain().get_sc_address())
-            .close_market(market_id)
-            .async_call()
-            .with_callback(<Self as MarketModule>::callbacks(self).market_close_callback(market_id))
-            .call_and_exit();
+       self.schedule_market_close(market_id);
         
         // Emit event
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         Ok(market_id)
     }
-    #[proxy]
-    fn close_market_proxy(&self, sc_address: ManagedAddress) -> close_market::Proxy<Self::Api>;
+
+    fn schedule_market_close(&self, market_id: u64) {        
+        self.send()
+            .contract_call::<()>(self.blockchain().get_sc_address(), "closeMarket")
+            .async_call()
+            .with_callback(<Self as MarketModule>::callbacks(self).market_close_callback(market_id))
+            .call_and_exit()
+    }
 
     #[callback]
     fn market_close_callback(
         &self,
+        market_id: u64,
         #[call_result] result: ManagedAsyncCallResult<()>,
-        market_id: u64
     ) {
         match result {
             ManagedAsyncCallResult::Ok(_) => {
-                let _ = self.handle_expired_market(market_id);
-                self.market_auto_closed_event(
-                    market_id,
-                    self.blockchain().get_block_timestamp()
-                );
+                let current_timestamp = self.blockchain().get_block_timestamp();
+                let market = self.markets(market_id).get();
+                
+                if current_timestamp >= market.close_timestamp {
+                    let _ = self.handle_expired_market(market_id);
+                    self.market_auto_closed_event(
+                        market_id,
+                        current_timestamp
+                    );
+                }
             },
             ManagedAsyncCallResult::Err(_) => {
-                // Log error and emit event
+                // Retry logic could be implemented here
                 self.market_close_failed_event(market_id);
             }
         }
@@ -94,6 +101,7 @@ pub trait MarketModule:
 
         self.handle_expired_market(market_id)
     }
+
 
     // ... restul codului rămâne neschimbat ...
 
