@@ -32,21 +32,15 @@ pub trait ValidationModule:
         );
         Ok(())
     }
-
-    // fn validate_bet_type(&self, bet: &Bet<Self::Api>) -> SCResult<()> {
-    //     match bet.bet_type {
-    //         BetType::Lay => self.validate_lay_bet(bet),
-    //         BetType::Back => self.validate_back_bet(bet),
-    //     }
-    // }
-
-    fn validate_lay_bet(&self, liability: &BigUint,total_amount: &BigUint,odds: &BigUint) -> SCResult<(BigUint, BigUint)>{
+    
+    fn validate_lay_bet(&self, liability: &BigUint, total_amount: &BigUint, odds: &BigUint) -> SCResult<(BigUint, BigUint)> {
         require!(liability > &BigUint::zero(), ERR_LIABILITY_ZERO);
-
+        
         let stake = total_amount - liability;    
         let odds_minus_one = odds - &BigUint::from(100u32);
-        let stake_check = (liability.clone() * &BigUint::from(100u32)) / odds_minus_one;
-        require!(stake == stake_check, ERR_LIABILITY_TOTAL_AMOUNT);
+        let stake_check = (liability * &BigUint::from(100u32)) / odds_minus_one;
+        require!(&stake == &stake_check, ERR_LIABILITY_TOTAL_AMOUNT);
+        
         Ok((stake, liability.clone()))
     }
 

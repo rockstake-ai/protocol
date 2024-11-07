@@ -101,7 +101,7 @@ pub trait BetModule:
                 self.validate_back_bet(total_amount,liability)
             },
             BetType::Lay => {
-               self.validate_lay_bet(total_amount,liability,odds)
+               self.validate_lay_bet(liability,total_amount,odds)
             }
         }
     }
