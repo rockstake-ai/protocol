@@ -24,42 +24,50 @@ pub trait TrackerModule:
             let mut level = levels.get(i);
             
             if level.odds == bet.odd {
-                let match_amount = remaining.clone().min(level.total_stake.clone());
+                // For Back bets, we match against Lay liability
+                // For Lay bets, we match against Back stake
+                let match_amount = match bet.bet_type {
+                    BetType::Back => {
+                        // Când un Back întâlnește un Lay, se uită la liability-ul disponibil
+                        remaining.clone().min(level.total_stake.clone())
+                    },
+                    BetType::Lay => {
+                        // Când un Lay întâlnește un Back, se uită la stake-ul disponibil
+                        bet.liability.clone().min(level.total_stake.clone())
+                    }
+                };
                 
                 if match_amount > BigUint::zero() {
                     matched_amount += &match_amount;
                     remaining -= &match_amount;
                     level.total_stake -= &match_amount;
-
+    
+                    // Update matched bets
                     let mut updated_nonces = ManagedVec::new();
                     for nonce in level.bet_nonces.iter() {
                         let mut matched_bet = self.bet_by_id(nonce).get();
                         if matched_bet.unmatched_amount > BigUint::zero() {
-                            let bet_match = matched_bet.unmatched_amount.clone().min(match_amount.clone());
+                            let match_this_bet = matched_bet.unmatched_amount.clone().min(match_amount.clone());
                             
-                            if bet_match > BigUint::zero() {
-                                matched_bet.matched_amount += &bet_match;
-                                matched_bet.unmatched_amount -= &bet_match;
+                            if match_this_bet > BigUint::zero() {
+                                matched_bet.matched_amount += &match_this_bet;
+                                matched_bet.unmatched_amount -= &match_this_bet;
                                 
                                 matched_bet.status = if matched_bet.unmatched_amount == BigUint::zero() {
-                                    self.selection_matched_count(bet.event, bet.selection.selection_id)
-                                        .update(|val| *val += 1);
                                     BetStatus::Matched
                                 } else {
-                                    self.selection_partially_matched_count(bet.event, bet.selection.selection_id)
-                                        .update(|val| *val += 1);
                                     BetStatus::PartiallyMatched
                                 };
                                 
                                 self.bet_by_id(nonce).set(&matched_bet);
-
+    
                                 if matched_bet.unmatched_amount > BigUint::zero() {
                                     updated_nonces.push(nonce);
                                 }
                             }
                         }
                     }
-
+    
                     if !updated_nonces.is_empty() {
                         level.bet_nonces = updated_nonces;
                         let _ = levels.set(i, &level);
@@ -70,7 +78,6 @@ pub trait TrackerModule:
                             let _ = levels.set(i, &last);
                         }
                         levels.remove(levels.len() - 1);
-                        continue;
                     }
                 } else {
                     i += 1;
@@ -79,7 +86,7 @@ pub trait TrackerModule:
                 i += 1;
             }
         }
-
+        
         // Update opposite side levels
         match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.selection_id).set(&levels),
