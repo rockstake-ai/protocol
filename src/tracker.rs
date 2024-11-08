@@ -12,27 +12,22 @@ pub trait TrackerModule:
         let mut matched_amount = BigUint::zero();
         let mut remaining = bet.stake_amount.clone();
 
-        // Get opposite levels for matching
         let mut levels = match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.selection_id).get(),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.selection_id).get(),
         };
 
-        // Match against existing orders
         let mut i = 0;
         while i < levels.len() && remaining > BigUint::zero() {
             let mut level = levels.get(i);
             
             if level.odds == bet.odd {
-                // For Back bets, we match against Lay liability
-                // For Lay bets, we match against Back stake
+            
                 let match_amount = match bet.bet_type {
                     BetType::Back => {
-                        // Când un Back întâlnește un Lay, se uită la liability-ul disponibil
                         remaining.clone().min(level.total_stake.clone())
                     },
                     BetType::Lay => {
-                        // Când un Lay întâlnește un Back, se uită la stake-ul disponibil
                         bet.liability.clone().min(level.total_stake.clone())
                     }
                 };
@@ -87,7 +82,6 @@ pub trait TrackerModule:
             }
         }
         
-        // Update opposite side levels
         match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.selection_id).set(&levels),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.selection_id).set(&levels),
@@ -203,6 +197,39 @@ pub trait TrackerModule:
         }
     }
 
+    fn update_total_matched(
+        &self,
+        market_id: u64,
+        selection_id: u64,
+        matched_amount: &BigUint
+    ) {
+        self.total_matched_amount(market_id, selection_id)
+            .update(|total| *total += matched_amount);
+    }
+
+    fn count_valid_bets_at_level(&self, level: &PriceLevel<Self::Api>) -> u32 {
+        let mut count = 0u32;
+        let mut processed_bettors = ManagedVec::<Self::Api, ManagedAddress<Self::Api>>::new();
+        
+        for nonce in level.bet_nonces.iter() {
+            let bet = self.bet_by_id(nonce).get();
+            if bet.unmatched_amount > BigUint::zero() {
+                let mut is_unique = true;
+                for processed_bettor in processed_bettors.iter() {
+                    if bet.bettor == *processed_bettor {
+                        is_unique = false;
+                        break;
+                    }
+                }
+                if is_unique {
+                    count += 1;
+                    processed_bettors.push(bet.bettor);
+                }
+            }
+        }
+        count
+    }
+
     #[view(getMatchingDetails)]
     fn get_matching_details(
         &self,
@@ -234,29 +261,6 @@ pub trait TrackerModule:
         }
         
         result
-    }
-
-    fn count_valid_bets_at_level(&self, level: &PriceLevel<Self::Api>) -> u32 {
-        let mut count = 0u32;
-        let mut processed_bettors = ManagedVec::<Self::Api, ManagedAddress<Self::Api>>::new();
-        
-        for nonce in level.bet_nonces.iter() {
-            let bet = self.bet_by_id(nonce).get();
-            if bet.unmatched_amount > BigUint::zero() {
-                let mut is_unique = true;
-                for processed_bettor in processed_bettors.iter() {
-                    if bet.bettor == *processed_bettor {
-                        is_unique = false;
-                        break;
-                    }
-                }
-                if is_unique {
-                    count += 1;
-                    processed_bettors.push(bet.bettor);
-                }
-            }
-        }
-        count
     }
 
     #[view(getBetMatchingState)]
@@ -301,15 +305,5 @@ pub trait TrackerModule:
         let matched_count = self.selection_matched_count(market_id, selection_id).get() as u32;
         let total_matched = self.total_matched_amount(market_id, selection_id).get();
         (matched_count, total_matched)
-    }
-
-    fn update_total_matched(
-        &self,
-        market_id: u64,
-        selection_id: u64,
-        matched_amount: &BigUint
-    ) {
-        self.total_matched_amount(market_id, selection_id)
-            .update(|total| *total += matched_amount);
     }
 }

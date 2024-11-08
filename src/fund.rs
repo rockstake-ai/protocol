@@ -11,17 +11,10 @@ pub trait FundModule:
     fn handle_expired_market(&self, market_id: u64) -> SCResult<()> {
         let mut market = self.markets(market_id).get();
         
-        // Actualizăm statusul market-ului
         market.market_status = MarketStatus::Closed;
         self.markets(market_id).set(&market);
-
-        // Distribuim recompensele pentru pariurile câștigătoare
         self.process_winning_bets(market_id)?;
-        
-        // Procesăm toate pariurile unmatched
         self.process_unmatched_bets(market_id)?;
-
-        // Emitem event pentru market expirat
         self.market_closed_event(
             market_id,
             self.blockchain().get_block_timestamp()
@@ -34,7 +27,6 @@ pub trait FundModule:
         let market = self.markets(market_id).get();
         
         for selection in market.selections.iter() {
-            // Procesăm back bets câștigătoare
             let back_levels = self.selection_back_levels(market_id, selection.selection_id).get();
             for level in back_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
@@ -64,7 +56,6 @@ pub trait FundModule:
         let market = self.markets(market_id).get();
         
         for selection in market.selections.iter() {
-            // Procesăm back bets unmatched
             let back_levels = self.selection_back_levels(market_id, selection.selection_id).get();
             for level in back_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
@@ -72,7 +63,6 @@ pub trait FundModule:
                 }
             }
 
-            // Procesăm lay bets unmatched
             let lay_levels = self.selection_lay_levels(market_id, selection.selection_id).get();
             for level in lay_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
@@ -80,7 +70,6 @@ pub trait FundModule:
                 }
             }
 
-            // Resetăm levels și lichiditate
             self.selection_back_levels(market_id, selection.selection_id)
                 .set(&ManagedVec::new());
             self.selection_lay_levels(market_id, selection.selection_id)
@@ -100,7 +89,7 @@ pub trait FundModule:
         if bet.unmatched_amount > BigUint::zero() {
             let refund_amount = match bet.bet_type {
                 BetType::Back => bet.unmatched_amount.clone(),
-                BetType::Lay => bet.unmatched_amount.clone() // Returnăm direct stake-ul unmatched
+                BetType::Lay => bet.unmatched_amount.clone() 
             };
     
             if refund_amount > BigUint::zero() {
@@ -161,12 +150,4 @@ pub trait FundModule:
 
         Ok(())
     }
-
-    #[event("bet_refunded")]
-    fn bet_refunded_event(
-        &self,
-        #[indexed] bet_id: u64,
-        #[indexed] bettor: &ManagedAddress,
-        #[indexed] amount: &BigUint,
-    );
 }
