@@ -82,5 +82,8 @@ pub trait StorageModule {
         user: &ManagedAddress<Self::Api>
     ) -> SingleValueMapper<BigUint>;
 
+    #[storage_mapper("marketsByEvent")]
+    fn markets_by_event(&self, event_id: u64) -> SingleValueMapper<ManagedVec<u64>>;
+
 }
 
