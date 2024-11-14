@@ -193,9 +193,9 @@ pub trait FundModule:
                 if score_home > score_away {
                     Ok(1) // Home win
                 } else if score_home < score_away {
-                    Ok(3) // Away win
+                    Ok(2) // Away win
                 } else {
-                    Ok(2) // Draw
+                    Ok(3) // Draw
                 }
             },
             b"Total Goals O/U 2.5" => {
