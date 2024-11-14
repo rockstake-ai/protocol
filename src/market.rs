@@ -17,17 +17,17 @@ pub trait MarketModule:
         &self,
         event_id: u64,
         description: ManagedBuffer,
-        selection_descriptions: ManagedVec<ManagedBuffer>,
+        selection_values: ManagedVec<u64>,
         close_timestamp: u64
     ) -> SCResult<u64> {
         // Validări
-        self.validate_market_creation(close_timestamp, &selection_descriptions)?;
+        self.validate_market_creation(close_timestamp)?;
         
         // Obținem următorul ID valid
         let market_id = self.get_and_validate_next_market_id()?;
         
         // Creăm selecțiile
-        let selections = self.create_selections(market_id, selection_descriptions)?;
+        let selections = self.create_selections(market_id, selection_values)?;
 
         let market = Market {
             market_id,
@@ -77,24 +77,19 @@ pub trait MarketModule:
     fn create_selections(
         &self,
         market_id: u64,
-        descriptions: ManagedVec<ManagedBuffer>
+        descriptions: ManagedVec<u64>
     ) -> SCResult<ManagedVec<Selection<Self::Api>>> {
         let mut selections = ManagedVec::new();
-        
-        for (index, desc) in descriptions.iter().enumerate() {
-            let selection_id = (index + 1) as u64;
-            
-            self.init_selection_storage(market_id, selection_id);
-            
-            let tracker = self.selection_tracker(market_id, selection_id).get();
-
+        for (index, value) in descriptions.iter().enumerate() {
+            let id = (index + 1) as u64;
+            self.init_selection_storage(market_id, id);
+            let tracker = self.selection_tracker(market_id, id).get();
             selections.push(Selection {
-                selection_id,
-                description: desc.as_ref().clone_value(),
+                id,
+                value: value,
                 priority_queue: tracker,
             });
         }
-        
         Ok(selections)
     }
 
@@ -146,7 +141,7 @@ pub trait MarketModule:
         selection_id: u64
     ) -> SCResult<Selection<Self::Api>> {
         let selection = market.selections.iter()
-            .find(|s| s.selection_id == selection_id)
+            .find(|s| s.id == selection_id)
             .ok_or("Selection not found")?;
         Ok(selection)
     }

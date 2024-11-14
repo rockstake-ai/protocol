@@ -13,8 +13,8 @@ pub trait TrackerModule:
         let mut remaining = bet.stake_amount.clone();
 
         let mut levels = match bet.bet_type {
-            BetType::Back => self.selection_lay_levels(bet.event, bet.selection.selection_id).get(),
-            BetType::Lay => self.selection_back_levels(bet.event, bet.selection.selection_id).get(),
+            BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).get(),
+            BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).get(),
         };
 
         let mut i = 0;
@@ -83,8 +83,8 @@ pub trait TrackerModule:
         }
         
         match bet.bet_type {
-            BetType::Back => self.selection_lay_levels(bet.event, bet.selection.selection_id).set(&levels),
-            BetType::Lay => self.selection_back_levels(bet.event, bet.selection.selection_id).set(&levels),
+            BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).set(&levels),
+            BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).set(&levels),
         }
 
         // Update bet state
@@ -92,21 +92,21 @@ pub trait TrackerModule:
         bet.unmatched_amount = remaining.clone();
         
         bet.status = if remaining == BigUint::zero() {
-            self.selection_matched_count(bet.event, bet.selection.selection_id)
+            self.selection_matched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::Matched
         } else if matched_amount > BigUint::zero() {
-            self.selection_partially_matched_count(bet.event, bet.selection.selection_id)
+            self.selection_partially_matched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::PartiallyMatched
         } else {
-            self.selection_unmatched_count(bet.event, bet.selection.selection_id)
+            self.selection_unmatched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::Unmatched
         };
 
         if matched_amount > BigUint::zero() {
-            self.update_total_matched(bet.event, bet.selection.selection_id, &matched_amount);
+            self.update_total_matched(bet.event, bet.selection.id, &matched_amount);
         }
         
         if remaining > BigUint::zero() {
@@ -120,8 +120,8 @@ pub trait TrackerModule:
 
     fn add_to_orderbook(&self, bet: &Bet<Self::Api>) {
         let mut levels = match bet.bet_type {
-            BetType::Back => self.selection_back_levels(bet.event, bet.selection.selection_id).get(),
-            BetType::Lay => self.selection_lay_levels(bet.event, bet.selection.selection_id).get(),
+            BetType::Back => self.selection_back_levels(bet.event, bet.selection.id).get(),
+            BetType::Lay => self.selection_lay_levels(bet.event, bet.selection.id).get(),
         };
 
         let mut level_index = Option::<usize>::None;
@@ -185,13 +185,13 @@ pub trait TrackerModule:
 
         match bet.bet_type {
             BetType::Back => {
-                self.selection_back_levels(bet.event, bet.selection.selection_id).set(&levels);
-                self.selection_back_liquidity(bet.event, bet.selection.selection_id)
+                self.selection_back_levels(bet.event, bet.selection.id).set(&levels);
+                self.selection_back_liquidity(bet.event, bet.selection.id)
                     .update(|val| *val = levels.iter().fold(BigUint::zero(), |acc, level| acc + &level.total_stake));
             },
             BetType::Lay => {
-                self.selection_lay_levels(bet.event, bet.selection.selection_id).set(&levels);
-                self.selection_lay_liquidity(bet.event, bet.selection.selection_id)
+                self.selection_lay_levels(bet.event, bet.selection.id).set(&levels);
+                self.selection_lay_liquidity(bet.event, bet.selection.id)
                     .update(|val| *val = levels.iter().fold(BigUint::zero(), |acc, level| acc + &level.total_stake));
             },
         }

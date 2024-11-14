@@ -121,7 +121,7 @@ pub trait BetModule:
         let market = self.markets(market_id).get();
         let selection = market.selections
             .iter()
-            .find(|s| s.selection_id == selection_id)
+            .find(|s| s.id == selection_id)
             .ok_or(ERR_INVALID_SELECTION)?
             .clone();
         let bet_id = self.get_last_bet_id() + 1;
@@ -175,7 +175,7 @@ pub trait BetModule:
         let selection_index = market
             .selections
             .iter()
-            .position(|s| s.selection_id == selection_id)
+            .position(|s| s.id == selection_id)
             .ok_or(ERR_INVALID_SELECTION)?;
         
         let mut selection = market.selections.get(selection_index);
@@ -227,7 +227,7 @@ pub trait BetModule:
             &bet.bettor,
             self.bet_nft_token().get_token_id_ref(),
             &bet.event,
-            &bet.selection.selection_id,
+            &bet.selection.id,
             &bet.stake_amount,
             &bet.odd,
             bet.bet_type,

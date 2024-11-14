@@ -75,8 +75,8 @@ pub struct Market<M: ManagedTypeApi> {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Selection<M: ManagedTypeApi> {
-    pub selection_id: u64,
-    pub description: ManagedBuffer<M>,
+    pub id: u64,
+    pub value: u64,
     pub priority_queue: Tracker<M>,
 }
 

@@ -27,7 +27,7 @@ pub trait FundModule:
         let market = self.markets(market_id).get();
         
         for selection in market.selections.iter() {
-            let back_levels = self.selection_back_levels(market_id, selection.selection_id).get();
+            let back_levels = self.selection_back_levels(market_id, selection.id).get();
             for level in back_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
                     let bet = self.bet_by_id(bet_nonce).get();
@@ -38,7 +38,7 @@ pub trait FundModule:
             }
 
             // Procesăm lay bets câștigătoare
-            let lay_levels = self.selection_lay_levels(market_id, selection.selection_id).get();
+            let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
             for level in lay_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
                     let bet = self.bet_by_id(bet_nonce).get();
@@ -56,27 +56,27 @@ pub trait FundModule:
         let market = self.markets(market_id).get();
         
         for selection in market.selections.iter() {
-            let back_levels = self.selection_back_levels(market_id, selection.selection_id).get();
+            let back_levels = self.selection_back_levels(market_id, selection.id).get();
             for level in back_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
                     self.process_unmatched_bet(bet_nonce)?;
                 }
             }
 
-            let lay_levels = self.selection_lay_levels(market_id, selection.selection_id).get();
+            let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
             for level in lay_levels.iter() {
                 for bet_nonce in level.bet_nonces.iter() {
                     self.process_unmatched_bet(bet_nonce)?;
                 }
             }
 
-            self.selection_back_levels(market_id, selection.selection_id)
+            self.selection_back_levels(market_id, selection.id)
                 .set(&ManagedVec::new());
-            self.selection_lay_levels(market_id, selection.selection_id)
+            self.selection_lay_levels(market_id, selection.id)
                 .set(&ManagedVec::new());
-            self.selection_back_liquidity(market_id, selection.selection_id)
+            self.selection_back_liquidity(market_id, selection.id)
                 .set(&BigUint::zero());
-            self.selection_lay_liquidity(market_id, selection.selection_id)
+            self.selection_lay_liquidity(market_id, selection.id)
                 .set(&BigUint::zero());
         }
 
@@ -223,12 +223,12 @@ pub trait FundModule:
         winning_selection: u64
     ) -> SCResult<()> {
         for selection in selections.iter() {
-            let is_winning = selection.selection_id == winning_selection;
-            self.process_all_bets(market_id, selection.selection_id, is_winning)?;
+            let is_winning = selection.id == winning_selection;
+            self.process_all_bets(market_id, selection.id, is_winning)?;
             
             // Cleanup
-            self.selection_back_levels(market_id, selection.selection_id).clear();
-            self.selection_lay_levels(market_id, selection.selection_id).clear();
+            self.selection_back_levels(market_id, selection.id).clear();
+            self.selection_lay_levels(market_id, selection.id).clear();
         }
         Ok(())
     }

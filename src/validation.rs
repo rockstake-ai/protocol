@@ -59,10 +59,8 @@ pub trait ValidationModule:
     fn validate_market_creation(
         &self,
         close_timestamp: u64,
-        selection_descriptions: &ManagedVec<ManagedBuffer>,
     ) -> SCResult<()> {
         self.validate_market_timestamp(close_timestamp)?;
-        self.validate_total_selections(selection_descriptions)?;
         Ok(())
     }
 
@@ -70,18 +68,6 @@ pub trait ValidationModule:
         require!(
             close_timestamp > self.blockchain().get_block_timestamp(),
             ERR_MARKET_TIMESTAMP
-        );
-        Ok(())
-    }
-
-    fn validate_total_selections(
-        &self,
-        selection_descriptions: &ManagedVec<ManagedBuffer>
-    ) -> SCResult<()> {
-        require!(!selection_descriptions.is_empty(), "No selections provided");
-        require!(
-            selection_descriptions.len() <= constants::MAX_SELECTIONS,
-            ERR_TOO_MANY_SELECTIONS
         );
         Ok(())
     }
@@ -119,7 +105,7 @@ pub trait ValidationModule:
         let selection_exists = market
             .selections
             .iter()
-            .any(|s| s.selection_id == selection_id);
+            .any(|s| s.id == selection_id);
         require!(selection_exists, ERR_INVALID_SELECTION);
         Ok(())
     }
