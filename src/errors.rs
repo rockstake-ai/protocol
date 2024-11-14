@@ -5,7 +5,6 @@ pub const ERR_MARKET_ALREADY_EXISTS: &str = "Market already exists";
 pub const ERR_MARKET_TIMESTAMP: &str = "Invalid closing timestamp";
 
 pub const ERR_TOO_MANY_SELECTIONS: &str= "Too many selections";
-pub const ERR_SELECTION_DESC_LENGTH: &str= "Invalid selection description length";
 pub const ERR_INVALID_SELECTION: &str= "Invalid selection ID";
 
 pub const ERR_STAKE_OUT_OF_RANGE : &str = "Stake amount outside allowed range";

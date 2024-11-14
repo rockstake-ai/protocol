@@ -1,5 +1,5 @@
 use crate::constants::constants;
-use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_SELECTION_DESC_LENGTH, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
+use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
 use crate::types::{Market, MarketStatus};
 
 multiversx_sc::imports!();
@@ -62,7 +62,7 @@ pub trait ValidationModule:
         selection_descriptions: &ManagedVec<ManagedBuffer>,
     ) -> SCResult<()> {
         self.validate_market_timestamp(close_timestamp)?;
-        self.validate_selection_descriptions(selection_descriptions)?;
+        self.validate_total_selections(selection_descriptions)?;
         Ok(())
     }
 
@@ -74,7 +74,7 @@ pub trait ValidationModule:
         Ok(())
     }
 
-    fn validate_selection_descriptions(
+    fn validate_total_selections(
         &self,
         selection_descriptions: &ManagedVec<ManagedBuffer>
     ) -> SCResult<()> {
@@ -83,14 +83,6 @@ pub trait ValidationModule:
             selection_descriptions.len() <= constants::MAX_SELECTIONS,
             ERR_TOO_MANY_SELECTIONS
         );
-
-        for desc in selection_descriptions.iter() {
-            require!(
-                desc.len() >= constants::MIN_DESCRIPTION_LENGTH &&
-                desc.len() <= constants::MAX_DESCRIPTION_LENGTH,
-                ERR_SELECTION_DESC_LENGTH
-            );
-        }
         Ok(())
     }
 
