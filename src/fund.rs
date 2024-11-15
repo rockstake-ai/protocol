@@ -241,7 +241,7 @@ pub trait FundModule:
     ) -> SCResult<()> {
         let back_levels = self.selection_back_levels(market_id, selection_id).get();
         let lay_levels = self.selection_lay_levels(market_id, selection_id).get();
-
+    
         for level in back_levels.iter().chain(lay_levels.iter()) {
             for bet_nonce in level.bet_nonces.iter() {
                 let mut bet = self.bet_by_id(bet_nonce).get();
@@ -251,15 +251,15 @@ pub trait FundModule:
                     } else {
                         !is_winning
                     };
-
+    
                     if is_bet_winning {
                         bet.status = BetStatus::Win;
                         let amount = if bet.bet_type == BetType::Back {
-                            bet.potential_profit.clone()
+                            &bet.matched_amount + &bet.matched_amount
                         } else {
-                            &bet.liability - &bet.potential_profit
+                            bet.matched_amount.clone()
                         };
-
+    
                         self.send().direct(
                             &bet.bettor,
                             &bet.payment_token,
@@ -274,7 +274,7 @@ pub trait FundModule:
                 }
             }
         }
-
+    
         Ok(())
     }
 }
