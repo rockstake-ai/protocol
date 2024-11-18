@@ -69,6 +69,14 @@ pub trait EventsModule {
         #[indexed] current_counter: &u64,
     );
 
+    #[event("marketSettled")]
+    fn market_settled_event(
+        &self,
+        #[indexed] market_id: u64,
+        #[indexed] winning_selection: u64,
+        #[indexed] current_counter: u64,
+    );
+
     #[event("bet_refunded")]
     fn bet_refunded_event(
         &self,

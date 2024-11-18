@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, Market, MarketStatus, Selection};
+use crate::types::{Bet, BetStatus, BetType, MarketStatus, Selection};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -161,14 +161,13 @@ pub trait FundModule:
             let (event_id, score_home, score_away) = result.into_tuple();
             let markets = self.markets_by_event(event_id).get();
             
-            // Procesăm fiecare piață asociată evenimentului
             for market_id in markets.iter() {
                 let mut market = self.markets(market_id).get();
-                if market.market_status != MarketStatus::Closed {
-                    continue;
-                }
+                require!(
+                    market.market_status == MarketStatus::Closed,
+                    "Market must be closed first"
+                );
 
-                // Determinăm selecția câștigătoare bazată pe tipul pieței
                 let winning_selection = match market.description.to_boxed_bytes().as_slice() {
                     b"FullTime Result" => {
                         if score_home > score_away {
@@ -193,10 +192,9 @@ pub trait FundModule:
                             2u64 // No
                         }
                     },
-                    _ => continue, // Skip invalid market types
+                    _ => continue,
                 };
 
-                // Procesăm pariurile pentru fiecare selecție
                 for selection in market.selections.iter() {
                     let is_winning = selection.id == winning_selection;
                     
@@ -208,12 +206,20 @@ pub trait FundModule:
                             if bet.matched_amount > BigUint::zero() {
                                 if is_winning {
                                     bet.status = BetStatus::Win;
-                                    // Distribuim câștigul: stake + profit
+                                    // Pentru Back câștigător: primește stake + profit
+                                    let total_win = &bet.matched_amount + &bet.potential_profit;
+                                    
                                     self.send().direct(
                                         &bet.bettor,
                                         &bet.payment_token,
                                         bet.payment_nonce,
-                                        &(&bet.matched_amount + &bet.potential_profit)
+                                        &total_win
+                                    );
+                                    
+                                    self.reward_distributed_event(
+                                        bet.nft_nonce,
+                                        &bet.bettor,
+                                        &total_win
                                     );
                                 } else {
                                     bet.status = BetStatus::Lost;
@@ -229,33 +235,45 @@ pub trait FundModule:
                         for bet_nonce in level.bet_nonces.iter() {
                             let mut bet = self.bet_by_id(bet_nonce).get();
                             if bet.matched_amount > BigUint::zero() {
-                                if !is_winning { // Pentru LAY, câștigăm când selecția pierde
+                                if !is_winning {
                                     bet.status = BetStatus::Win;
-                                    // Distribuim câștigul: profit
+                                    // Pentru Lay câștigător: primește stake-ul adversarului (matched_amount)
+                                    let winning_amount = bet.matched_amount.clone();
+                                    
                                     self.send().direct(
                                         &bet.bettor,
                                         &bet.payment_token,
                                         bet.payment_nonce,
-                                        &bet.matched_amount
+                                        &winning_amount
+                                    );
+                                    
+                                    self.reward_distributed_event(
+                                        bet.nft_nonce,
+                                        &bet.bettor,
+                                        &winning_amount
                                     );
                                 } else {
                                     bet.status = BetStatus::Lost;
+                                    // Nu trebuie să facem nimic aici - liability-ul e deja blocat
                                 }
                                 self.bet_by_id(bet_nonce).set(&bet);
                             }
                         }
                     }
 
-                    // Cleanup pentru nivelele de preț
+                    // Cleanup după procesare
                     self.selection_back_levels(market_id, selection.id).clear();
                     self.selection_lay_levels(market_id, selection.id).clear();
-                    self.selection_back_liquidity(market_id, selection.id).set(&BigUint::zero());
-                    self.selection_lay_liquidity(market_id, selection.id).set(&BigUint::zero());
                 }
 
-                // Actualizăm statusul pieței
                 market.market_status = MarketStatus::Settled;
                 self.markets(market_id).set(&market);
+                
+                self.market_settled_event(
+                    market_id,
+                    winning_selection,
+                    self.blockchain().get_block_timestamp()
+                );
             }
         }
         
