@@ -160,25 +160,105 @@ pub trait FundModule:
         for result in match_results {
             let (event_id, score_home, score_away) = result.into_tuple();
             let markets = self.markets_by_event(event_id).get();
-
+            
+            // Procesăm fiecare piață asociată evenimentului
             for market_id in markets.iter() {
                 let mut market = self.markets(market_id).get();
                 if market.market_status != MarketStatus::Closed {
                     continue;
                 }
 
-                let winning_selection = self.get_winning_selection(
-                    &market.description,
-                    score_home,
-                    score_away
-                )?;
+                // Determinăm selecția câștigătoare bazată pe tipul pieței
+                let winning_selection = match market.description.to_boxed_bytes().as_slice() {
+                    b"FullTime Result" => {
+                        if score_home > score_away {
+                            1u64 // Home win
+                        } else if score_home < score_away {
+                            2u64 // Away win
+                        } else {
+                            3u64 // Draw
+                        }
+                    },
+                    b"Total Goals O/U 2.5" => {
+                        if (score_home + score_away) > 2 {
+                            1u64 // Over
+                        } else {
+                            2u64 // Under
+                        }
+                    },
+                    b"Both Teams To Score" => {
+                        if score_home > 0 && score_away > 0 {
+                            1u64 // Yes
+                        } else {
+                            2u64 // No
+                        }
+                    },
+                    _ => continue, // Skip invalid market types
+                };
 
-                self.process_market_selections(market_id, &market.selections, winning_selection)?;
+                // Procesăm pariurile pentru fiecare selecție
+                for selection in market.selections.iter() {
+                    let is_winning = selection.id == winning_selection;
+                    
+                    // Procesăm pariurile BACK
+                    let back_levels = self.selection_back_levels(market_id, selection.id).get();
+                    for level in back_levels.iter() {
+                        for bet_nonce in level.bet_nonces.iter() {
+                            let mut bet = self.bet_by_id(bet_nonce).get();
+                            if bet.matched_amount > BigUint::zero() {
+                                if is_winning {
+                                    bet.status = BetStatus::Win;
+                                    // Distribuim câștigul: stake + profit
+                                    self.send().direct(
+                                        &bet.bettor,
+                                        &bet.payment_token,
+                                        bet.payment_nonce,
+                                        &(&bet.matched_amount + &bet.potential_profit)
+                                    );
+                                } else {
+                                    bet.status = BetStatus::Lost;
+                                }
+                                self.bet_by_id(bet_nonce).set(&bet);
+                            }
+                        }
+                    }
 
+                    // Procesăm pariurile LAY
+                    let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
+                    for level in lay_levels.iter() {
+                        for bet_nonce in level.bet_nonces.iter() {
+                            let mut bet = self.bet_by_id(bet_nonce).get();
+                            if bet.matched_amount > BigUint::zero() {
+                                if !is_winning { // Pentru LAY, câștigăm când selecția pierde
+                                    bet.status = BetStatus::Win;
+                                    // Distribuim câștigul: profit
+                                    self.send().direct(
+                                        &bet.bettor,
+                                        &bet.payment_token,
+                                        bet.payment_nonce,
+                                        &bet.matched_amount
+                                    );
+                                } else {
+                                    bet.status = BetStatus::Lost;
+                                }
+                                self.bet_by_id(bet_nonce).set(&bet);
+                            }
+                        }
+                    }
+
+                    // Cleanup pentru nivelele de preț
+                    self.selection_back_levels(market_id, selection.id).clear();
+                    self.selection_lay_levels(market_id, selection.id).clear();
+                    self.selection_back_liquidity(market_id, selection.id).set(&BigUint::zero());
+                    self.selection_lay_liquidity(market_id, selection.id).set(&BigUint::zero());
+                }
+
+                // Actualizăm statusul pieței
                 market.market_status = MarketStatus::Settled;
                 self.markets(market_id).set(&market);
             }
         }
+        
         Ok(())
     }
 
