@@ -20,15 +20,11 @@ pub trait MarketModule:
         selection_values: ManagedVec<u64>,
         close_timestamp: u64
     ) -> SCResult<u64> {
-        // Validări
         self.validate_market_creation(close_timestamp)?;
         
-        // Obținem următorul ID valid
         let market_id = self.get_and_validate_next_market_id()?;
-        
-        // Creăm selecțiile
         let selections = self.create_selections(market_id, selection_values)?;
-
+    
         let market = Market {
             market_id,
             event_id,
@@ -40,12 +36,15 @@ pub trait MarketModule:
             total_matched_amount: BigUint::zero(),
             created_at: self.blockchain().get_block_timestamp(),
         };
-
+    
         self.markets(market_id).set(&market);
         
-        // Emit event
+        self.markets_by_event(event_id).update(|markets| {
+            markets.push(market_id);
+        });
+    
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
-
+    
         Ok(market_id)
     }
 
