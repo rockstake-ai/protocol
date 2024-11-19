@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, MarketStatus, Selection};
+use crate::types::{Bet, BetStatus, BetType, MarketStatus, PriceLevel, Selection};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -151,11 +151,6 @@ pub trait FundModule:
         Ok(())
     }
 
-    // Map pentru a stoca rezultatele validării pentru fiecare selection ID
-    #[view(getSelectionValidationMap)]
-    #[storage_mapper("selectionValidationMap")]
-    fn selection_validation_map(&self) -> MapMapper<u64, bool>;
-
     #[only_owner]
     #[endpoint(validateMatchResults)]
     fn validate_match_results(
@@ -164,101 +159,163 @@ pub trait FundModule:
         score_home: u32,
         score_away: u32
     ) -> SCResult<()> {
-        let market_id = self.markets_by_event(event_id).get().get(0);
-        let mut market = self.markets(market_id).get();
-        require!(market.market_status == MarketStatus::Closed, "Market not closed");
+        // Get all markets for this event
+        let markets = self.markets_by_event(event_id).get();
+        
+        for market_id in markets.iter() {
+            let mut market = self.markets(market_id).get();
+            require!(
+                market.market_status == MarketStatus::Closed, 
+                "Market not closed"
+            );
 
-        // Validăm toate selecțiile într-o singură trecere
-        match market.description.to_boxed_bytes().as_slice() {
+            // Determine winning selections based on market type
+            let winning_selections = self.get_winning_selections(
+                &market.description,
+                score_home,
+                score_away
+            )?;
+
+            // Process each selection
+            for selection in market.selections.iter() {
+                let is_winning = winning_selections.contains(&selection.id);
+                
+                // Process back bets first
+                let back_levels = self.selection_back_levels(market_id, selection.id).get();
+                for level in back_levels.iter() {
+                    self.process_bets_at_level(
+                        &level,
+                        is_winning,
+                        BetType::Back
+                    )?;
+                }
+                self.selection_back_levels(market_id, selection.id).clear();
+
+                // Then process lay bets
+                let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
+                for level in lay_levels.iter() {
+                    self.process_bets_at_level(
+                        &level,
+                        is_winning,
+                        BetType::Lay
+                    )?;
+                }
+                self.selection_lay_levels(market_id, selection.id).clear();
+            }
+
+            market.market_status = MarketStatus::Settled;
+            self.markets(market_id).set(&market);
+        }
+        
+        Ok(())
+    }
+
+    fn get_winning_selections(
+        &self,
+        market_type: &ManagedBuffer,
+        score_home: u32,
+        score_away: u32
+    ) -> SCResult<ManagedVec<u64>> {
+        let mut winning_selections = ManagedVec::new();
+
+        match market_type.to_boxed_bytes().as_slice() {
             b"FullTime Result" => {
-                self.selection_validation_map().insert(1u64, score_home > score_away);
-                self.selection_validation_map().insert(2u64, score_home < score_away);
-                self.selection_validation_map().insert(3u64, score_home == score_away);
+                if score_home > score_away {
+                    winning_selections.push(1u64); // Home Win
+                } else if score_home < score_away {
+                    winning_selections.push(2u64); // Away Win
+                } else {
+                    winning_selections.push(3u64); // Draw
+                }
             },
             b"Total Goals O/U 2.5" => {
-                let total = score_home + score_away;
-                self.selection_validation_map().insert(1u64, total > 2);
-                self.selection_validation_map().insert(2u64, total <= 2);
+                if (score_home + score_away) > 2 {
+                    winning_selections.push(1u64); // Over
+                } else {
+                    winning_selections.push(2u64); // Under
+                }
             },
             b"Both Teams To Score" => {
-                self.selection_validation_map().insert(1u64, score_home > 0 && score_away > 0);
-                self.selection_validation_map().insert(2u64, score_home == 0 || score_away == 0);
+                if score_home > 0 && score_away > 0 {
+                    winning_selections.push(1u64); // Yes
+                } else {
+                    winning_selections.push(2u64); // No
+                }
             },
             _ => return sc_error!("Invalid market type")
         }
 
-        // Procesăm pariurile folosind rezultatele validate
-        self.process_all_selections(market_id)?;
-
-        market.market_status = MarketStatus::Settled;
-        self.markets(market_id).set(&market);
-        Ok(())
+        Ok(winning_selections)
     }
 
-    fn process_selection_bets(
+    fn process_bets_at_level(
         &self,
-        market_id: u64,
-        selection_id: u64,
-        is_winning: bool
+        level: &PriceLevel<Self::Api>,
+        is_winning: bool,
+        bet_type: BetType
     ) -> SCResult<()> {
-        let back_levels = self.selection_back_levels(market_id, selection_id).get();
-        for level in back_levels.iter() {
-            for bet_nonce in level.bet_nonces.iter() {
-                let mut bet = self.bet_by_id(bet_nonce).get();
-                if bet.matched_amount > BigUint::zero() {
-                    if is_winning {
-                        bet.status = BetStatus::Win;
-                        self.send().direct(
-                            &bet.bettor,
-                            &bet.payment_token,
-                            bet.payment_nonce,
-                            &(&bet.matched_amount + &bet.potential_profit)
-                        );
+        for bet_nonce in level.bet_nonces.iter() {
+            let mut bet = self.bet_by_id(bet_nonce).get();
+            
+            if bet.matched_amount > BigUint::zero() {
+                let should_win = match bet_type {
+                    BetType::Back => is_winning,
+                    BetType::Lay => !is_winning
+                };
+
+                if should_win {
+                    bet.status = BetStatus::Win;
+                    // Calculate payout based on bet type
+                    let payout = if bet_type == BetType::Back {
+                        &bet.matched_amount + &bet.potential_profit
                     } else {
-                        bet.status = BetStatus::Lost;
-                    }
-                    self.bet_by_id(bet_nonce).set(&bet);
+                        bet.matched_amount.clone()
+                    };
+
+                    self.send().direct(
+                        &bet.bettor,
+                        &bet.payment_token,
+                        bet.payment_nonce,
+                        &payout
+                    );
+
+                    self.reward_distributed_event(
+                        bet.nft_nonce,
+                        &bet.bettor,
+                        &payout
+                    );
+                } else {
+                    bet.status = BetStatus::Lost;
                 }
+                
+                self.bet_by_id(bet_nonce).set(&bet);
             }
         }
-
-        let lay_levels = self.selection_lay_levels(market_id, selection_id).get();
-        for level in lay_levels.iter() {
-            for bet_nonce in level.bet_nonces.iter() {
-                let mut bet = self.bet_by_id(bet_nonce).get();
-                if bet.matched_amount > BigUint::zero() {
-                    if !is_winning {
-                        bet.status = BetStatus::Win;
-                        self.send().direct(
-                            &bet.bettor,
-                            &bet.payment_token,
-                            bet.payment_nonce,
-                            &bet.matched_amount
-                        );
-                    } else {
-                        bet.status = BetStatus::Lost;
-                    }
-                    self.bet_by_id(bet_nonce).set(&bet);
-                }
-            }
-        }
-
-        // Cleanup
-        self.selection_back_levels(market_id, selection_id).clear();
-        self.selection_lay_levels(market_id, selection_id).clear();
 
         Ok(())
     }
 
-    fn process_all_selections(&self, market_id: u64) -> SCResult<()> {
-        let market = self.markets(market_id).get();
-        
-        for selection in market.selections.iter() {
-            let is_winning = self.selection_validation_map().get(&selection.id).unwrap_or_default();
-            self.process_selection_bets(market_id, selection.id, is_winning)?;
-            self.selection_validation_map().remove(&selection.id);
+    // Utility function to check if a market exists for an event
+    #[view(getMarketIdForEventAndType)]
+    fn get_market_id_for_event_and_type(
+        &self,
+        event_id: u64,
+        market_type: ManagedBuffer
+    ) -> Option<u64> {
+        let markets = self.markets_by_event(event_id).get();
+        for market_id in markets.iter() {
+            let market = self.markets(market_id).get();
+            if market.description == market_type {
+                return Some(market_id);
+            }
         }
-        Ok(())
+        None
+    }
+
+    // View function to get market status
+    #[view(getMarketStatus)]
+    fn get_market_status(&self, market_id: u64) -> MarketStatus {
+        self.markets(market_id).get().market_status
     }
 
     fn get_winning_selection(
