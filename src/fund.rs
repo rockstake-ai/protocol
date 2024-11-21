@@ -118,7 +118,6 @@ pub trait FundModule:
         Ok(())
     }
 
-    // Pasul 2: Procesăm pariurile în loturi
     #[endpoint(processBatchBets)]
     fn process_batch_bets(
         &self,
@@ -131,51 +130,90 @@ pub trait FundModule:
         );
 
         let winning_selection = self.winning_selection(market_id).get();
-        let mut current_index = self.current_processing_index(market_id).get();
-        let mut processed_in_batch = 0u64;
+        let mut processed_count = 0u64;
 
-        // Parcurgem fiecare selecție
         let market = self.markets(market_id).get();
         for selection in market.selections.iter() {
             let is_winning = selection.id == winning_selection;
 
-            // Procesăm back bets
-            processed_in_batch += self.process_selection_bets(
-                market_id,
-                selection.id,
-                is_winning,
-                true,
-                current_index,
-                batch_size
-            )?;
+            // Procesăm back levels
+            let back_levels = self.selection_back_levels(market_id, selection.id).get();
+            for level in back_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    if processed_count >= batch_size {
+                        return Ok(ProcessingStatus::InProgress);
+                    }
 
-            if processed_in_batch >= batch_size {
-                break;
+                    let mut bet = self.bet_by_id(bet_nonce).get();
+                    if bet.matched_amount > BigUint::zero() {
+                        if is_winning {
+                            bet.status = BetStatus::Win;
+                            // Pentru back bets câștigătoare, returnăm stake + profit
+                            let payout = &bet.matched_amount + &bet.potential_profit;
+
+                            self.send().direct(
+                                &bet.bettor,
+                                &bet.payment_token,
+                                bet.payment_nonce,
+                                &payout
+                            );
+
+                            self.reward_distributed_event(
+                                bet.nft_nonce,
+                                &bet.bettor,
+                                &payout
+                            );
+                        } else {
+                            bet.status = BetStatus::Lost;
+                        }
+                        
+                        self.bet_by_id(bet_nonce).set(&bet);
+                        processed_count += 1;
+                    }
+                }
             }
 
-            // Procesăm lay bets
-            processed_in_batch += self.process_selection_bets(
-                market_id,
-                selection.id,
-                is_winning,
-                false,
-                current_index,
-                batch_size - processed_in_batch
-            )?;
+            // Procesăm lay levels
+            let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
+            for level in lay_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    if processed_count >= batch_size {
+                        return Ok(ProcessingStatus::InProgress);
+                    }
 
-            if processed_in_batch >= batch_size {
-                break;
+                    let mut bet = self.bet_by_id(bet_nonce).get();
+                    if bet.matched_amount > BigUint::zero() {
+                        if !is_winning { // Pentru lay bets, câștigă când selecția pierde
+                            bet.status = BetStatus::Win;
+                            // Pentru lay bets câștigătoare, returnăm doar matched amount
+                            let payout = bet.matched_amount.clone();
+
+                            self.send().direct(
+                                &bet.bettor,
+                                &bet.payment_token,
+                                bet.payment_nonce,
+                                &payout
+                            );
+
+                            self.reward_distributed_event(
+                                bet.nft_nonce,
+                                &bet.bettor,
+                                &payout
+                            );
+                        } else {
+                            bet.status = BetStatus::Lost;
+                        }
+                        
+                        self.bet_by_id(bet_nonce).set(&bet);
+                        processed_count += 1;
+                    }
+                }
             }
         }
 
-        // Actualizăm indexul de procesare
-        if processed_in_batch > 0 {
-            current_index += processed_in_batch;
-            self.current_processing_index(market_id).set(current_index);
+        if processed_count > 0 {
             Ok(ProcessingStatus::InProgress)
         } else {
-            // Nu mai avem pariuri de procesat
-            self.current_processing_index(market_id).clear();
             Ok(ProcessingStatus::Completed)
         }
     }
