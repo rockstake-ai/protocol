@@ -110,12 +110,20 @@ pub enum MarketType {
 }
 
 impl MarketType {
-    fn from_u64(value: u64) -> SCResult<Self> {
+    pub fn from_u64(value: u64) -> SCResult<Self> {
         match value {
             1 => Ok(MarketType::FullTimeResult),
             2 => Ok(MarketType::TotalGoals),
             3 => Ok(MarketType::BothTeamsToScore),
             _ => sc_error!("Invalid market type")
+        }
+    }
+
+    pub fn to_description(&self) -> &[u8] {
+        match self {
+            MarketType::FullTimeResult => b"FullTime Result",
+            MarketType::TotalGoals => b"Total Goals O/U 2.5",
+            MarketType::BothTeamsToScore => b"Both Teams To Score",
         }
     }
 }
