@@ -95,8 +95,8 @@ pub trait FundModule:
         &self,
         event_id: u64,
         market_type_id: u64,
-        score_home: u32,
-        score_away: u32
+        score_home: u64,
+        score_away: u64
     ) -> SCResult<()> {
         let market_type = MarketType::from_u64(market_type_id)?;
         let market_id = self.get_market_id_for_event_and_type(event_id, &market_type)?;
@@ -188,8 +188,8 @@ pub trait FundModule:
     fn determine_winner(
         &self,
         market_type: &MarketType,
-        score_home: u32,
-        score_away: u32
+        score_home: u64,
+        score_away: u64
     ) -> SCResult<u64> {
         match market_type {
             MarketType::FullTimeResult => {
