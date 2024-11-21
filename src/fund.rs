@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, MarketStatus, MarketType, PriceLevel, Selection};
+use crate::types::{Bet, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -90,8 +90,8 @@ pub trait FundModule:
     }
 
     #[only_owner]
-    #[endpoint(validateMatchResults)]
-    fn validate_match_results(
+    #[endpoint(setMarketResult)]
+    fn set_market_result(
         &self,
         event_id: u64,
         market_type_id: u64,
@@ -99,179 +99,188 @@ pub trait FundModule:
         score_away: u32
     ) -> SCResult<()> {
         let market_type = MarketType::from_u64(market_type_id)?;
-        let market_id = self.find_market_by_type(event_id, &market_type)?;
-        
-        // Validăm și salvăm rezultatul
-        self.save_market_result(market_id, score_home, score_away)?;
-        
-        Ok(())
-    }
-
-    // Step 2: Găsim market-ul și validăm starea
-    fn find_market_by_type(
-        &self,
-        event_id: u64,
-        market_type: &MarketType,
-    ) -> SCResult<u64> {
-        let markets = self.markets_by_event(event_id).get();
-        for market_id in markets.iter() {
-            let market = self.markets(market_id).get();
-            require!(
-                market.market_status == MarketStatus::Closed,
-                "Market not closed"
-            );
-
-            let current_type = self.get_market_type(&market.description)?;
-            if current_type == *market_type {
-                return Ok(market_id);
-            }
-        }
-        sc_error!("Market not found")
-    }
-
-    // Step 3: Salvăm rezultatul pentru procesare ulterioară
-    fn save_market_result(
-        &self,
-        market_id: u64,
-        score_home: u32,
-        score_away: u32
-    ) -> SCResult<()> {
+        let market_id = self.get_market_id(event_id, market_type_id)?;
         let mut market = self.markets(market_id).get();
-        let market_type = self.get_market_type(&market.description)?;
         
-        let winning_selection = self.determine_winner(
-            &market_type,
-            score_home,
-            score_away
-        )?;
+        require!(market.market_status == MarketStatus::Closed, "Market not closed");
 
-        // Salvăm rezultatul pentru procesare ulterioară
-        self.market_results(market_id).set(winning_selection);
-        
-        // Marcăm market-ul pentru procesare
+        // Determinăm selecția câștigătoare și o salvăm
+        let winning_selection = self.determine_winner(market_type, score_home, score_away)?;
+        self.winning_selection(market_id).set(winning_selection);
+
+        // Inițializăm indexul de procesare pentru acest market
+        self.current_processing_index(market_id).set(0u64);
+
+        // Setăm statusul și numărul total de pariuri pentru tracking
         market.market_status = MarketStatus::Settled;
         self.markets(market_id).set(&market);
-        
-        // Adăugăm market-ul la coada de procesare
-        self.markets_to_process().push(&market_id);
-        
+
         Ok(())
     }
 
-    // Step 4: Procesăm un singur nivel de pariuri
-    #[endpoint(processBetLevel)]
-    fn process_bet_level(
+    // Pasul 2: Procesăm pariurile în loturi
+    #[endpoint(processBatchBets)]
+    fn process_batch_bets(
         &self,
         market_id: u64,
-        selection_id: u64,
-        is_back: bool
-    ) -> SCResult<()> {
+        batch_size: u64
+    ) -> SCResult<ProcessingStatus> {
         require!(
             self.markets(market_id).get().market_status == MarketStatus::Settled,
             "Market not settled"
         );
 
-        let winning_selection = self.market_results(market_id).get();
-        let is_winning = selection_id == winning_selection;
+        let winning_selection = self.winning_selection(market_id).get();
+        let mut current_index = self.current_processing_index(market_id).get();
+        let mut processed_in_batch = 0u64;
 
+        // Parcurgem fiecare selecție
+        let market = self.markets(market_id).get();
+        for selection in market.selections.iter() {
+            let is_winning = selection.id == winning_selection;
+
+            // Procesăm back bets
+            processed_in_batch += self.process_selection_bets(
+                market_id,
+                selection.id,
+                is_winning,
+                true,
+                current_index,
+                batch_size
+            )?;
+
+            if processed_in_batch >= batch_size {
+                break;
+            }
+
+            // Procesăm lay bets
+            processed_in_batch += self.process_selection_bets(
+                market_id,
+                selection.id,
+                is_winning,
+                false,
+                current_index,
+                batch_size - processed_in_batch
+            )?;
+
+            if processed_in_batch >= batch_size {
+                break;
+            }
+        }
+
+        // Actualizăm indexul de procesare
+        if processed_in_batch > 0 {
+            current_index += processed_in_batch;
+            self.current_processing_index(market_id).set(current_index);
+            Ok(ProcessingStatus::InProgress)
+        } else {
+            // Nu mai avem pariuri de procesat
+            self.current_processing_index(market_id).clear();
+            Ok(ProcessingStatus::Completed)
+        }
+    }
+
+    fn process_selection_bets(
+        &self,
+        market_id: u64,
+        selection_id: u64,
+        is_winning: bool,
+        is_back: bool,
+        start_index: u64,
+        max_to_process: u64
+    ) -> SCResult<u64> {
         let levels = if is_back {
             self.selection_back_levels(market_id, selection_id).get()
         } else {
             self.selection_lay_levels(market_id, selection_id).get()
         };
 
-        if !levels.is_empty() {
-            // Procesăm doar primul nivel
-            let level = levels.get(0);
-            self.process_single_level(
-                market_id,
-                selection_id,
-                &level,
-                is_winning,
-                is_back
-            )?;
+        let mut processed_count = 0u64;
 
-            // Actualizăm nivelurile rămase
-            let mut remaining_levels = ManagedVec::new();
-            for i in 1..levels.len() {
-                remaining_levels.push(levels.get(i));
-            }
-
-            if is_back {
-                self.selection_back_levels(market_id, selection_id).set(&remaining_levels);
-            } else {
-                self.selection_lay_levels(market_id, selection_id).set(&remaining_levels);
-            }
-        }
-
-        Ok(())
-    }
-
-    // Step 5: Procesăm pariurile dintr-un singur nivel
-    fn process_single_level(
-        &self,
-        market_id: u64,
-        selection_id: u64,
-        level: &PriceLevel<Self::Api>,
-        is_winning: bool,
-        is_back: bool
-    ) -> SCResult<()> {
-        for bet_nonce in level.bet_nonces.iter() {
-            let mut bet = self.bet_by_id(bet_nonce).get();
-            if bet.matched_amount > BigUint::zero() {
-                let should_win = if is_back { is_winning } else { !is_winning };
-
-                if should_win {
-                    bet.status = BetStatus::Win;
-                    let payout = if is_back {
-                        &bet.matched_amount + &bet.potential_profit
-                    } else {
-                        bet.matched_amount.clone()
-                    };
-
-                    self.send().direct(
-                        &bet.bettor,
-                        &bet.payment_token,
-                        bet.payment_nonce,
-                        &payout
-                    );
-
-                    self.reward_distributed_event(
-                        bet.nft_nonce,
-                        &bet.bettor,
-                        &payout
-                    );
-                } else {
-                    bet.status = BetStatus::Lost;
+        for level in levels.iter() {
+            for bet_nonce in level.bet_nonces.iter() {
+                if processed_count >= max_to_process {
+                    return Ok(processed_count);
                 }
-                
-                self.bet_by_id(bet_nonce).set(&bet);
+
+                let mut bet = self.bet_by_id(bet_nonce).get();
+                if bet.matched_amount > BigUint::zero() {
+                    let should_win = if is_back { is_winning } else { !is_winning };
+                    
+                    if should_win {
+                        bet.status = BetStatus::Win;
+                        
+                        // Calculăm și distribuim câștigul
+                        let payout = if is_back {
+                            &bet.matched_amount + &bet.potential_profit
+                        } else {
+                            bet.matched_amount.clone()
+                        };
+
+                        // Facem plata
+                        self.send().direct(
+                            &bet.bettor,
+                            &bet.payment_token,
+                            bet.payment_nonce,
+                            &payout
+                        );
+
+                        self.reward_distributed_event(
+                            bet.nft_nonce,
+                            &bet.bettor,
+                            &payout
+                        );
+                    } else {
+                        bet.status = BetStatus::Lost;
+                    }
+                    
+                    self.bet_by_id(bet_nonce).set(&bet);
+                    processed_count += 1;
+                }
             }
         }
 
-        Ok(())
+        Ok(processed_count)
     }
 
     // Storage mappers
-    #[storage_mapper("marketResults")]
-    fn market_results(&self, market_id: u64) -> SingleValueMapper<u64>;
+    #[storage_mapper("winningSelection")]
+    fn winning_selection(&self, market_id: u64) -> SingleValueMapper<u64>;
 
-    #[storage_mapper("marketsToProcess")]
-    fn markets_to_process(&self) -> VecMapper<u64>;
+    #[storage_mapper("currentProcessingIndex")]
+    fn current_processing_index(&self, market_id: u64) -> SingleValueMapper<u64>;
 
-    // Helpers
-    fn get_market_type(&self, description: &ManagedBuffer) -> SCResult<MarketType> {
-        match description.to_boxed_bytes().as_slice() {
-            b"FullTime Result" => Ok(MarketType::FullTimeResult),
-            b"Total Goals O/U 2.5" => Ok(MarketType::TotalGoals),
-            b"Both Teams To Score" => Ok(MarketType::BothTeamsToScore),
-            _ => sc_error!("Invalid market type")
+    // View functions pentru monitorizare
+    #[view(getProcessingProgress)]
+    fn get_processing_progress(&self, market_id: u64) -> ProcessingProgress {
+        let current_index = if self.current_processing_index(market_id).is_empty() {
+            0u64
+        } else {
+            self.current_processing_index(market_id).get()
+        };
+
+        ProcessingProgress {
+            market_id,
+            processed_bets: current_index,
+            status: if current_index > 0 { 
+                ProcessingStatus::InProgress 
+            } else { 
+                ProcessingStatus::Completed 
+            }
         }
     }
 
+    #[inline]
+    fn get_market_id(&self, event_id: u64, market_type_id: u64) -> SCResult<u64> {
+        let markets = self.markets_by_event(event_id).get();
+        require!(!markets.is_empty(), "No markets found");
+        Ok(markets.get(market_type_id as usize - 1))
+    }
+
+    #[inline]
     fn determine_winner(
         &self,
-        market_type: &MarketType,
+        market_type: MarketType,
         score_home: u32,
         score_away: u32
     ) -> SCResult<u64> {

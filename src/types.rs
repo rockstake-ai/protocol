@@ -127,6 +127,19 @@ impl MarketType {
         }
     }
 }
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
+pub enum ProcessingStatus {
+    InProgress,
+    Completed
+}
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
+pub struct ProcessingProgress {
+    pub market_id: u64,
+    pub processed_bets: u64,
+    pub status: ProcessingStatus
+}
 /// 
 
 
