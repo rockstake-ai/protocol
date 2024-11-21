@@ -101,6 +101,27 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub canceled_count: u64,
 }
 
+///
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
+pub enum MarketType {
+    FullTimeResult = 1,
+    TotalGoals = 2,
+    BothTeamsToScore = 3,
+}
+
+impl MarketType {
+    fn from_u64(value: u64) -> SCResult<Self> {
+        match value {
+            1 => Ok(MarketType::FullTimeResult),
+            2 => Ok(MarketType::TotalGoals),
+            3 => Ok(MarketType::BothTeamsToScore),
+            _ => sc_error!("Invalid market type")
+        }
+    }
+}
+/// 
+
+
 //Debugging
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct BetMatchingState<M: ManagedTypeApi> {
