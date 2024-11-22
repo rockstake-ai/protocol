@@ -145,6 +145,11 @@ pub trait MarketModule:
         Ok(selection)
     }
 
+    #[view(getMarketStatus)]
+    fn get_market_status(&self, market_id: u64) -> MarketStatus {
+        self.markets(market_id).get().market_status
+    }
+
     #[view(isMarketOpen)]
     fn is_market_open(&self, market_id: u64) -> bool {
         if self.markets(market_id).is_empty() {
