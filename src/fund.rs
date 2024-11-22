@@ -119,104 +119,100 @@ pub trait FundModule:
     }
 
     #[endpoint(processBatchBets)]
-    fn process_batch_bets(
-        &self,
-        market_id: u64,
-        batch_size: u64
-    ) -> SCResult<ProcessingStatus> {
-        require!(
-            self.markets(market_id).get().market_status == MarketStatus::Settled,
-            "Market not settled"
-        );
+fn process_batch_bets(
+    &self,
+    market_id: u64,
+    batch_size: u64
+) -> SCResult<ProcessingStatus> {
+    require!(
+        self.markets(market_id).get().market_status == MarketStatus::Settled,
+        "Market not settled"
+    );
 
-        let winning_selection = self.winning_selection(market_id).get();
-        let mut processed_count = 0u64;
+    let winning_selection = self.winning_selection(market_id).get();
+    let mut processed_count = 0u64;
 
-        let market = self.markets(market_id).get();
-        for selection in market.selections.iter() {
-            let is_winning = selection.id == winning_selection;
-
-            // Procesăm back levels
-            let back_levels = self.selection_back_levels(market_id, selection.id).get();
-            for level in back_levels.iter() {
-                for bet_nonce in level.bet_nonces.iter() {
-                    if processed_count >= batch_size {
-                        return Ok(ProcessingStatus::InProgress);
-                    }
-
-                    let mut bet = self.bet_by_id(bet_nonce).get();
-                    if bet.matched_amount > BigUint::zero() {
-                        if is_winning {
-                            bet.status = BetStatus::Win;
-                            // Pentru back bets câștigătoare, returnăm stake + profit
-                            let payout = &bet.matched_amount + &bet.potential_profit;
-
-                            self.send().direct(
-                                &bet.bettor,
-                                &bet.payment_token,
-                                bet.payment_nonce,
-                                &payout
-                            );
-
-                            self.reward_distributed_event(
-                                bet.nft_nonce,
-                                &bet.bettor,
-                                &payout
-                            );
-                        } else {
-                            bet.status = BetStatus::Lost;
-                        }
-                        
-                        self.bet_by_id(bet_nonce).set(&bet);
-                        processed_count += 1;
-                    }
+    let market = self.markets(market_id).get();
+    for selection in market.selections.iter() {
+        // Procesăm back levels
+        let back_levels = self.selection_back_levels(market_id, selection.id).get();
+        for level in back_levels.iter() {
+            for bet_nonce in level.bet_nonces.iter() {
+                if processed_count >= batch_size {
+                    return Ok(ProcessingStatus::InProgress);
                 }
-            }
 
-            // Procesăm lay levels
-            let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
-            for level in lay_levels.iter() {
-                for bet_nonce in level.bet_nonces.iter() {
-                    if processed_count >= batch_size {
-                        return Ok(ProcessingStatus::InProgress);
-                    }
-
-                    let mut bet = self.bet_by_id(bet_nonce).get();
-                    if bet.matched_amount > BigUint::zero() {
-                        if !is_winning { // Pentru lay bets, câștigă când selecția pierde
-                            bet.status = BetStatus::Win;
-                            // Pentru lay bets câștigătoare, returnăm doar matched amount
-                            let payout = bet.matched_amount.clone();
-
-                            self.send().direct(
-                                &bet.bettor,
-                                &bet.payment_token,
-                                bet.payment_nonce,
-                                &payout
-                            );
-
-                            self.reward_distributed_event(
-                                bet.nft_nonce,
-                                &bet.bettor,
-                                &payout
-                            );
-                        } else {
-                            bet.status = BetStatus::Lost;
-                        }
+                let mut bet = self.bet_by_id(bet_nonce).get();
+                if bet.matched_amount > BigUint::zero() {
+                    if selection.id == winning_selection {
+                        bet.status = BetStatus::Win;
+                        let payout = &bet.matched_amount + &bet.potential_profit;
                         
-                        self.bet_by_id(bet_nonce).set(&bet);
-                        processed_count += 1;
+                        self.send().direct(
+                            &bet.bettor,
+                            &bet.payment_token,
+                            bet.payment_nonce,
+                            &payout
+                        );
+
+                        self.reward_distributed_event(
+                            bet.nft_nonce,
+                            &bet.bettor,
+                            &payout
+                        );
+                    } else {
+                        bet.status = BetStatus::Lost;
                     }
+                    
+                    self.bet_by_id(bet_nonce).set(&bet);
+                    processed_count += 1;
                 }
             }
         }
 
-        if processed_count > 0 {
-            Ok(ProcessingStatus::InProgress)
-        } else {
-            Ok(ProcessingStatus::Completed)
+        // Procesăm lay levels similar
+        let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
+        for level in lay_levels.iter() {
+            for bet_nonce in level.bet_nonces.iter() {
+                if processed_count >= batch_size {
+                    return Ok(ProcessingStatus::InProgress);
+                }
+
+                let mut bet = self.bet_by_id(bet_nonce).get();
+                if bet.matched_amount > BigUint::zero() {
+                    if selection.id != winning_selection {
+                        bet.status = BetStatus::Win;
+                        let payout = bet.matched_amount.clone();
+                        
+                        self.send().direct(
+                            &bet.bettor,
+                            &bet.payment_token,
+                            bet.payment_nonce,
+                            &payout
+                        );
+
+                        self.reward_distributed_event(
+                            bet.nft_nonce,
+                            &bet.bettor,
+                            &payout
+                        );
+                    } else {
+                        bet.status = BetStatus::Lost;
+                    }
+                    
+                    self.bet_by_id(bet_nonce).set(&bet);
+                    processed_count += 1;
+                }
+            }
         }
     }
+
+    Ok(if processed_count > 0 {
+        ProcessingStatus::InProgress
+    } else {
+        ProcessingStatus::Completed
+    })
+}
 
     fn process_selection_bets(
         &self,
@@ -287,6 +283,35 @@ pub trait FundModule:
 
     #[storage_mapper("currentProcessingIndex")]
     fn current_processing_index(&self, market_id: u64) -> SingleValueMapper<u64>;
+
+    #[view(getWinningSelection)]
+    fn get_winning_selection(&self, market_id: u64) -> u64 {
+        self.winning_selection(market_id).get()
+    }
+
+    #[view(getMarketSettlementDetails)]
+    fn get_market_settlement_details(
+        &self,
+        market_id: u64
+    ) -> (u64, MarketStatus) {
+        let market = self.markets(market_id).get();
+        let winning_selection = if self.winning_selection(market_id).is_empty() {
+            0u64
+        } else {
+            self.winning_selection(market_id).get()
+        };
+        
+        (winning_selection, market.market_status)
+    }
+
+    #[view(getBetStatusDetails)]
+    fn get_bet_status_details(
+        &self,
+        bet_nonce: u64
+    ) -> (BetStatus, BigUint<Self::Api>, BigUint<Self::Api>) {
+        let bet = self.bet_by_id(bet_nonce).get();
+        (bet.status, bet.matched_amount, bet.potential_profit)
+    }
 
     // View functions pentru monitorizare
     #[view(getProcessingProgress)]
