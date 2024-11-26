@@ -53,35 +53,20 @@ pub trait FundModule:
         let mut bet = self.bet_by_id(bet_nonce).get();
         
         if bet.unmatched_amount > BigUint::zero() {
-            let refund_amount = match bet.bet_type {
-                BetType::Back => bet.unmatched_amount.clone(),
-                BetType::Lay => bet.unmatched_amount.clone()
-            };
+            let refund_amount = bet.unmatched_amount.clone();
+            
+            self.send().direct(
+                &bet.bettor,
+                &bet.payment_token,
+                bet.payment_nonce,
+                &refund_amount,
+            );
     
-            if refund_amount > BigUint::zero() {
-                let payment = EgldOrEsdtTokenPayment::new(
-                    bet.payment_token.clone(),
-                    bet.payment_nonce,
-                    refund_amount.clone(),
-                );
-    
-                self.send().direct(
-                    &bet.bettor,
-                    &payment.token_identifier,
-                    payment.token_nonce,
-                    &payment.amount,
-                );
-    
-                bet.status = BetStatus::Canceled;
-                bet.unmatched_amount = BigUint::zero();
-                self.bet_by_id(bet_nonce).set(&bet);
-    
-                self.bet_refunded_event(
-                    bet_nonce,
-                    &bet.bettor,
-                    &refund_amount
-                );
-            }
+            bet.unmatched_amount = BigUint::zero();
+            // Nu modificăm matched_amount!
+            
+            self.bet_by_id(bet_nonce).set(&bet);
+            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     
         Ok(())
