@@ -114,91 +114,71 @@ fn process_batch_bets(
 
     let winning_selection = self.winning_selection(market_id).get();
     let mut processed_count = 0u64;
-    let market = self.markets(market_id).get();
+    let current_index = self.current_processing_index(market_id).get();
+    let last_bet_id = self.blockchain().get_current_esdt_nft_nonce(
+        &self.blockchain().get_sc_address(),
+        self.bet_nft_token().get_token_id_ref(),
+    );
 
-    for selection in market.selections.iter() {
-        // Procesăm back levels
-        let back_levels = self.selection_back_levels(market_id, selection.id).get();
-        for level in back_levels.iter() {
-            for bet_nonce in level.bet_nonces.iter() {
-                if processed_count >= batch_size {
-                    return Ok(ProcessingStatus::InProgress);
-                }
-
-                let mut bet = self.bet_by_id(bet_nonce).get();
-                if bet.matched_amount > BigUint::zero() {
-                    // Pentru Back: câștigă dacă selection == winning_selection
-                    if bet.bet_type == BetType::Back {
-                        if selection.id == winning_selection {
-                            bet.status = BetStatus::Win;
-                            let payout = &bet.matched_amount + &bet.potential_profit;
-                            
-                            self.send().direct(
-                                &bet.bettor,
-                                &bet.payment_token,
-                                bet.payment_nonce,
-                                &payout
-                            );
-
-                            self.reward_distributed_event(
-                                bet.nft_nonce,
-                                &bet.bettor,
-                                &payout
-                            );
-                        } else {
-                            bet.status = BetStatus::Lost;
-                        }
-                    }
-                    self.bet_by_id(bet_nonce).set(&bet);
-                    processed_count += 1;
-                }
-            }
+    // Procesăm pariurile în ordine, începând de la current_index
+    for bet_id in current_index..last_bet_id + 1 {
+        if processed_count >= batch_size {
+            self.current_processing_index(market_id).set(bet_id);
+            return Ok(ProcessingStatus::InProgress);
         }
 
-        // Procesăm lay levels
-        let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
-        for level in lay_levels.iter() {
-            for bet_nonce in level.bet_nonces.iter() {
-                if processed_count >= batch_size {
-                    return Ok(ProcessingStatus::InProgress);
+        let mut bet = self.bet_by_id(bet_id).get();
+        if bet.matched_amount > BigUint::zero() {
+            // Pentru Back: câștigă dacă selection == winning_selection
+            if bet.bet_type == BetType::Back {
+                if bet.selection.id == winning_selection {
+                    bet.status = BetStatus::Win;
+                    let payout = &bet.matched_amount + &bet.potential_profit;
+                    
+                    self.send().direct(
+                        &bet.bettor,
+                        &bet.payment_token,
+                        bet.payment_nonce,
+                        &payout
+                    );
+
+                    self.reward_distributed_event(
+                        bet.nft_nonce,
+                        &bet.bettor,
+                        &payout
+                    );
+                } else {
+                    bet.status = BetStatus::Lost;
                 }
+            } else if bet.bet_type == BetType::Lay {
+                // Pentru Lay: câștigă dacă selection != winning_selection
+                if bet.selection.id != winning_selection {
+                    bet.status = BetStatus::Win;
+                    let payout = &bet.matched_amount + &bet.potential_profit;
+                    
+                    self.send().direct(
+                        &bet.bettor,
+                        &bet.payment_token,
+                        bet.payment_nonce,
+                        &payout
+                    );
 
-                let mut bet = self.bet_by_id(bet_nonce).get();
-                if bet.matched_amount > BigUint::zero() {
-                    // Pentru Lay: câștigă dacă selection != winning_selection
-                    if bet.bet_type == BetType::Lay {
-                        if selection.id != winning_selection {
-                            bet.status = BetStatus::Win;
-                            let payout = &bet.matched_amount + &bet.potential_profit;
-                            
-                            self.send().direct(
-                                &bet.bettor,
-                                &bet.payment_token,
-                                bet.payment_nonce,
-                                &payout
-                            );
-
-                            self.reward_distributed_event(
-                                bet.nft_nonce,
-                                &bet.bettor,
-                                &payout
-                            );
-                        } else {
-                            bet.status = BetStatus::Lost;
-                        }
-                    }
-                    self.bet_by_id(bet_nonce).set(&bet);
-                    processed_count += 1;
+                    self.reward_distributed_event(
+                        bet.nft_nonce,
+                        &bet.bettor,
+                        &payout
+                    );
+                } else {
+                    bet.status = BetStatus::Lost;
                 }
             }
+            self.bet_by_id(bet_id).set(&bet);
+            processed_count += 1;
         }
     }
 
-    Ok(if processed_count > 0 {
-        ProcessingStatus::InProgress
-    } else {
-        ProcessingStatus::Completed
-    })
+    self.current_processing_index(market_id).set(last_bet_id + 1);
+    Ok(ProcessingStatus::Completed)
 }
 
     fn process_selection_bets(
