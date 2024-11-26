@@ -181,7 +181,6 @@ fn process_batch_bets(
             processed_count += 1;
         }
     }
-
     Ok(ProcessingStatus::Completed)
 }
 
