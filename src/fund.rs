@@ -42,8 +42,6 @@ pub trait FundModule:
             }
 
             // Clear storage after processing
-            self.selection_back_levels(market_id, selection.id).clear();
-            self.selection_lay_levels(market_id, selection.id).clear();
             self.selection_back_liquidity(market_id, selection.id).set(&BigUint::zero());
             self.selection_lay_liquidity(market_id, selection.id).set(&BigUint::zero());
         }
