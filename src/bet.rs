@@ -199,6 +199,9 @@ pub trait BetModule:
         let bet_nft_nonce = self.mint_bet_nft(bet);
         self.bet_by_id(bet.nft_nonce).set(bet);
 
+        self.market_bet_ids(bet.event).insert(bet.nft_nonce);
+
+
         let total_locked = match bet_type {
             BetType::Back => unmatched_amount.clone(),
             BetType::Lay => liability.clone(),

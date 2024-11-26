@@ -8,6 +8,9 @@ pub trait StorageModule {
     #[storage_mapper("betById")]
     fn bet_by_id(&self, bet_id: u64) -> SingleValueMapper<Bet<Self::Api>>;
 
+    #[storage_mapper("marketBetIds")]
+    fn market_bet_ids(&self, market_id: u64) -> UnorderedSetMapper<u64>;
+
     #[storage_mapper("betNftToken")]
     fn bet_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
 
