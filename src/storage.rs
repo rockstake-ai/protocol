@@ -17,11 +17,9 @@ pub trait StorageModule {
     #[storage_mapper("betNftBaseUri")]
     fn bet_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
 
-    #[view(getMarketCounter)]
     #[storage_mapper("market_counter")]
     fn market_counter(&self) -> SingleValueMapper<u64>;
 
-    // Levels and liquidity
     #[storage_mapper("selection_back_levels")]
     fn selection_back_levels(&self, market_id: u64, selection_id: u64)
         -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
@@ -38,7 +36,6 @@ pub trait StorageModule {
     fn selection_lay_liquidity(&self, market_id: u64, selection_id: u64)
         -> SingleValueMapper<BigUint<Self::Api>>;
 
-    // Counters
     #[storage_mapper("selection_matched_count")]
     fn selection_matched_count(&self, market_id: u64, selection_id: u64)
         -> SingleValueMapper<u64>;
@@ -63,12 +60,10 @@ pub trait StorageModule {
     fn selection_canceled_count(&self, market_id: u64, selection_id: u64)
         -> SingleValueMapper<u64>;
 
-    // Tracker
     #[storage_mapper("selection_tracker")]
     fn selection_tracker(&self, market_id: u64, selection_id: u64)
         -> SingleValueMapper<Tracker<Self::Api>>;
 
-    // Markets
     #[storage_mapper("markets")]
     fn markets(&self, market_id: u64) -> SingleValueMapper<Market<Self::Api>>;
 
@@ -87,6 +82,12 @@ pub trait StorageModule {
 
     #[storage_mapper("marketsByEvent")]
     fn markets_by_event(&self, event_id: u64) -> SingleValueMapper<ManagedVec<u64>>;
+
+    #[storage_mapper("winningSelection")]
+    fn winning_selection(&self, market_id: u64) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("currentProcessingIndex")]
+    fn current_processing_index(&self, market_id: u64) -> SingleValueMapper<u64>;
 
 }
 
