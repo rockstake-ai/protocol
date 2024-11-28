@@ -1,5 +1,5 @@
 use crate::constants::constants;
-use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_ODDS_OUT_OF_RANGE, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
+use crate::errors::{ERR_INVALID_MARKET, ERR_INVALID_SELECTION, ERR_LIABILITY_BACK_BET, ERR_LIABILITY_TOTAL_AMOUNT, ERR_LIABILITY_ZERO, ERR_MARKET_CLOSED, ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP, ERR_MAXIMUM_STAKE, ERR_ODDS_OUT_OF_RANGE, ERR_STAKE_OUT_OF_RANGE, ERR_TOO_MANY_SELECTIONS};
 use crate::types::{Market, MarketStatus};
 
 multiversx_sc::imports!();
@@ -92,7 +92,6 @@ pub trait ValidationModule:
         require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
         
         let market = self.markets(market_id).get();
-        // require!(market.market_status == MarketStatus::Open, ERR_MARKET_NOT_OPEN);
         
         let created_at = self.blockchain().get_block_timestamp();
         require!(created_at < market.close_timestamp, ERR_MARKET_CLOSED);
@@ -120,7 +119,7 @@ pub trait ValidationModule:
         
         require!(
             new_exposure <= BigUint::from(constants::MAX_USER_EXPOSURE),
-            "Exceeds maximum user exposure limit"
+            ERR_MAXIMUM_STAKE
         );
         Ok(())
     }
@@ -128,11 +127,6 @@ pub trait ValidationModule:
     fn get_and_validate_next_market_id(&self) -> SCResult<u64> {
         let mut counter = self.market_counter().get();
         counter += 1;
-        
-        require!(
-            counter <= constants::MAX_MARKETS,
-            "Maximum number of markets reached"
-        );
         
         self.market_counter().set(&counter);
         Ok(counter)

@@ -12,10 +12,7 @@ pub mod constants {
     pub const MAX_ODDS: u32 = 100000;   // 1000.00
 
     // Market constants
-    pub const MAX_MARKETS: u64 = 1_000_000;
     pub const MAX_SELECTIONS: usize = 100;
-    // pub const MAX_DESCRIPTION_LENGTH: usize = 100;
-    // pub const MIN_DESCRIPTION_LENGTH: usize = 3;
     
     // User constants
     pub const MAX_USER_EXPOSURE: u64 = 10_000_000_000_000_000_000; // 10 EGLD

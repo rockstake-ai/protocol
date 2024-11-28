@@ -1,4 +1,4 @@
-use crate::{errors::ERR_INVALID_MARKET, types::{Market, MarketStatus, Selection, Tracker}};
+use crate::{errors::{ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP}, types::{Market, MarketStatus, Selection, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -54,12 +54,12 @@ pub trait MarketModule:
         
         require!(
             market.market_status == MarketStatus::Open,
-            "Market is not in open state"
+            ERR_MARKET_NOT_OPEN
         );
         
         require!(
             self.blockchain().get_block_timestamp() >= market.close_timestamp,
-            "Market has not reached close timestamp yet"
+            ERR_MARKET_TIMESTAMP
         );
 
         self.handle_expired_market(market_id)
@@ -93,7 +93,6 @@ pub trait MarketModule:
     }
 
     fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
-        // Inițializăm un nou tracker
         let tracker = Tracker {
             back_levels: ManagedVec::new(),
             lay_levels: ManagedVec::new(),
@@ -107,22 +106,18 @@ pub trait MarketModule:
             canceled_count: 0,
         };
 
-        // Salvăm tracker-ul
         self.selection_tracker(market_id, selection_id).set(&tracker);
 
-        // Inițializăm storage-ul pentru levels
         self.selection_back_levels(market_id, selection_id)
             .set(&ManagedVec::new());
         self.selection_lay_levels(market_id, selection_id)
             .set(&ManagedVec::new());
 
-        // Inițializăm lichiditatea
         self.selection_back_liquidity(market_id, selection_id)
             .set(&BigUint::zero());
         self.selection_lay_liquidity(market_id, selection_id)
             .set(&BigUint::zero());
 
-        // Inițializăm contoarele
         self.selection_matched_count(market_id, selection_id).set(&0u64);
         self.selection_unmatched_count(market_id, selection_id).set(&0u64);
         self.selection_partially_matched_count(market_id, selection_id).set(&0u64);
@@ -130,7 +125,6 @@ pub trait MarketModule:
         self.selection_lost_count(market_id, selection_id).set(&0u64);
         self.selection_canceled_count(market_id, selection_id).set(&0u64);
 
-        // Inițializăm total matched amount
         self.total_matched_amount(market_id, selection_id).set(&BigUint::zero());
     }
 
@@ -150,44 +144,11 @@ pub trait MarketModule:
         self.markets(market_id).get().market_status
     }
 
-    #[view(isMarketOpen)]
-    fn is_market_open(&self, market_id: u64) -> bool {
-        if self.markets(market_id).is_empty() {
-            return false;
-        }
-        let market = self.markets(market_id).get();
-        market.market_status == MarketStatus::Open
-    }
-
-    #[view(getMarket)]
-    fn get_market(&self, market_id: u64) -> SCResult<Market<Self::Api>> {
-        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
-        Ok(self.markets(market_id).get())
-    }
-
-    #[view(getMarketSelections)]
-    fn get_market_selections(&self, market_id: u64) -> SCResult<ManagedVec<Selection<Self::Api>>> {
-        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
-        let market = self.markets(market_id).get();
-        Ok(market.selections)
-    }
-
-    #[view(getSelectionTracker)]
-    fn get_selection_tracker(&self, market_id: u64, selection_id: u64) -> SCResult<Tracker<Self::Api>> {
-        require!(!self.markets(market_id).is_empty(), ERR_INVALID_MARKET);
-        Ok(self.selection_tracker(market_id, selection_id).get())
-    }
-
     #[view(getCurrentMarketCounter)]
     fn get_current_market_counter(&self) -> u64 {
         if self.market_counter().is_empty() {
             return 0;
         }
         self.market_counter().get()
-    }
-
-    #[view(checkMarketExists)]
-    fn check_market_exists(&self, market_id: u64) -> bool {
-        !self.markets(market_id).is_empty()
     }
 }

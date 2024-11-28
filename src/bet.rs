@@ -34,7 +34,6 @@ pub trait BetModule:
         self.validate_market(market_id)?;
         self.validate_selection(market_id, selection_id)?;
         
-        // Calculăm stake și liability
         let (final_stake, final_liability) = self.calculate_stake_and_liability(
             &bet_type,
             &total_amount,
@@ -42,7 +41,6 @@ pub trait BetModule:
             &odds
         )?;
 
-        // Creăm pariul
         let bet = self.create_bet(
             market_id,
             selection_id,
@@ -55,20 +53,14 @@ pub trait BetModule:
             token_nonce
         )?;
 
-        // Procesăm pariul prin tracker
         let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
-        
-        // Actualizăm starea pariului
         let updated_bet = self.update_bet_status(bet, matched_amount.clone(), unmatched_amount.clone())?;
-
-        // Actualizăm market și selection
         self.update_market_and_selection(
             market_id,
             selection_id,
             &matched_amount,
         )?;
 
-        // Gestionăm NFT și fonduri blocate
         self.handle_nft_and_locked_funds(
             &caller,
             &updated_bet,
@@ -77,7 +69,6 @@ pub trait BetModule:
             bet_type
         )?;
 
-        // Emitem eveniment
         self.emit_bet_placed_event(
             &updated_bet,
             &token_identifier,
@@ -200,8 +191,6 @@ pub trait BetModule:
         self.bet_by_id(bet.nft_nonce).set(bet);
 
         self.market_bet_ids(bet.event).insert(bet.nft_nonce);
-
-
         let total_locked = match bet_type {
             BetType::Back => unmatched_amount.clone(),
             BetType::Lay => liability.clone(),
