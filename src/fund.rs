@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus};
+use crate::{errors::{ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_MARKET_NOT_SETTLED}, types::{Bet, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -8,7 +8,6 @@ pub trait FundModule:
     + crate::events::EventsModule
     + crate::nft::NftModule
 {
-    // Handling un-matched bets when market expires/closes
     fn handle_expired_market(&self, market_id: u64) -> SCResult<()> {
         let mut market = self.markets(market_id).get();
         
@@ -41,7 +40,6 @@ pub trait FundModule:
                 }
             }
 
-            // Clear storage after processing
             self.selection_back_liquidity(market_id, selection.id).set(&BigUint::zero());
             self.selection_lay_liquidity(market_id, selection.id).set(&BigUint::zero());
         }
@@ -61,20 +59,14 @@ pub trait FundModule:
                 bet.payment_nonce,
                 &refund_amount,
             );
-    
-            // Păstrăm matched_amount neschimbat
             let original_matched = bet.matched_amount.clone();
-            
             bet.unmatched_amount = BigUint::zero();
-            bet.matched_amount = original_matched; // Restaurăm matched_amount
-            
-            // Actualizăm statusul corect
+            bet.matched_amount = original_matched; 
             bet.status = if bet.matched_amount > BigUint::zero() {
                 BetStatus::Matched
             } else {
                 BetStatus::Canceled
             };
-            
             self.bet_by_id(bet_nonce).set(&bet);
             self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
@@ -95,16 +87,13 @@ pub trait FundModule:
         let market_id = self.get_market_id(event_id, market_type_id)?;
         let mut market = self.markets(market_id).get();
         
-        require!(market.market_status == MarketStatus::Closed, "Market not closed");
+        require!(market.market_status == MarketStatus::Closed, ERR_MARKET_NOT_CLOSED);
 
-        // Determinăm selecția câștigătoare și o salvăm
         let winning_selection = self.determine_winner(market_type, score_home, score_away)?;
         self.winning_selection(market_id).set(winning_selection);
 
-        // Inițializăm indexul de procesare pentru acest market
         self.current_processing_index(market_id).set(0u64);
 
-        // Setăm statusul și numărul total de pariuri pentru tracking
         market.market_status = MarketStatus::Settled;
         self.markets(market_id).set(&market);
 
@@ -119,7 +108,7 @@ pub trait FundModule:
     ) -> SCResult<ProcessingStatus> {
         require!(
             self.markets(market_id).get().market_status == MarketStatus::Settled,
-            "Market not settled"
+            ERR_MARKET_NOT_SETTLED
         );
 
         let winning_selection = self.winning_selection(market_id).get();
@@ -294,7 +283,7 @@ pub trait FundModule:
     #[inline]
     fn get_market_id(&self, event_id: u64, market_type_id: u64) -> SCResult<u64> {
         let markets = self.markets_by_event(event_id).get();
-        require!(!markets.is_empty(), "No markets found");
+        require!(!markets.is_empty(), ERR_INVALID_MARKET);
         Ok(markets.get(market_type_id as usize - 1))
     }
 
