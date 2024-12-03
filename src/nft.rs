@@ -2,6 +2,17 @@ use crate::{constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER}, err
 
 multiversx_sc::imports!();
 
+extern crate alloc;
+use alloc::string::ToString;
+
+const IPFS_GATEWAY: &[u8] = "https://ipfs.io/ipfs/".as_bytes();
+const METADATA_KEY_NAME: &[u8] = "metadata:".as_bytes();
+const METADATA_FILE_EXTENSION: &[u8] = ".json".as_bytes();
+
+pub type AttributesAsMultiValue<M> =
+    MultiValue6<u64, ManagedBuffer<M>, ManagedBuffer<M>, ManagedBuffer<M>, ManagedBuffer<M>, u16>;
+
+
 #[multiversx_sc::module]
 pub trait NftModule:
     crate::storage::StorageModule
@@ -54,20 +65,20 @@ pub trait NftModule:
         let royalties = BigUint::from(NFT_ROYALTIES);
 
         let attributes = BetAttributes {
-            bettor: bet.bettor.clone(),
+            // bettor: bet.bettor.clone(),
             event: bet.event.clone(),
-            selection: bet.selection.clone(),
-            stake_amount: bet.stake_amount.clone(),
-            liability: bet.liability.clone(),
-            matched_amount: bet.matched_amount.clone(),
-            unmatched_amount: bet.unmatched_amount.clone(),
-            potential_profit: bet.potential_profit.clone(),
+            // selection: bet.selection.clone(),
+            stake: bet.stake_amount.clone(),
+            // liability: bet.liability.clone(),
+            // matched_amount: bet.matched_amount.clone(),
+            // unmatched_amount: bet.unmatched_amount.clone(),
+            potential_win: bet.potential_profit.clone(),
             odd: bet.odd.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),
-            payment_token: bet.payment_token.clone(),
-            payment_nonce: bet.payment_nonce,
-            created_at:bet.created_at
+            // payment_token: bet.payment_token.clone(),
+            // payment_nonce: bet.payment_nonce,
+            // created_at:bet.created_at
         };
         let mut serialized_attributes = ManagedBuffer::new();
         if let core::result::Result::Err(err) = attributes.top_encode(&mut serialized_attributes) {
@@ -149,6 +160,48 @@ pub trait NftModule:
 
         o
     }
+
+    fn build_uri(&self, number: u64) -> ManagedBuffer {
+        let mut uri = ManagedBuffer::new_from_bytes(IPFS_GATEWAY);
+        let cid = self.image_cid().get();
+        let slash = ManagedBuffer::from("/".as_bytes());
+        let index_file = ManagedBuffer::new_from_bytes(number.to_string().as_bytes());
+        let uri_extension = ManagedBuffer::from(".png".as_bytes());
+
+        uri.append(&cid);
+        uri.append(&slash);
+        uri.append(&index_file);
+        uri.append(&uri_extension);
+
+        uri
+    }
+
+    fn build_metadata(&self, number: u64) -> ManagedBuffer {
+        let metadata_key_name = ManagedBuffer::new_from_bytes(METADATA_KEY_NAME);
+        let metadata_cid = self.metadata_cid().get();
+        let slash = ManagedBuffer::from("/".as_bytes());
+        let index_file = ManagedBuffer::new_from_bytes(number.to_string().as_bytes());
+        let file_extension = ManagedBuffer::new_from_bytes(METADATA_FILE_EXTENSION);
+
+        let mut metadata = ManagedBuffer::new();
+        metadata.append(&metadata_key_name);
+        metadata.append(&metadata_cid);
+        metadata.append(&slash);
+        metadata.append(&index_file);
+        metadata.append(&file_extension);
+
+        metadata
+    }
+
+    #[storage_mapper("attributes")]
+    fn attributes(&self, number: u64) -> SingleValueMapper<BetAttributes<Self::Api>>;
+
+    #[storage_mapper("imageCid")]
+    fn image_cid(&self) -> SingleValueMapper<ManagedBuffer>;
+
+    #[storage_mapper("metadataCid")]
+    fn metadata_cid(&self) -> SingleValueMapper<ManagedBuffer>;
+
 
     #[view(getBetslipData)]
     fn get_bet(&self, bet_id: u64) -> Bet<Self::Api> {

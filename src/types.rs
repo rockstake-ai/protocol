@@ -44,20 +44,20 @@ pub struct Bet<M: ManagedTypeApi> {
 
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct BetAttributes<M:ManagedTypeApi>{
-    pub bettor: ManagedAddress<M>,
+    // pub bettor: ManagedAddress<M>,
     pub event: u64,     
-    pub selection: Selection<M>,     
-    pub stake_amount: BigUint<M>, 
-    pub liability: BigUint<M>,  
-    pub matched_amount: BigUint<M>, 
-    pub unmatched_amount: BigUint<M>,    
-    pub potential_profit: BigUint<M>,     
+    // pub selection: Selection<M>,     
+    pub stake: BigUint<M>, 
+    // pub liability: BigUint<M>,  
+    // pub matched_amount: BigUint<M>, 
+    // pub unmatched_amount: BigUint<M>,    
+    pub potential_win: BigUint<M>,     
     pub odd: BigUint<M>,        
     pub bet_type: BetType,      
     pub status: BetStatus,         
-    pub payment_token: EgldOrEsdtTokenIdentifier<M>, 
-    pub payment_nonce: u64,
-    pub created_at: u64, 
+    // pub payment_token: EgldOrEsdtTokenIdentifier<M>, 
+    // pub payment_nonce: u64,
+    // pub created_at: u64, 
 }
 
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
@@ -101,7 +101,6 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub canceled_count: u64,
 }
 
-///
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
 pub enum MarketType {
     FullTimeResult = 1,
@@ -140,8 +139,6 @@ pub struct ProcessingProgress {
     pub processed_bets: u64,
     pub status: ProcessingStatus
 }
-/// 
-
 
 //Debugging
 #[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
