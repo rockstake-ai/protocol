@@ -45,7 +45,7 @@ pub trait NftModule:
         }
     }
 
-    fn mint_bet_nft(&self, bet: &Bet<Self::Api>) -> u64 {
+    fn mint_bet_nft(&self, metadata_cid: ManagedBuffer, bet: &Bet<Self::Api>) -> u64 {
         require!(!self.bet_nft_token().is_empty(), ERR_TOKEN_NOT_ISSUED);
         let big_one = BigUint::from(1u64);
 
@@ -55,10 +55,19 @@ pub trait NftModule:
         let royalties = BigUint::from(NFT_ROYALTIES);
 
         let mut uris = ManagedVec::new();
+        let mut full_uri = self.bet_nft_base_uri().get();
+        full_uri.append_bytes(b"/bet/");
+        full_uri.append(&bet_id_buffer);
+        full_uri.append_bytes(b"/nft");
+        uris.push(full_uri);
+
+
+        self.metadata_cid().set(&metadata_cid);
         let metadata = self.build_metadata(bet.nft_nonce);
 
         let attributes = BetAttributes {
             event: bet.event.clone(),
+            selection: bet.selection.clone(),
             stake: bet.stake_amount.clone(),
             potential_win: bet.potential_profit.clone(),
             odd: bet.odd.clone(),
@@ -74,8 +83,8 @@ pub trait NftModule:
         let attributes_sha256 = self.crypto().sha256(&serialized_attributes);
         let attributes_hash = attributes_sha256.as_managed_buffer();
 
-        let uri = self.build_uri(bet.nft_nonce);
-        uris.push(uri);
+        // let uri = self.build_uri(bet.nft_nonce);
+        // uris.push(uri);
 
         let nonce = self.send().esdt_nft_create(
             self.bet_nft_token().get_token_id_ref(),
@@ -166,19 +175,15 @@ pub trait NftModule:
     }
 
     fn build_metadata(&self, number: u64) -> ManagedBuffer {
-        let metadata_key_name = ManagedBuffer::new_from_bytes(METADATA_KEY_NAME);
-        let metadata_cid = self.metadata_cid().get();
-        let slash = ManagedBuffer::from("/".as_bytes());
-        let index_file = ManagedBuffer::new_from_bytes(number.to_string().as_bytes());
-        let file_extension = ManagedBuffer::new_from_bytes(METADATA_FILE_EXTENSION);
-
         let mut metadata = ManagedBuffer::new();
-        metadata.append(&metadata_key_name);
-        metadata.append(&metadata_cid);
-        metadata.append(&slash);
-        metadata.append(&index_file);
-        metadata.append(&file_extension);
-
+        
+        // Adaugă direct bytes în loc să convertești
+        metadata.append_bytes(METADATA_KEY_NAME);
+        metadata.append(&self.metadata_cid().get());
+        metadata.append_bytes(b"/");
+        metadata.append_bytes(number.to_string().as_bytes());
+        metadata.append_bytes(METADATA_FILE_EXTENSION);
+        
         metadata
     }
 
@@ -187,7 +192,6 @@ pub trait NftModule:
 
     #[storage_mapper("metadataCid")]
     fn metadata_cid(&self) -> SingleValueMapper<ManagedBuffer>;
-
 
     #[view(getBetslipData)]
     fn get_bet(&self, bet_id: u64) -> Bet<Self::Api> {

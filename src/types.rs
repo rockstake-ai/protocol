@@ -46,7 +46,7 @@ pub struct Bet<M: ManagedTypeApi> {
 pub struct BetAttributes<M:ManagedTypeApi>{
     // pub bettor: ManagedAddress<M>,
     pub event: u64,     
-    // pub selection: Selection<M>,     
+    pub selection: Selection<M>,     
     pub stake: BigUint<M>, 
     // pub liability: BigUint<M>,  
     // pub matched_amount: BigUint<M>, 

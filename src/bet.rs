@@ -17,6 +17,7 @@ pub trait BetModule:
     #[endpoint(placeBet)]
     fn place_bet(
         &self,
+        cid: ManagedBuffer,
         market_id: u64,
         selection_id: u64,
         odds: BigUint,
@@ -62,6 +63,7 @@ pub trait BetModule:
         )?;
 
         self.handle_nft_and_locked_funds(
+            cid,
             &caller,
             &updated_bet,
             &unmatched_amount,
@@ -181,13 +183,14 @@ pub trait BetModule:
 
     fn handle_nft_and_locked_funds(
         &self,
+        cid: ManagedBuffer,
         caller: &ManagedAddress<Self::Api>,
         bet: &Bet<Self::Api>,
         unmatched_amount: &BigUint,
         liability: &BigUint,
         bet_type: BetType
     ) -> SCResult<()> {
-        let bet_nft_nonce = self.mint_bet_nft(bet);
+        let bet_nft_nonce = self.mint_bet_nft(cid,bet);
         self.bet_by_id(bet.nft_nonce).set(bet);
 
         self.market_bet_ids(bet.event).insert(bet.nft_nonce);
