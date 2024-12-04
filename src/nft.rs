@@ -1,4 +1,4 @@
-use crate::{constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER}, errors::{ERR_INVALID_NFT_TOKEN, ERR_INVALID_NFT_TOKEN_NONCE, ERR_INVALID_ROLE, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes}};
+use crate::{constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER}, errors::{ERR_INVALID_NFT_TOKEN, ERR_INVALID_NFT_TOKEN_NONCE, ERR_INVALID_ROLE, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED}, types::{Bet, BetAttributes, BetStatus, BetType}};
 
 multiversx_sc::imports!();
 
@@ -10,8 +10,7 @@ const METADATA_KEY_NAME: &[u8] = "metadata:".as_bytes();
 const METADATA_FILE_EXTENSION: &[u8] = ".json".as_bytes();
 
 pub type AttributesAsMultiValue<M> =
-    MultiValue6<u64, ManagedBuffer<M>, ManagedBuffer<M>, ManagedBuffer<M>, ManagedBuffer<M>, u16>;
-
+    MultiValue7<u64, u64, BigUint<M>, BigUint<M>, BigUint<M>, BetType, BetStatus>;
 
 #[multiversx_sc::module]
 pub trait NftModule:
@@ -53,32 +52,19 @@ pub trait NftModule:
         let mut token_name = ManagedBuffer::new_from_bytes(b"BetCube Ticket #");
         let bet_id_buffer = self.u64_to_ascii(bet.nft_nonce);
         token_name.append(&bet_id_buffer);
-
-        let mut uris = ManagedVec::new();
-        let mut full_uri = self.bet_nft_base_uri().get();
-        full_uri.append_bytes(b"/bet/");
-        full_uri.append(&bet_id_buffer);
-        full_uri.append_bytes(b"/nft");
-
-        uris.push(full_uri);
-
         let royalties = BigUint::from(NFT_ROYALTIES);
 
+        let mut uris = ManagedVec::new();
+        let metadata = self.build_metadata(bet.nft_nonce);
+
         let attributes = BetAttributes {
-            // bettor: bet.bettor.clone(),
             event: bet.event.clone(),
-            // selection: bet.selection.clone(),
             stake: bet.stake_amount.clone(),
-            // liability: bet.liability.clone(),
-            // matched_amount: bet.matched_amount.clone(),
-            // unmatched_amount: bet.unmatched_amount.clone(),
             potential_win: bet.potential_profit.clone(),
             odd: bet.odd.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),
-            // payment_token: bet.payment_token.clone(),
-            // payment_nonce: bet.payment_nonce,
-            // created_at:bet.created_at
+            metadata,
         };
         let mut serialized_attributes = ManagedBuffer::new();
         if let core::result::Result::Err(err) = attributes.top_encode(&mut serialized_attributes) {
@@ -87,6 +73,9 @@ pub trait NftModule:
 
         let attributes_sha256 = self.crypto().sha256(&serialized_attributes);
         let attributes_hash = attributes_sha256.as_managed_buffer();
+
+        let uri = self.build_uri(bet.nft_nonce);
+        uris.push(uri);
 
         let nonce = self.send().esdt_nft_create(
             self.bet_nft_token().get_token_id_ref(),
@@ -192,9 +181,6 @@ pub trait NftModule:
 
         metadata
     }
-
-    #[storage_mapper("attributes")]
-    fn attributes(&self, number: u64) -> SingleValueMapper<BetAttributes<Self::Api>>;
 
     #[storage_mapper("imageCid")]
     fn image_cid(&self) -> SingleValueMapper<ManagedBuffer>;

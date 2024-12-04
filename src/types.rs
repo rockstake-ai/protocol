@@ -54,7 +54,8 @@ pub struct BetAttributes<M:ManagedTypeApi>{
     pub potential_win: BigUint<M>,     
     pub odd: BigUint<M>,        
     pub bet_type: BetType,      
-    pub status: BetStatus,         
+    pub status: BetStatus,
+    pub metadata: ManagedBuffer<M>     
     // pub payment_token: EgldOrEsdtTokenIdentifier<M>, 
     // pub payment_nonce: u64,
     // pub created_at: u64, 
