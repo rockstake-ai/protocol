@@ -6,8 +6,8 @@ extern crate alloc;
 use alloc::string::ToString;
 
 const IPFS_GATEWAY: &[u8] = "https://ipfs.io/ipfs/".as_bytes();
-const METADATA_KEY_NAME: &[u8] = "metadata:".as_bytes();
-const METADATA_FILE_EXTENSION: &[u8] = ".json".as_bytes();
+const METADATA_KEY_NAME: &[u8] = b"metadata:";
+const METADATA_FILE_EXTENSION: &[u8] = b".json";
 
 pub type AttributesAsMultiValue<M> =
     MultiValue7<u64, u64, BigUint<M>, BigUint<M>, BigUint<M>, BetType, BetStatus>;
@@ -174,15 +174,27 @@ pub trait NftModule:
         uri
     }
 
+    fn number_to_str(&self, num: u64) -> ManagedBuffer {
+        let mut buf = ManagedBuffer::new();
+        buf.append_bytes(num.to_string().as_bytes());
+        buf
+    }
+
     fn build_metadata(&self, number: u64) -> ManagedBuffer {
-        let mut metadata = ManagedBuffer::new();
+        let cid = self.metadata_cid().get();
+        let num_buffer = self.u64_to_ascii(number);
         
-        // Adaugă direct bytes în loc să convertești
-        metadata.append_bytes(METADATA_KEY_NAME);
-        metadata.append(&self.metadata_cid().get());
+        let total_len = 9 + // "metadata:"
+                       cid.len() +
+                       1 + // "/"
+                       num_buffer.len() +
+                       5; // ".json"
+        
+        let mut metadata = ManagedBuffer::new_from_bytes(b"metadata:");
+        metadata.append(&cid);
         metadata.append_bytes(b"/");
-        metadata.append_bytes(number.to_string().as_bytes());
-        metadata.append_bytes(METADATA_FILE_EXTENSION);
+        metadata.append(&num_buffer);
+        metadata.append_bytes(b".json");
         
         metadata
     }
