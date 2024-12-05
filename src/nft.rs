@@ -54,13 +54,9 @@ pub trait NftModule:
         token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);
 
+        let uri = self.build_uri(bet.nft_nonce);
         let mut uris = ManagedVec::new();
-        let mut full_uri = self.bet_nft_base_uri().get();
-        full_uri.append_bytes(b"/bet/");
-        full_uri.append(&bet_id_buffer);
-        full_uri.append_bytes(b"/nft");
-        uris.push(full_uri);
-
+        uris.push(uri);
 
         self.metadata_cid().set(&metadata_cid);
         let metadata = self.build_metadata(bet.nft_nonce);
@@ -83,8 +79,6 @@ pub trait NftModule:
         let attributes_sha256 = self.crypto().sha256(&serialized_attributes);
         let attributes_hash = attributes_sha256.as_managed_buffer();
 
-        // let uri = self.build_uri(bet.nft_nonce);
-        // uris.push(uri);
 
         let nonce = self.send().esdt_nft_create(
             self.bet_nft_token().get_token_id_ref(),
@@ -160,17 +154,17 @@ pub trait NftModule:
     }
 
     fn build_uri(&self, number: u64) -> ManagedBuffer {
-        let mut uri = ManagedBuffer::new_from_bytes(IPFS_GATEWAY);
+        let mut uri = ManagedBuffer::new_from_bytes(b"https://ipfs.io/ipfs/");
+        
         let cid = self.image_cid().get();
-        let slash = ManagedBuffer::from("/".as_bytes());
-        let index_file = ManagedBuffer::new_from_bytes(number.to_string().as_bytes());
-        let uri_extension = ManagedBuffer::from(".png".as_bytes());
-
+        
+        let num_buffer = self.u64_to_ascii(number);
+        
         uri.append(&cid);
-        uri.append(&slash);
-        uri.append(&index_file);
-        uri.append(&uri_extension);
-
+        uri.append_bytes(b"/");
+        uri.append(&num_buffer);
+        uri.append_bytes(b".png");
+        
         uri
     }
 
