@@ -54,12 +54,12 @@ pub trait NftModule:
         token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);
 
+        self.metadata_cid().set(&metadata_cid);
+        self.image_cid().set(&metadata_cid);
+        let metadata = self.build_metadata(bet.nft_nonce);
         let uri = self.build_uri(bet.nft_nonce);
         let mut uris = ManagedVec::new();
         uris.push(uri);
-
-        self.metadata_cid().set(&metadata_cid);
-        let metadata = self.build_metadata(bet.nft_nonce);
 
         let attributes = BetAttributes {
             event: bet.event.clone(),
@@ -162,8 +162,8 @@ pub trait NftModule:
         
         uri.append(&cid);
         uri.append_bytes(b"/");
-        uri.append(&num_buffer);
-        uri.append_bytes(b".png");
+        // uri.append(&num_buffer);
+        // uri.append_bytes(b".png");
         
         uri
     }
@@ -187,8 +187,8 @@ pub trait NftModule:
         let mut metadata = ManagedBuffer::new_from_bytes(b"metadata:");
         metadata.append(&cid);
         metadata.append_bytes(b"/");
-        metadata.append(&num_buffer);
-        metadata.append_bytes(b".json");
+        // metadata.append(&num_buffer);
+        // metadata.append_bytes(b".json");
         
         metadata
     }
