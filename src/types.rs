@@ -1,6 +1,8 @@
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem)]
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem)]
 pub enum BetStatus {
     Matched,
     Unmatched,
@@ -10,20 +12,24 @@ pub enum BetStatus {
     Canceled,
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone, ManagedVecItem, Copy)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem, Copy)]
 pub enum BetType {
     Back,
     Lay
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone, PartialEq)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
 pub enum MarketStatus {
     Open,    
     Closed, 
     Settled
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
     pub event: u64, 
@@ -42,7 +48,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub created_at: u64, 
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct BetAttributes<M:ManagedTypeApi>{
     // pub bettor: ManagedAddress<M>,
     pub event: u64,     
@@ -61,7 +67,7 @@ pub struct BetAttributes<M:ManagedTypeApi>{
     // pub created_at: u64, 
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct Market<M: ManagedTypeApi> {
     pub market_id: u64,
     pub event_id: u64,
@@ -74,21 +80,24 @@ pub struct Market<M: ManagedTypeApi> {
     pub created_at: u64,
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Selection<M: ManagedTypeApi> {
     pub id: u64,
     pub value: u64,
     pub priority_queue: Tracker<M>,
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct PriceLevel<M: ManagedTypeApi> {
     pub odds: BigUint<M>,
     pub total_stake: BigUint<M>,
     pub bet_nonces: ManagedVec<M, u64>,
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct Tracker<M: ManagedTypeApi> {
     pub back_levels: ManagedVec<M, PriceLevel<M>>,
     pub lay_levels: ManagedVec<M, PriceLevel<M>>,
@@ -102,7 +111,7 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub canceled_count: u64,
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone)]
 pub enum MarketType {
     FullTimeResult = 1,
     TotalGoals = 2,
@@ -110,12 +119,12 @@ pub enum MarketType {
 }
 
 impl MarketType {
-    pub fn from_u64(value: u64) -> SCResult<Self> {
+    pub fn from_u64(value: u64) -> Self {
         match value {
-            1 => Ok(MarketType::FullTimeResult),
-            2 => Ok(MarketType::TotalGoals),
-            3 => Ok(MarketType::BothTeamsToScore),
-            _ => sc_error!("Invalid market type")
+            1 => MarketType::FullTimeResult,
+            2 => MarketType::TotalGoals,
+            3 => MarketType::BothTeamsToScore,
+            _ => panic!("Invalid market type")
         }
     }
 
@@ -128,13 +137,15 @@ impl MarketType {
     }
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone)]
 pub enum ProcessingStatus {
     InProgress,
     Completed
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, PartialEq, Clone)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone)]
 pub struct ProcessingProgress {
     pub market_id: u64,
     pub processed_bets: u64,
@@ -142,7 +153,8 @@ pub struct ProcessingProgress {
 }
 
 //Debugging
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct BetMatchingState<M: ManagedTypeApi> {
     pub bet_type: BetType,
     pub original_stake: BigUint<M>,
@@ -152,7 +164,8 @@ pub struct BetMatchingState<M: ManagedTypeApi> {
     pub odds: BigUint<M>
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct MatchingDetails<M: ManagedTypeApi> {
     pub back_levels: ManagedVec<M,PriceLevelView<M>>,
     pub lay_levels: ManagedVec<M,PriceLevelView<M>>,
@@ -163,14 +176,16 @@ pub struct MatchingDetails<M: ManagedTypeApi> {
     pub partially_matched_count: u64
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct PriceLevelView<M: ManagedTypeApi> {
     pub odds: BigUint<M>,
     pub total_stake: BigUint<M>,
     pub bets: ManagedVec<M, BetView<M>>
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct BetView<M: ManagedTypeApi> {
     pub nonce: u64,
     pub bettor: ManagedAddress<M>,
@@ -180,7 +195,8 @@ pub struct BetView<M: ManagedTypeApi> {
     pub status: BetStatus
 }
 
-#[derive(TypeAbi, TopEncode, TopDecode, ManagedVecItem, Debug)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, ManagedVecItem, Debug)]
 pub struct OrderbookView<M: ManagedTypeApi> {
     pub price_level: BigUint<M>,
     pub total_amount: BigUint<M>,

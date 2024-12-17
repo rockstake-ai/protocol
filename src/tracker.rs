@@ -65,12 +65,12 @@ pub trait TrackerModule:
     
                     if !updated_nonces.is_empty() {
                         level.bet_nonces = updated_nonces;
-                        let _ = levels.set(i, &level);
+                        let _ = levels.set(i, level);
                         i += 1;
                     } else {
                         if i < levels.len() - 1 {
                             let last = levels.get(levels.len() - 1);
-                            let _ = levels.set(i, &last);
+                            let _ = levels.set(i, last);
                         }
                         levels.remove(levels.len() - 1);
                     }
@@ -139,7 +139,7 @@ pub trait TrackerModule:
                 let mut level = levels.get(i);
                 level.total_stake += &bet.unmatched_amount;
                 level.bet_nonces.push(bet.nft_nonce);
-                let _ = levels.set(i, &level);
+                let _ = levels.set(i, level);
             },
             None => {
                 let new_level = PriceLevel {

@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_MARKET_NOT_OPEN, ERR_MARKET_TIMESTAMP}, types::{Market, MarketStatus, Selection, Tracker}};
+use crate::types::{Market, MarketStatus, Selection, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -19,11 +19,11 @@ pub trait MarketModule:
         description: ManagedBuffer,
         selection_values: ManagedVec<u64>,
         close_timestamp: u64
-    ) -> SCResult<u64> {
-        self.validate_market_creation(close_timestamp)?;
+    ) -> u64 {
+        self.validate_market_creation(close_timestamp);
         
-        let market_id = self.get_and_validate_next_market_id()?;
-        let selections = self.create_selections(market_id, selection_values)?;
+        let market_id = self.get_next_market_id();
+        let selections = self.create_selections(market_id, selection_values);
     
         let market = Market {
             market_id,
@@ -45,39 +45,31 @@ pub trait MarketModule:
     
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
     
-        Ok(market_id)
+        market_id
     }
 
     #[endpoint(processMarketClose)]
-    fn process_market_close(&self, market_id: u64) -> SCResult<()> {
+    fn process_market_close(&self, market_id: u64) {
         let market = self.markets(market_id).get();
         
         require!(
             market.market_status == MarketStatus::Open,
-            ERR_MARKET_NOT_OPEN
+            "Market not open"
         );
         
         require!(
             self.blockchain().get_block_timestamp() >= market.close_timestamp,
-            ERR_MARKET_TIMESTAMP
+            "Market timestamp not reached"
         );
 
-        self.handle_expired_market(market_id)
-    }
-
-
-    fn get_and_increment_market_counter(&self) -> u64 {
-        let mut counter = self.market_counter().get();
-        counter += 1;
-        self.market_counter().set(&counter);
-        counter
+        self.handle_expired_market(market_id);
     }
 
     fn create_selections(
         &self,
         market_id: u64,
         descriptions: ManagedVec<u64>
-    ) -> SCResult<ManagedVec<Selection<Self::Api>>> {
+    ) -> ManagedVec<Selection<Self::Api>> {
         let mut selections = ManagedVec::new();
         for (index, value) in descriptions.iter().enumerate() {
             let id = (index + 1) as u64;
@@ -89,7 +81,7 @@ pub trait MarketModule:
                 priority_queue: tracker,
             });
         }
-        Ok(selections)
+        selections
     }
 
     fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
@@ -132,11 +124,10 @@ pub trait MarketModule:
         &self,
         market: &Market<Self::Api>,
         selection_id: u64
-    ) -> SCResult<Selection<Self::Api>> {
-        let selection = market.selections.iter()
+    ) -> Selection<Self::Api> {
+        market.selections.iter()
             .find(|s| s.id == selection_id)
-            .ok_or("Selection not found")?;
-        Ok(selection)
+            .unwrap_or_else(|| sc_panic!("Selection not found"))
     }
 
     #[view(getMarketStatus)]

@@ -1,7 +1,4 @@
-use crate::{
-    errors::ERR_INVALID_SELECTION, 
-    types::{Bet, BetStatus, BetType}
-};
+use crate::types::{Bet, BetStatus, BetType};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -23,24 +20,24 @@ pub trait BetModule:
         odds: BigUint,
         bet_type: BetType,
         liability: BigUint
-    ) -> SCResult<(u64, BigUint, BigUint)> {
+    ) {
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, total_amount) = self
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
 
-        self.validate_bet_amount(&total_amount)?;
-        self.validate_bet_odds(&odds)?;
-        self.validate_market(market_id)?;
-        self.validate_selection(market_id, selection_id)?;
+        self.validate_bet_amount(&total_amount);
+        self.validate_bet_odds(&odds);
+        self.validate_market(market_id);
+        self.validate_selection(market_id, selection_id);
         
         let (final_stake, final_liability) = self.calculate_stake_and_liability(
             &bet_type,
             &total_amount,
             &liability,
             &odds
-        )?;
+        );
 
         let bet = self.create_bet(
             market_id,
@@ -52,15 +49,15 @@ pub trait BetModule:
             bet_type,
             token_identifier.clone(),
             token_nonce
-        )?;
+        );
 
         let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
-        let updated_bet = self.update_bet_status(bet, matched_amount.clone(), unmatched_amount.clone())?;
+        let updated_bet = self.update_bet_status(bet, matched_amount.clone(), unmatched_amount.clone());
         self.update_market_and_selection(
             market_id,
             selection_id,
-            &matched_amount,
-        )?;
+            &matched_amount
+        );
 
         self.handle_nft_and_locked_funds(
             cid,
@@ -69,7 +66,7 @@ pub trait BetModule:
             &unmatched_amount,
             &final_liability,
             bet_type
-        )?;
+        );
 
         self.emit_bet_placed_event(
             &updated_bet,
@@ -78,25 +75,6 @@ pub trait BetModule:
             &matched_amount,
             &unmatched_amount
         );
-
-        Ok((updated_bet.nft_nonce, odds, final_stake))
-    }
-
-    fn calculate_stake_and_liability(
-        &self,
-        bet_type: &BetType,
-        total_amount: &BigUint,
-        liability: &BigUint,
-        odds: &BigUint
-    ) -> SCResult<(BigUint, BigUint)> {
-        match bet_type {
-            BetType::Back => {
-                self.validate_back_bet(total_amount,liability)
-            },
-            BetType::Lay => {
-               self.validate_lay_bet(liability,total_amount,odds)
-            }
-        }
     }
 
     fn create_bet(
@@ -110,16 +88,16 @@ pub trait BetModule:
         bet_type: BetType,
         token_identifier: EgldOrEsdtTokenIdentifier<Self::Api>,
         token_nonce: u64
-    ) -> SCResult<Bet<Self::Api>> {
+    ) -> Bet<Self::Api> {
         let market = self.markets(market_id).get();
         let selection = market.selections
             .iter()
             .find(|s| s.id == selection_id)
-            .ok_or(ERR_INVALID_SELECTION)?
+            .unwrap_or_else(|| sc_panic!("Invalid selection"))
             .clone();
         let bet_id = self.get_last_bet_id() + 1;
         
-        Ok(Bet {
+        Bet {
             bettor: caller.clone(),
             event: market_id,
             selection,
@@ -135,7 +113,7 @@ pub trait BetModule:
             payment_nonce: token_nonce,
             nft_nonce: bet_id,
             created_at: self.blockchain().get_block_timestamp()
-        })
+        }
     }
 
     fn update_bet_status(
@@ -143,7 +121,7 @@ pub trait BetModule:
         mut bet: Bet<Self::Api>,
         matched_amount: BigUint,
         unmatched_amount: BigUint
-    ) -> SCResult<Bet<Self::Api>> {
+    ) -> Bet<Self::Api> {
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = unmatched_amount.clone();
         bet.status = if matched_amount > BigUint::zero() {
@@ -155,7 +133,7 @@ pub trait BetModule:
         } else {
             BetStatus::Unmatched
         };
-        Ok(bet)
+        bet
     }
 
     fn update_market_and_selection(
@@ -163,22 +141,20 @@ pub trait BetModule:
         market_id: u64,
         selection_id: u64,
         matched_amount: &BigUint,
-    ) -> SCResult<()> {
+    ) {
         let mut market = self.markets(market_id).get();
         let selection_index = market
             .selections
             .iter()
             .position(|s| s.id == selection_id)
-            .ok_or(ERR_INVALID_SELECTION)?;
+            .unwrap_or_else(|| sc_panic!("Invalid selection"));
         
         let mut selection = market.selections.get(selection_index);
         selection.priority_queue = self.selection_tracker(market_id, selection_id).get();
         
-        let _ = market.selections.set(selection_index, &selection);
+        let _ = market.selections.set(selection_index, selection);
         market.total_matched_amount += matched_amount;
         self.markets(market_id).set(&market);
-
-        Ok(())
     }
 
     fn handle_nft_and_locked_funds(
@@ -189,8 +165,8 @@ pub trait BetModule:
         unmatched_amount: &BigUint,
         liability: &BigUint,
         bet_type: BetType
-    ) -> SCResult<()> {
-        let bet_nft_nonce = self.mint_bet_nft(cid,bet);
+    ) {
+        let bet_nft_nonce = self.mint_bet_nft(cid, bet);
         self.bet_by_id(bet.nft_nonce).set(bet);
 
         self.market_bet_ids(bet.event).insert(bet.nft_nonce);
@@ -206,8 +182,6 @@ pub trait BetModule:
             bet_nft_nonce,
             &BigUint::from(1u64)
         );
-        
-        Ok(())
     }
 
     fn emit_bet_placed_event(
@@ -232,6 +206,19 @@ pub trait BetModule:
             unmatched_amount,
             &bet.liability
         );
+    }
+
+    fn calculate_stake_and_liability(
+        &self,
+        bet_type: &BetType,
+        total_amount: &BigUint,
+        liability: &BigUint,
+        odds: &BigUint
+    ) -> (BigUint, BigUint) {
+        match bet_type {
+            BetType::Back => self.validate_back_bet(total_amount, liability),
+            BetType::Lay => self.validate_lay_bet(liability, total_amount, odds)
+        }
     }
 
     fn calculate_potential_profit(

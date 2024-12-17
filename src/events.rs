@@ -1,4 +1,4 @@
-use crate::types::{BetStatus, BetType};
+use crate::types::{BetType};
 
 multiversx_sc::imports!();
 
