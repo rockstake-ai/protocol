@@ -102,6 +102,83 @@ pub trait BetModule:
         self.send().direct(&caller, &bet.payment_token,0, &refund_amount);
     }
 
+    #[endpoint(updateBet)]
+    #[allow_multiple_var_args]
+    fn update_bet(
+        &self,
+        bet_nonce: u64,
+        new_odds: OptionalValue<BigUint>,
+        new_amount: OptionalValue<BigUint>,
+    ) {
+        let caller = self.blockchain().get_caller();
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        
+        require!(bet.bettor == caller, "Not bet owner");
+        require!(
+            bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
+            "Bet cannot be updated"
+        );
+        require!(
+            new_odds.is_some() || new_amount.is_some(),
+            "Must provide new odds or amount"
+        );
+
+        let update_odds = match new_odds {
+            OptionalValue::Some(odds) => {
+                self.validate_bet_odds(&odds);
+                odds
+            },
+            OptionalValue::None => bet.odd.clone() // Nu mai validăm cotele când folosim valoarea existentă
+        };
+
+        let old_unmatched = bet.unmatched_amount.clone();
+        let update_amount = match &new_amount {
+            OptionalValue::Some(amount) => {
+                require!(
+                    amount <= &old_unmatched,
+                    "New amount cannot exceed unmatched amount"
+                );
+                bet.matched_amount.clone() + amount // Adăugăm partea matched
+            },
+            OptionalValue::None => bet.stake_amount.clone()
+         };
+        
+
+        let old_liability = match bet.bet_type {
+            BetType::Back => BigUint::zero(),
+            BetType::Lay => bet.liability.clone()
+        };
+
+        self.remove_from_orderbook(&bet);
+
+        let (stake, new_liability) = self.calculate_stake_and_liability(
+            &bet.bet_type,
+            &update_amount,
+            &update_odds
+        );
+
+        bet.odd = update_odds.clone();
+        bet.unmatched_amount = update_amount.clone();
+        bet.liability = new_liability.clone();
+        bet.potential_profit = self.calculate_potential_profit(&bet.bet_type, &stake, &update_odds);
+
+        let payment_token = bet.payment_token.clone();
+        let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
+        let updated_bet = self.update_bet_status(bet, matched_amount.clone(), unmatched_amount.clone());
+
+        self.locked_funds(&caller).update(|val| {
+            *val -= &old_liability;
+            *val += &new_liability;
+        });
+
+        if &old_unmatched > &update_amount {
+            let refund = old_unmatched - &update_amount;
+            self.send().direct(&caller, &payment_token, 0, &refund);
+         }
+
+        self.bet_by_id(bet_nonce).set(&updated_bet);
+    }
+
     fn create_bet(
         &self,
         market_id: u64,
