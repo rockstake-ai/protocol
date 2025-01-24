@@ -19,7 +19,6 @@ pub trait BetModule:
         selection_id: u64,
         odds: BigUint,
         bet_type: BetType,
-        liability: BigUint
     ) {
         let caller = self.blockchain().get_caller();
         let (token_identifier, token_nonce, total_amount) = self
@@ -35,7 +34,6 @@ pub trait BetModule:
         let (final_stake, final_liability) = self.calculate_stake_and_liability(
             &bet_type,
             &total_amount,
-            &liability,
             &odds
         );
 
@@ -212,12 +210,11 @@ pub trait BetModule:
         &self,
         bet_type: &BetType,
         total_amount: &BigUint,
-        liability: &BigUint,
         odds: &BigUint
     ) -> (BigUint, BigUint) {
         match bet_type {
-            BetType::Back => self.validate_back_bet(total_amount, liability),
-            BetType::Lay => self.validate_lay_bet(liability, total_amount, odds)
+            BetType::Back => self.validate_back_bet(total_amount),
+            BetType::Lay => self.validate_lay_bet(total_amount, odds)
         }
     }
 

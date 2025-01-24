@@ -30,24 +30,17 @@ pub trait ValidationModule:
         );
     }
     
-    fn validate_lay_bet(&self, liability: &BigUint, total_amount: &BigUint, odds: &BigUint) -> (BigUint, BigUint) {
-        require!(liability > &BigUint::zero(), "Liability must be greater than zero");
-        
-        let stake = total_amount - liability;    
+    fn validate_lay_bet(&self, total_amount: &BigUint, odds: &BigUint) -> (BigUint, BigUint) {
         let odds_minus_one = odds - &BigUint::from(100u32);
-        let stake_check = (liability * &BigUint::from(100u32)) / odds_minus_one;
+        let stake = total_amount.clone();
+        let calculated_liability = (stake.clone() * odds_minus_one) / &BigUint::from(100u32);
         
-        require!(&stake == &stake_check, "Invalid liability to total amount ratio");
+        require!(calculated_liability > BigUint::zero(), "Invalid liability calculation");
         
-        (stake, liability.clone())
-    }
+        (stake, calculated_liability)
+     }
 
-    fn validate_back_bet(&self, total_amount: &BigUint, liability: &BigUint) -> (BigUint, BigUint) {
-        require!(
-            liability == &BigUint::zero(),
-            "Back bet cannot have liability"
-        );
-        
+    fn validate_back_bet(&self, total_amount: &BigUint) -> (BigUint, BigUint) {
         (total_amount.clone(), BigUint::zero())
     }
 
