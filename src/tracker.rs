@@ -197,6 +197,59 @@ pub trait TrackerModule:
         }
     }
 
+    fn remove_from_orderbook(&self, bet: &Bet<Self::Api>) {
+        let mut levels = match bet.bet_type {
+            BetType::Back => self.selection_back_levels(bet.event, bet.selection.id).get(),
+            BetType::Lay => self.selection_lay_levels(bet.event, bet.selection.id).get(),
+        };
+    
+        let mut level_index = Option::<usize>::None;
+        
+        for i in 0..levels.len() {
+            let level = levels.get(i);
+            if level.odds == bet.odd {
+                level_index = Some(i);
+                break;
+            }
+        }
+    
+        if let Some(i) = level_index {
+            let mut level = levels.get(i);
+            level.total_stake -= &bet.unmatched_amount;
+            
+            let mut updated_nonces = ManagedVec::new();
+            for nonce in level.bet_nonces.iter() {
+                if nonce != bet.nft_nonce {
+                    updated_nonces.push(nonce);
+                }
+            }
+            
+            if updated_nonces.is_empty() {
+                if i < levels.len() - 1 {
+                    let last = levels.get(levels.len() - 1);
+                    let _ = levels.set(i, last);
+                }
+                levels.remove(levels.len() - 1);
+            } else {
+                level.bet_nonces = updated_nonces;
+                let _ = levels.set(i, level);
+            }
+            
+            match bet.bet_type {
+                BetType::Back => {
+                    self.selection_back_levels(bet.event, bet.selection.id).set(&levels);
+                    self.selection_back_liquidity(bet.event, bet.selection.id)
+                        .update(|val| *val -= &bet.unmatched_amount);
+                },
+                BetType::Lay => {
+                    self.selection_lay_levels(bet.event, bet.selection.id).set(&levels);
+                    self.selection_lay_liquidity(bet.event, bet.selection.id)
+                        .update(|val| *val -= &bet.unmatched_amount);
+                },
+            }
+        }
+    }
+
     fn update_total_matched(
         &self,
         market_id: u64,

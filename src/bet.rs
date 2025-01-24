@@ -75,6 +75,33 @@ pub trait BetModule:
         );
     }
 
+    #[endpoint(cancelBet)]
+    fn cancel_bet(&self, bet_nonce: u64) {
+        let caller = self.blockchain().get_caller();
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        
+        require!(bet.bettor == caller, "Not bet owner");
+        require!(
+            bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
+            "Bet cannot be cancelled"
+        );
+        
+        let refund_amount = match bet.bet_type {
+            BetType::Back => bet.unmatched_amount.clone(),
+            BetType::Lay => bet.liability.clone()
+        };
+        
+        self.remove_from_orderbook(&bet);
+        
+        bet.status = BetStatus::Canceled;
+        bet.unmatched_amount = BigUint::zero();
+        self.bet_by_id(bet_nonce).set(&bet);
+        
+        self.locked_funds(&caller).update(|val| *val -= &refund_amount);
+        
+        self.send().direct(&caller, &bet.payment_token,0, &refund_amount);
+    }
+
     fn create_bet(
         &self,
         market_id: u64,

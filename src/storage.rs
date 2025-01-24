@@ -89,5 +89,8 @@ pub trait StorageModule {
     #[storage_mapper("currentProcessingIndex")]
     fn current_processing_index(&self, market_id: u64) -> SingleValueMapper<u64>;
 
+    #[storage_mapper("eventsByTimestamp")]
+    fn events_by_timestamp(&self, timestamp: u64) -> SingleValueMapper<ManagedVec<u64>>;
+
 }
 

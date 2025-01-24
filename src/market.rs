@@ -48,6 +48,19 @@ pub trait MarketModule:
         market_id
     }
 
+    #[endpoint(processEventMarkets)]
+    fn process_event_markets(&self, timestamp: u64) {
+        let events = self.events_by_timestamp(timestamp).get();
+        require!(!events.is_empty(), "No events found for timestamp");
+
+        for event_id in events.iter() {
+            let market_ids = self.markets_by_event(event_id).get();
+            for market_id in market_ids.iter() {
+                self.handle_expired_market(market_id);
+            }
+        }
+    }
+
     #[endpoint(processMarketClose)]
     fn process_market_close(&self, market_id: u64) {
         let market = self.markets(market_id).get();
