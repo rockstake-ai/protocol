@@ -123,61 +123,90 @@ pub trait BetModule:
             "Must provide new odds or amount"
         );
 
-        let update_odds = match new_odds {
-            OptionalValue::Some(odds) => {
-                self.validate_bet_odds(&odds);
-                odds
-            },
-            OptionalValue::None => bet.odd.clone()
-        };
-
+        let matched_part = bet.matched_amount.clone();
         let old_unmatched = bet.unmatched_amount.clone();
-        let new_unmatched = match &new_amount {
-            OptionalValue::Some(new_unmatched) => {
-                require!(
-                    new_unmatched <= &old_unmatched,
-                    "New amount cannot exceed unmatched amount"
-                );
-                new_unmatched.clone()
-            },
-            OptionalValue::None => bet.unmatched_amount.clone()
-        };
-
-        bet.stake_amount = bet.matched_amount.clone() + &new_unmatched;
-        bet.unmatched_amount = new_unmatched.clone();
-
+        let old_odds = bet.odd.clone();
         let old_liability = match bet.bet_type {
             BetType::Back => BigUint::zero(),
             BetType::Lay => bet.liability.clone()
         };
 
-        self.remove_from_orderbook(&bet);
+        let update_odds = match &new_odds {
+            OptionalValue::Some(odds) => {
+                self.validate_bet_odds(odds);
+                odds.clone()
+            },
+            OptionalValue::None => old_odds.clone()
+        };
 
-        let (stake, new_liability) = self.calculate_stake_and_liability(
-            &bet.bet_type,
-            &bet.stake_amount,
+        // Determinăm noua sumă unmatched și validăm
+        let new_unmatched = match &new_amount {
+            OptionalValue::Some(amount) => {
+                require!(
+                    amount <= &old_unmatched,
+                    "New amount cannot exceed unmatched amount"
+                );
+                amount.clone()
+            },
+            OptionalValue::None => old_unmatched.clone()
+        };
+
+        let refund_amount = if new_amount.is_some() {
+            old_unmatched.clone() - &new_unmatched
+        } else {
+            BigUint::zero()
+        };
+
+        let should_remove_from_orderbook = new_amount.is_some() || new_odds.is_some();
+        
+        if should_remove_from_orderbook {
+            self.remove_from_orderbook(&bet);
+        }
+
+        bet.odd = update_odds.clone();
+        bet.unmatched_amount = new_unmatched.clone();
+        bet.stake_amount = matched_part.clone() + &new_unmatched;
+
+        let mut total_liability = BigUint::zero();
+        
+        if matched_part > BigUint::zero() {
+            let (_, matched_liability) = self.calculate_stake_and_liability(
+                &bet.bet_type,
+                &matched_part,
+                &old_odds
+            );
+            total_liability += matched_liability;
+        }
+
+        if new_unmatched > BigUint::zero() {
+            let (_, unmatched_liability) = self.calculate_stake_and_liability(
+                &bet.bet_type,
+                &new_unmatched,
+                &update_odds
+            );
+            total_liability += unmatched_liability;
+        }
+
+        bet.liability = total_liability.clone();
+        bet.potential_profit = self.calculate_potential_profit(
+            &bet.bet_type, 
+            &bet.stake_amount, 
             &update_odds
         );
 
-        bet.odd = update_odds.clone();
-        bet.liability = new_liability.clone();
-        bet.potential_profit = self.calculate_potential_profit(&bet.bet_type, &stake, &update_odds);
-
-        let payment_token = bet.payment_token.clone();
         let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
-        let updated_bet = self.update_bet_status(bet, matched_amount.clone(), unmatched_amount.clone());
 
         self.locked_funds(&caller).update(|val| {
             *val -= &old_liability;
-            *val += &new_liability;
+            *val += &total_liability;
         });
 
-        let refund = old_unmatched - &new_unmatched;
-        if refund > BigUint::zero() {
-            self.send().direct(&caller, &payment_token, 0, &refund);
-        }
-
+        let updated_bet = self.update_bet_status(bet, matched_amount, unmatched_amount);
         self.bet_by_id(bet_nonce).set(&updated_bet);
+
+        if refund_amount > BigUint::zero() {
+            self.send().direct(&caller, &updated_bet.payment_token, 0, &refund_amount);
+        }
     }
 
     fn create_bet(

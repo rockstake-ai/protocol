@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, OrderbookView, PriceLevel};
+use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, MatchingDetails, OrderbookView, PriceLevel, PriceLevelView};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -9,20 +9,20 @@ pub trait TrackerModule:
 {
 
     fn process_bet(&self, mut bet: Bet<Self::Api>) -> (BigUint, BigUint) {
-        let mut matched_amount = BigUint::zero();
-        let mut remaining = bet.stake_amount.clone();
-
-        let mut levels = match bet.bet_type {
+        let mut matched_amount = bet.matched_amount.clone();
+        let mut remaining = bet.unmatched_amount.clone();
+    
+        // Încercăm să facem match cu pariurile opuse
+        let mut opposite_levels = match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).get(),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).get(),
         };
-
+    
         let mut i = 0;
-        while i < levels.len() && remaining > BigUint::zero() {
-            let mut level = levels.get(i);
+        while i < opposite_levels.len() && remaining > BigUint::zero() {
+            let mut level = opposite_levels.get(i);
             
             if level.odds == bet.odd {
-            
                 let match_amount = match bet.bet_type {
                     BetType::Back => {
                         remaining.clone().min(level.total_stake.clone())
@@ -65,14 +65,14 @@ pub trait TrackerModule:
     
                     if !updated_nonces.is_empty() {
                         level.bet_nonces = updated_nonces;
-                        let _ = levels.set(i, level);
+                        let _ = opposite_levels.set(i, level);
                         i += 1;
                     } else {
-                        if i < levels.len() - 1 {
-                            let last = levels.get(levels.len() - 1);
-                            let _ = levels.set(i, last);
+                        if i < opposite_levels.len() - 1 {
+                            let last = opposite_levels.get(opposite_levels.len() - 1);
+                            let _ = opposite_levels.set(i, last);
                         }
-                        levels.remove(levels.len() - 1);
+                        opposite_levels.remove(opposite_levels.len() - 1);
                     }
                 } else {
                     i += 1;
@@ -82,11 +82,12 @@ pub trait TrackerModule:
             }
         }
         
+        // Salvăm levels-urile opuse actualizate
         match bet.bet_type {
-            BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).set(&levels),
-            BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).set(&levels),
+            BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).set(&opposite_levels),
+            BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).set(&opposite_levels),
         }
-
+    
         // Update bet state
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = remaining.clone();
@@ -95,7 +96,7 @@ pub trait TrackerModule:
             self.selection_matched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::Matched
-        } else if matched_amount > BigUint::zero() {
+        } else if matched_amount > bet.matched_amount {
             self.selection_partially_matched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::PartiallyMatched
@@ -104,17 +105,20 @@ pub trait TrackerModule:
                 .update(|val| *val += 1);
             BetStatus::Unmatched
         };
-
-        if matched_amount > BigUint::zero() {
-            self.update_total_matched(bet.event, bet.selection.id, &matched_amount);
+    
+        // Actualizăm totalul matched doar pentru noile matchuri
+        if matched_amount > bet.matched_amount {
+            let new_matches = &matched_amount - &bet.matched_amount;
+            self.update_total_matched(bet.event, bet.selection.id, &new_matches);
         }
         
+        // Adăugăm în orderbook doar dacă mai avem sumă unmatched
         if remaining > BigUint::zero() {
             self.add_to_orderbook(&bet);
         }
-
+    
         self.bet_by_id(bet.nft_nonce).set(&bet);
-
+    
         (matched_amount, remaining)
     }
 
@@ -288,32 +292,72 @@ pub trait TrackerModule:
         &self,
         market_id: u64,
         selection_id: u64
-    ) -> MultiValueEncoded<Self::Api, OrderbookView<Self::Api>> {
-        let mut result = MultiValueEncoded::new();
-        
+    ) -> MatchingDetails<Self::Api> {
         let back_levels = self.selection_back_levels(market_id, selection_id).get();
+        let lay_levels = self.selection_lay_levels(market_id, selection_id).get();
+        let back_liquidity = self.selection_back_liquidity(market_id, selection_id).get();
+        let lay_liquidity = self.selection_lay_liquidity(market_id, selection_id).get();
+        let matched_count = self.selection_matched_count(market_id, selection_id).get();
+        let unmatched_count = self.selection_unmatched_count(market_id, selection_id).get();
+        let partially_matched_count = self.selection_partially_matched_count(market_id, selection_id).get();
+
+        let mut back_level_views = ManagedVec::new();
         for level in back_levels.iter() {
             if level.total_stake > BigUint::zero() && !level.bet_nonces.is_empty() {
-                result.push(OrderbookView {
-                    price_level: level.odds.clone(),
-                    total_amount: level.total_stake.clone(),
-                    bet_count: self.count_valid_bets_at_level(&level)
+                let mut bets = ManagedVec::new();
+                for nonce in level.bet_nonces.iter() {
+                    let bet = self.bet_by_id(nonce).get();
+                    bets.push(BetView {
+                        nonce,
+                        bettor: bet.bettor,
+                        stake: bet.stake_amount,
+                        matched: bet.matched_amount,
+                        unmatched: bet.unmatched_amount,
+                        status: bet.status
+                    });
+                }
+                
+                back_level_views.push(PriceLevelView {
+                    odds: level.odds,
+                    total_stake: level.total_stake,
+                    bets
                 });
             }
         }
-        
-        let lay_levels = self.selection_lay_levels(market_id, selection_id).get();
+
+        let mut lay_level_views = ManagedVec::new();
         for level in lay_levels.iter() {
             if level.total_stake > BigUint::zero() && !level.bet_nonces.is_empty() {
-                result.push(OrderbookView {
-                    price_level: level.odds.clone(),
-                    total_amount: level.total_stake.clone(),
-                    bet_count: self.count_valid_bets_at_level(&level)
+                let mut bets = ManagedVec::new();
+                for nonce in level.bet_nonces.iter() {
+                    let bet = self.bet_by_id(nonce).get();
+                    bets.push(BetView {
+                        nonce,
+                        bettor: bet.bettor,
+                        stake: bet.stake_amount,
+                        matched: bet.matched_amount,
+                        unmatched: bet.unmatched_amount,
+                        status: bet.status
+                    });
+                }
+                
+                lay_level_views.push(PriceLevelView {
+                    odds: level.odds,
+                    total_stake: level.total_stake,
+                    bets
                 });
             }
         }
-        
-        result
+
+        MatchingDetails {
+            back_levels: back_level_views,
+            lay_levels: lay_level_views,
+            back_liquidity,
+            lay_liquidity,
+            matched_count,
+            unmatched_count,
+            partially_matched_count
+        }
     }
 
     #[view(getBetMatchingState)]
