@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, MatchingDetails, OrderbookView, PriceLevel, PriceLevelView};
+use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, MatchedPart, MatchingDetails, OrderbookView, PriceLevel, PriceLevelView};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -12,7 +12,6 @@ pub trait TrackerModule:
         let mut matched_amount = bet.matched_amount.clone();
         let mut remaining = bet.unmatched_amount.clone();
     
-        // Încercăm să facem match cu pariurile opuse
         let mut opposite_levels = match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).get(),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).get(),
@@ -33,6 +32,12 @@ pub trait TrackerModule:
                 };
                 
                 if match_amount > BigUint::zero() {
+                    // Adăugăm noua parte matched cu cota curentă
+                    bet.matched_parts.push(MatchedPart {
+                        amount: match_amount.clone(),
+                        odds: level.odds.clone()
+                    });
+
                     matched_amount += &match_amount;
                     remaining -= &match_amount;
                     level.total_stake -= &match_amount;
@@ -45,6 +50,12 @@ pub trait TrackerModule:
                             let match_this_bet = matched_bet.unmatched_amount.clone().min(match_amount.clone());
                             
                             if match_this_bet > BigUint::zero() {
+                                // Adăugăm partea matched și pentru pariul opus
+                                matched_bet.matched_parts.push(MatchedPart {
+                                    amount: match_this_bet.clone(),
+                                    odds: matched_bet.odd.clone()
+                                });
+
                                 matched_bet.matched_amount += &match_this_bet;
                                 matched_bet.unmatched_amount -= &match_this_bet;
                                 
@@ -53,6 +64,9 @@ pub trait TrackerModule:
                                 } else {
                                     BetStatus::PartiallyMatched
                                 };
+                                
+                                // Recalculăm potential profit pentru pariul opus
+                                matched_bet.potential_profit = self.calculate_total_potential_profit(&matched_bet);
                                 
                                 self.bet_by_id(nonce).set(&matched_bet);
     
@@ -82,13 +96,11 @@ pub trait TrackerModule:
             }
         }
         
-        // Salvăm levels-urile opuse actualizate
         match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).set(&opposite_levels),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).set(&opposite_levels),
         }
     
-        // Update bet state
         bet.matched_amount = matched_amount.clone();
         bet.unmatched_amount = remaining.clone();
         
@@ -96,7 +108,7 @@ pub trait TrackerModule:
             self.selection_matched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::Matched
-        } else if matched_amount > bet.matched_amount {
+        } else if matched_amount > BigUint::zero() {
             self.selection_partially_matched_count(bet.event, bet.selection.id)
                 .update(|val| *val += 1);
             BetStatus::PartiallyMatched
@@ -106,13 +118,14 @@ pub trait TrackerModule:
             BetStatus::Unmatched
         };
     
-        // Actualizăm totalul matched doar pentru noile matchuri
+        // Recalculăm profitul potențial bazat pe părțile matched
+        bet.potential_profit = self.calculate_total_potential_profit(&bet);
+    
         if matched_amount > bet.matched_amount {
             let new_matches = &matched_amount - &bet.matched_amount;
             self.update_total_matched(bet.event, bet.selection.id, &new_matches);
         }
         
-        // Adăugăm în orderbook doar dacă mai avem sumă unmatched
         if remaining > BigUint::zero() {
             self.add_to_orderbook(&bet);
         }
@@ -121,6 +134,28 @@ pub trait TrackerModule:
     
         (matched_amount, remaining)
     }
+
+    fn calculate_total_potential_profit(&self, bet: &Bet<Self::Api>) -> BigUint<Self::Api> {
+        let mut total_profit = BigUint::zero();
+        
+        for matched_part in bet.matched_parts.iter() {
+            match bet.bet_type {
+                BetType::Back => {
+                    // Pentru Back: amount * (odds - 1)
+                    let profit = (matched_part.odds.clone() - BigUint::from(100u32)) 
+                        * &matched_part.amount / BigUint::from(100u32);
+                    total_profit += profit;
+                },
+                BetType::Lay => {
+                    // Pentru Lay: doar matched amount
+                    total_profit += &matched_part.amount;
+                }
+            }
+        }
+        
+        total_profit
+    }
+
 
     fn add_to_orderbook(&self, bet: &Bet<Self::Api>) {
         let mut levels = match bet.bet_type {

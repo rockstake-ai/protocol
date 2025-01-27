@@ -27,6 +27,13 @@ pub enum MarketStatus {
     Settled
 }
 
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+pub struct MatchedPart<M: ManagedTypeApi> {
+    pub amount: BigUint<M>,
+    pub odds: BigUint<M>
+}
+
 
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
@@ -37,6 +44,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub stake_amount: BigUint<M>, 
     pub liability: BigUint<M>, 
     pub matched_amount: BigUint<M>, 
+    pub matched_parts: ManagedVec<M, MatchedPart<M>>,
     pub unmatched_amount: BigUint<M>, 
     pub potential_profit: BigUint<M>, 
     pub odd: BigUint<M>, 
@@ -202,6 +210,28 @@ pub struct OrderbookView<M: ManagedTypeApi> {
     pub total_amount: BigUint<M>,
     pub bet_count: u32
 }
+
+///
+///
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct DebugMatchedPart<M: ManagedTypeApi> {
+    pub amount: BigUint<M>,
+    pub odds: BigUint<M>
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct DebugBetState<M: ManagedTypeApi> {
+    pub bet_type: BetType,
+    pub stake_amount: BigUint<M>,
+    pub matched_amount: BigUint<M>,
+    pub status: BetStatus,
+    pub current_odds: BigUint<M>,
+    pub potential_profit: BigUint<M>,
+    pub matched_parts: ManagedVec<M, DebugMatchedPart<M>>
+}
+
 
 
 

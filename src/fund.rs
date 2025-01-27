@@ -58,7 +58,10 @@ pub trait FundModule:
             
             let original_matched = bet.matched_amount.clone();
             bet.unmatched_amount = BigUint::zero();
-            bet.matched_amount = original_matched; 
+            bet.matched_amount = original_matched.clone();
+            // Actualizăm stake_amount să reflecte doar partea matched
+            bet.stake_amount = original_matched; 
+            
             bet.status = if bet.matched_amount > BigUint::zero() {
                 BetStatus::Matched
             } else {
@@ -141,7 +144,27 @@ pub trait FundModule:
 
     fn process_winning_bet(&self, bet: &mut Bet<Self::Api>) {
         bet.status = BetStatus::Win;
-        let payout = &bet.matched_amount + &bet.potential_profit;
+        
+        let payout = match bet.bet_type {
+            BetType::Back => {
+                let mut total_payout = BigUint::zero();
+                
+                for part in bet.matched_parts.iter() {
+                    let part_profit = (part.odds.clone() - BigUint::from(100u32)) * &part.amount / BigUint::from(100u32);
+                    total_payout += &part.amount + &part_profit;
+                }
+                
+                total_payout
+            },
+            BetType::Lay => {
+                // Pentru Lay: suma tuturor părților matched
+                let mut total_matched = BigUint::zero();
+                for part in bet.matched_parts.iter() {
+                    total_matched += &part.amount;
+                }
+                total_matched
+            }
+        };
         
         self.send().direct(
             &bet.bettor,
@@ -149,7 +172,7 @@ pub trait FundModule:
             bet.payment_nonce,
             &payout
         );
-
+    
         self.reward_distributed_event(
             bet.nft_nonce,
             &bet.bettor,
