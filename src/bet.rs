@@ -128,21 +128,23 @@ pub trait BetModule:
                 self.validate_bet_odds(&odds);
                 odds
             },
-            OptionalValue::None => bet.odd.clone() // Nu mai validăm cotele când folosim valoarea existentă
+            OptionalValue::None => bet.odd.clone()
         };
 
         let old_unmatched = bet.unmatched_amount.clone();
-        let update_amount = match &new_amount {
-            OptionalValue::Some(amount) => {
+        let new_unmatched = match &new_amount {
+            OptionalValue::Some(new_unmatched) => {
                 require!(
-                    amount <= &old_unmatched,
+                    new_unmatched <= &old_unmatched,
                     "New amount cannot exceed unmatched amount"
                 );
-                bet.matched_amount.clone() + amount // Adăugăm partea matched
+                new_unmatched.clone()
             },
-            OptionalValue::None => bet.stake_amount.clone()
-         };
-        
+            OptionalValue::None => bet.unmatched_amount.clone()
+        };
+
+        bet.stake_amount = bet.matched_amount.clone() + &new_unmatched;
+        bet.unmatched_amount = new_unmatched.clone();
 
         let old_liability = match bet.bet_type {
             BetType::Back => BigUint::zero(),
@@ -153,12 +155,11 @@ pub trait BetModule:
 
         let (stake, new_liability) = self.calculate_stake_and_liability(
             &bet.bet_type,
-            &update_amount,
+            &bet.stake_amount,
             &update_odds
         );
 
         bet.odd = update_odds.clone();
-        bet.unmatched_amount = update_amount.clone();
         bet.liability = new_liability.clone();
         bet.potential_profit = self.calculate_potential_profit(&bet.bet_type, &stake, &update_odds);
 
@@ -171,10 +172,10 @@ pub trait BetModule:
             *val += &new_liability;
         });
 
-        if &old_unmatched > &update_amount {
-            let refund = old_unmatched - &update_amount;
+        let refund = old_unmatched - &new_unmatched;
+        if refund > BigUint::zero() {
             self.send().direct(&caller, &payment_token, 0, &refund);
-         }
+        }
 
         self.bet_by_id(bet_nonce).set(&updated_bet);
     }
