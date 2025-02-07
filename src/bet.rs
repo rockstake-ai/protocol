@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, DebugBetState, DebugMatchedPart, MatchedPart};
+use crate::types::{Bet, BetAttributes, BetStatus, BetType, DebugBetState, DebugMatchedPart};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -75,6 +75,7 @@ pub trait BetModule:
         );
     }
 
+    #[payable("*")]
     #[endpoint(cancelBet)]
     fn cancel_bet(&self, bet_nonce: u64) {
         let caller = self.blockchain().get_caller();
@@ -93,126 +94,179 @@ pub trait BetModule:
         
         self.remove_from_orderbook(&bet);
         
+        if bet.status == BetStatus::Unmatched {
+            self.send().esdt_local_burn(
+                self.bet_nft_token().get_token_id_ref(),
+                bet.nft_nonce,
+                &BigUint::from(1u64)
+            );
+        } else {
+            let attributes = BetAttributes {
+                event: bet.event.clone(),
+                selection: bet.selection.clone(),
+                stake: bet.stake_amount.clone(),
+                potential_win: bet.potential_profit.clone(),
+                odd: bet.odd.clone(),
+                bet_type: bet.bet_type.clone(),
+                status: BetStatus::Canceled,
+                metadata: self.build_metadata(bet.nft_nonce),
+            };
+
+            self.send().nft_update_attributes(
+                self.bet_nft_token().get_token_id_ref(),
+                bet.nft_nonce,
+                &attributes
+            );
+        }
+        
         bet.status = BetStatus::Canceled;
         bet.unmatched_amount = BigUint::zero();
         self.bet_by_id(bet_nonce).set(&bet);
         
         self.locked_funds(&caller).update(|val| *val -= &refund_amount);
         
-        self.send().direct(&caller, &bet.payment_token,0, &refund_amount);
+        self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
     }
+
 
     #[endpoint(updateBet)]
-#[allow_multiple_var_args]
-fn update_bet(
-    &self,
-    bet_nonce: u64,
-    new_odds: OptionalValue<BigUint>,
-    new_amount: OptionalValue<BigUint>,
-) {
-    let caller = self.blockchain().get_caller();
-    let mut bet = self.bet_by_id(bet_nonce).get();
-    
-    require!(bet.bettor == caller, "Not bet owner");
-    require!(
-        bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
-        "Bet cannot be updated"
-    );
-    require!(
-        new_odds.is_some() || new_amount.is_some(),
-        "Must provide new odds or amount"
-    );
+    #[payable("*")]
+    #[allow_multiple_var_args]
+    fn update_bet(
+        &self,
+        bet_nonce: u64,
+        new_odds: OptionalValue<BigUint>,
+        new_amount: OptionalValue<BigUint>,
+    ) {
+        let caller = self.blockchain().get_caller();
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        
+        require!(bet.bettor == caller, "Not bet owner");
+        require!(
+            bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
+            "Bet cannot be updated"
+        );
+        require!(
+            new_odds.is_some() || new_amount.is_some(),
+            "Must provide new odds or amount"
+        );
 
-    // Păstrăm matched_parts neschimbate
-    let matched_parts = bet.matched_parts.clone();
-    let old_unmatched = bet.unmatched_amount.clone();
-    
-    let old_liability = match bet.bet_type {
-        BetType::Back => BigUint::zero(),
-        BetType::Lay => bet.liability.clone()
-    };
+        let matched_parts = bet.matched_parts.clone();
+        let old_unmatched = bet.unmatched_amount.clone();
+        
+        let old_liability = match bet.bet_type {
+            BetType::Back => BigUint::zero(),
+            BetType::Lay => bet.liability.clone()
+        };
 
-    let update_odds = match &new_odds {
-        OptionalValue::Some(odds) => {
-            self.validate_bet_odds(odds);
-            odds.clone()
-        },
-        OptionalValue::None => bet.odd.clone()
-    };
+        let update_odds = match &new_odds {
+            OptionalValue::Some(odds) => {
+                self.validate_bet_odds(odds);
+                odds.clone()
+            },
+            OptionalValue::None => bet.odd.clone()
+        };
 
-    let new_unmatched = match &new_amount {
-        OptionalValue::Some(amount) => {
-            require!(
-                amount <= &old_unmatched,
-                "New amount cannot exceed unmatched amount"
+        let new_unmatched = match &new_amount {
+            OptionalValue::Some(amount) => {
+                require!(
+                    amount <= &old_unmatched,
+                    "New amount cannot exceed unmatched amount"
+                );
+                amount.clone()
+            },
+            OptionalValue::None => old_unmatched.clone()
+        };
+
+        let refund_amount = if new_amount.is_some() {
+            old_unmatched.clone() - &new_unmatched
+        } else {
+            BigUint::zero()
+        };
+
+        if new_amount.is_some() || new_odds.is_some() {
+            self.remove_from_orderbook(&bet);
+        }
+
+        bet.odd = update_odds.clone();
+        bet.unmatched_amount = new_unmatched.clone();
+        
+        bet.stake_amount = BigUint::zero();
+        for part in bet.matched_parts.iter() {
+            bet.stake_amount += &part.amount;
+        }
+        bet.stake_amount += &new_unmatched;
+
+        bet.potential_profit = self.calculate_total_potential_profit(&bet);
+
+        let mut total_liability = BigUint::zero();
+        
+        for part in bet.matched_parts.iter() {
+            let (_, matched_liability) = self.calculate_stake_and_liability(
+                &bet.bet_type,
+                &part.amount,
+                &part.odds
             );
-            amount.clone()
-        },
-        OptionalValue::None => old_unmatched.clone()
-    };
+            total_liability += matched_liability;
+        }
 
-    let refund_amount = if new_amount.is_some() {
-        old_unmatched.clone() - &new_unmatched
-    } else {
-        BigUint::zero()
-    };
+        if new_unmatched > BigUint::zero() {
+            let (_, unmatched_liability) = self.calculate_stake_and_liability(
+                &bet.bet_type,
+                &new_unmatched,
+                &update_odds
+            );
+            total_liability += unmatched_liability;
+        }
 
-    if new_amount.is_some() || new_odds.is_some() {
-        self.remove_from_orderbook(&bet);
-    }
+        bet.liability = total_liability.clone();
 
-    bet.odd = update_odds.clone();
-    bet.unmatched_amount = new_unmatched.clone();
-    
-    // Calculăm stake_amount ca suma tuturor părților matched plus unmatched
-    bet.stake_amount = BigUint::zero();
-    for part in bet.matched_parts.iter() {
-        bet.stake_amount += &part.amount;
-    }
-    bet.stake_amount += &new_unmatched;
+        let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
 
-    // Recalculăm profitul potențial bazat pe matched_parts
-    bet.potential_profit = self.calculate_total_potential_profit(&bet);
+        let bet_payment = self.call_value().single_esdt();
 
-    // Calculăm liability total
-    let mut total_liability = BigUint::zero();
-    
-    // Pentru părțile matched
-    for part in bet.matched_parts.iter() {
-        let (_, matched_liability) = self.calculate_stake_and_liability(
-            &bet.bet_type,
-            &part.amount,
-            &part.odds
+        require!(
+            bet_payment.token_identifier == self.bet_nft_token().get_token_id(),
+            "Invalid Bet NFT"
         );
-        total_liability += matched_liability;
-    }
 
-    // Pentru partea unmatched
-    if new_unmatched > BigUint::zero() {
-        let (_, unmatched_liability) = self.calculate_stake_and_liability(
-            &bet.bet_type,
-            &new_unmatched,
-            &update_odds
+        let attributes = BetAttributes {
+            event: bet.event.clone(),
+            selection: bet.selection.clone(),
+            stake: bet.stake_amount.clone(),
+            potential_win: bet.potential_profit.clone(),
+            odd: update_odds.clone(),
+            bet_type: bet.bet_type.clone(),
+            status: bet.status.clone(),
+            metadata: self.build_metadata(bet.nft_nonce),
+        };
+
+        let token_identifier = bet.payment_token.clone().unwrap_esdt();
+
+        self.send().nft_update_attributes(
+            &token_identifier,
+            bet.nft_nonce,
+            &attributes
         );
-        total_liability += unmatched_liability;
+
+        self.locked_funds(&caller).update(|val| {
+            *val -= &old_liability;
+            *val += &total_liability;
+        });
+
+        let updated_bet: Bet<<Self as ContractBase>::Api> = self.update_bet_status(bet, matched_amount, unmatched_amount);
+        self.bet_by_id(bet_nonce).set(&updated_bet);
+
+        if refund_amount > BigUint::zero() {
+            self.send().direct(&caller, &updated_bet.payment_token, 0, &refund_amount);
+            self.send().direct_esdt(
+                &caller,
+                &token_identifier,
+                bet_nonce,
+                &BigUint::from(1u64)
+            );
+        }
     }
-
-    bet.liability = total_liability.clone();
-
-    let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
-
-    self.locked_funds(&caller).update(|val| {
-        *val -= &old_liability;
-        *val += &total_liability;
-    });
-
-    let updated_bet = self.update_bet_status(bet, matched_amount, unmatched_amount);
-    self.bet_by_id(bet_nonce).set(&updated_bet);
-
-    if refund_amount > BigUint::zero() {
-        self.send().direct(&caller, &updated_bet.payment_token, 0, &refund_amount);
-    }
-}
 
 
 fn create_bet(
