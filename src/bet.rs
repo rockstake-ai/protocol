@@ -80,49 +80,82 @@ pub trait BetModule:
     fn cancel_bet(&self, bet_nonce: u64) {
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_nonce).get();
+
         let (token_identifier, payment_nonce, _amount) = self
-            .call_value()
-            .egld_or_single_esdt()
-            .into_tuple();
+        .call_value()
+        .egld_or_single_esdt()
+        .into_tuple();
+
+        let token_identifier_wrap = token_identifier.unwrap_esdt();
+
         require!(bet.bettor == caller, "Not bet owner");
         require!(
             bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
             "Bet cannot be cancelled"
-            );
+        );
+        
         let refund_amount = match bet.bet_type {
             BetType::Back => bet.unmatched_amount.clone(),
             BetType::Lay => bet.liability.clone()
         };
+        
         self.remove_from_orderbook(&bet);
+        
         if bet.status == BetStatus::Unmatched {
             self.send().esdt_local_burn(
-            self.bet_nft_token().get_token_id_ref(),
-            bet.nft_nonce,
-            &BigUint::from(1u64)
+                &token_identifier_wrap,
+                payment_nonce,
+                &BigUint::from(1u64)
             );
         } else {
-        let attributes = BetAttributes {
-            event: bet.event.clone(),
-            selection: bet.selection.clone(),
-            stake: bet.stake_amount.clone(),
-            potential_win: bet.potential_profit.clone(),
-            odd: bet.odd.clone(),
-            bet_type: bet.bet_type.clone(),
-            status: BetStatus::Canceled,
-        };
+            let mut new_stake = BigUint::zero();
+            for part in bet.matched_parts.iter() {
+                new_stake += &part.amount;
+            }
+            let new_potential_win = self.calculate_matched_potential_profit(&bet);
+
+            let attributes = BetAttributes {
+                event: bet.event.clone(),
+                selection: bet.selection.clone(),
+                stake: new_stake,             
+                potential_win: new_potential_win,
+                odd: bet.odd.clone(),
+                bet_type: bet.bet_type.clone(),
+                status: bet.status,  
+            };
+    
             self.send().nft_update_attributes(
                 self.bet_nft_token().get_token_id_ref(),
                 bet.nft_nonce,
                 &attributes
             );
         }
+        
         bet.status = BetStatus::Canceled;
         bet.unmatched_amount = BigUint::zero();
-
         self.bet_by_id(bet_nonce).set(&bet);
         
         self.locked_funds(&caller).update(|val| *val -= &refund_amount);
+        
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
+    }
+
+    fn calculate_matched_potential_profit(&self, bet: &Bet<Self::Api>) -> BigUint {
+        let mut total_potential_profit = BigUint::zero();
+        
+        for part in bet.matched_parts.iter() {
+            let potential_profit = match bet.bet_type {
+                BetType::Back => {
+                    &part.amount * &part.odds / BigUint::from(100u64) - &part.amount
+                },
+                BetType::Lay => {
+                    part.amount
+                }
+            };
+            total_potential_profit += potential_profit;
+        }
+        
+        total_potential_profit
     }
 
 
@@ -481,6 +514,7 @@ fn get_debug_bet_state(
         bet_type: bet.bet_type,
         stake_amount: bet.stake_amount,
         matched_amount: bet.matched_amount,
+        unmatched_amount: bet.unmatched_amount,
         status: bet.status,
         current_odds: bet.odd,
         potential_profit: bet.potential_profit,

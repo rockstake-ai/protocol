@@ -226,6 +226,7 @@ pub struct DebugBetState<M: ManagedTypeApi> {
     pub bet_type: BetType,
     pub stake_amount: BigUint<M>,
     pub matched_amount: BigUint<M>,
+    pub unmatched_amount: BigUint<M>,
     pub status: BetStatus,
     pub current_odds: BigUint<M>,
     pub potential_profit: BigUint<M>,
