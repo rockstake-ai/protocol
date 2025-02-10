@@ -80,51 +80,48 @@ pub trait BetModule:
     fn cancel_bet(&self, bet_nonce: u64) {
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_nonce).get();
-        
+        let (token_identifier, payment_nonce, _amount) = self
+            .call_value()
+            .egld_or_single_esdt()
+            .into_tuple();
         require!(bet.bettor == caller, "Not bet owner");
         require!(
             bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
             "Bet cannot be cancelled"
-        );
-        
+            );
         let refund_amount = match bet.bet_type {
             BetType::Back => bet.unmatched_amount.clone(),
             BetType::Lay => bet.liability.clone()
         };
-        
         self.remove_from_orderbook(&bet);
-        
         if bet.status == BetStatus::Unmatched {
             self.send().esdt_local_burn(
-                self.bet_nft_token().get_token_id_ref(),
-                bet.nft_nonce,
-                &BigUint::from(1u64)
+            self.bet_nft_token().get_token_id_ref(),
+            bet.nft_nonce,
+            &BigUint::from(1u64)
             );
         } else {
-            let attributes = BetAttributes {
-                event: bet.event.clone(),
-                selection: bet.selection.clone(),
-                stake: bet.stake_amount.clone(),
-                potential_win: bet.potential_profit.clone(),
-                odd: bet.odd.clone(),
-                bet_type: bet.bet_type.clone(),
-                status: BetStatus::Canceled,
-                metadata: self.build_metadata(bet.nft_nonce),
-            };
-
+        let attributes = BetAttributes {
+            event: bet.event.clone(),
+            selection: bet.selection.clone(),
+            stake: bet.stake_amount.clone(),
+            potential_win: bet.potential_profit.clone(),
+            odd: bet.odd.clone(),
+            bet_type: bet.bet_type.clone(),
+            status: BetStatus::Canceled,
+        };
             self.send().nft_update_attributes(
                 self.bet_nft_token().get_token_id_ref(),
                 bet.nft_nonce,
                 &attributes
             );
         }
-        
         bet.status = BetStatus::Canceled;
         bet.unmatched_amount = BigUint::zero();
+
         self.bet_by_id(bet_nonce).set(&bet);
         
         self.locked_funds(&caller).update(|val| *val -= &refund_amount);
-        
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
     }
 
@@ -138,6 +135,12 @@ pub trait BetModule:
         new_odds: OptionalValue<BigUint>,
         new_amount: OptionalValue<BigUint>,
     ) {
+
+        let (token_identifier, payment_nonce, _amount) = self
+        .call_value()
+        .egld_or_single_esdt()
+        .into_tuple();
+
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_nonce).get();
         
@@ -150,6 +153,12 @@ pub trait BetModule:
             new_odds.is_some() || new_amount.is_some(),
             "Must provide new odds or amount"
         );
+
+        require!(
+            token_identifier == self.bet_nft_token().get_token_id(),
+            "Invalid NFT token identifier"
+        );
+        require!(payment_nonce == bet_nonce, "Invalid NFT nonce");
 
         let matched_parts = bet.matched_parts.clone();
         let old_unmatched = bet.unmatched_amount.clone();
@@ -223,13 +232,6 @@ pub trait BetModule:
 
         let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
 
-        let bet_payment = self.call_value().single_esdt();
-
-        require!(
-            bet_payment.token_identifier == self.bet_nft_token().get_token_id(),
-            "Invalid Bet NFT"
-        );
-
         let attributes = BetAttributes {
             event: bet.event.clone(),
             selection: bet.selection.clone(),
@@ -238,16 +240,9 @@ pub trait BetModule:
             odd: update_odds.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),
-            metadata: self.build_metadata(bet.nft_nonce),
         };
 
-        let token_identifier = bet.payment_token.clone().unwrap_esdt();
-
-        self.send().nft_update_attributes(
-            &token_identifier,
-            bet.nft_nonce,
-            &attributes
-        );
+        let token_identifier_wrap = token_identifier.unwrap_esdt();
 
         self.locked_funds(&caller).update(|val| {
             *val -= &old_liability;
@@ -257,11 +252,17 @@ pub trait BetModule:
         let updated_bet: Bet<<Self as ContractBase>::Api> = self.update_bet_status(bet, matched_amount, unmatched_amount);
         self.bet_by_id(bet_nonce).set(&updated_bet);
 
+        self.send().nft_update_attributes(
+            &token_identifier_wrap,
+            payment_nonce,
+            &attributes
+        );
+
         if refund_amount > BigUint::zero() {
             self.send().direct(&caller, &updated_bet.payment_token, 0, &refund_amount);
             self.send().direct_esdt(
                 &caller,
-                &token_identifier,
+                &token_identifier_wrap,
                 bet_nonce,
                 &BigUint::from(1u64)
             );

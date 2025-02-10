@@ -5,10 +5,6 @@ multiversx_sc::imports!();
 extern crate alloc;
 use alloc::string::ToString;
 
-const IPFS_GATEWAY: &[u8] = "https://ipfs.io/ipfs/".as_bytes();
-const METADATA_KEY_NAME: &[u8] = b"metadata:";
-const METADATA_FILE_EXTENSION: &[u8] = b".json";
-
 pub type AttributesAsMultiValue<M> =
     MultiValue7<u64, u64, BigUint<M>, BigUint<M>, BigUint<M>, BetType, BetStatus>;
 
@@ -22,14 +18,11 @@ pub trait NftModule:
     #[endpoint(issueToken)]
     fn issue_token(&self) {
         require!(self.bet_nft_token().is_empty(), ERR_TOKEN_ALREADY_ISSUED);
- 
         let issue_cost = self.call_value().egld_value().clone_value();
-
         let token_name = ManagedBuffer::new_from_bytes(TOKEN_NAME);
         let token_ticker = ManagedBuffer::new_from_bytes(TOKEN_TICKER);
-
+    
         self.bet_nft_token().issue_and_set_all_roles(EsdtTokenType::NonFungible, issue_cost, token_name, token_ticker, 0, Some(self.callbacks().issue_callback()));
-
     }
 
     #[callback]
@@ -45,6 +38,24 @@ pub trait NftModule:
         }
     }
 
+    #[only_owner]
+    #[endpoint(setLocalRoles)]
+    fn set_local_roles(&self) {
+        require!(!self.bet_nft_token().is_empty(), "Token is not issued");
+
+        let token = &self.bet_nft_token().get_token_id();
+        let roles = [EsdtLocalRole::NftUpdateAttributes];
+
+        self.send()
+            .esdt_system_sc_proxy()
+            .set_special_roles(
+                &self.blockchain().get_sc_address(),
+                token,
+                (&roles[..]).into_iter().cloned(),
+            )
+            .async_call_and_exit();
+    }
+
     fn mint_bet_nft(&self, metadata_cid: ManagedBuffer, bet: &Bet<Self::Api>) -> u64 {
         require!(!self.bet_nft_token().is_empty(), ERR_TOKEN_NOT_ISSUED);
         let big_one = BigUint::from(1u64);
@@ -54,9 +65,9 @@ pub trait NftModule:
         token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);
 
-        self.metadata_cid().set(&metadata_cid);
-        self.image_cid().set(&metadata_cid);
-        let metadata = self.build_metadata(bet.nft_nonce);
+        // self.metadata_cid().set(&metadata_cid);
+        // self.image_cid().set(&metadata_cid);
+        // let metadata = self.build_metadata(bet.nft_nonce);
         let uri = self.build_uri(bet.nft_nonce);
         let mut uris = ManagedVec::new();
         uris.push(uri);
@@ -69,16 +80,16 @@ pub trait NftModule:
             odd: bet.odd.clone(),
             bet_type: bet.bet_type.clone(),
             status: bet.status.clone(),
-            metadata,
         };
         let mut serialized_attributes = ManagedBuffer::new();
         if let core::result::Result::Err(err) = attributes.top_encode(&mut serialized_attributes) {
             sc_panic!("Attributes encode error: {}", err.message_bytes());
         }
 
+        // self.send().nft_update_attributes(token_id, nft_nonce, new_attributes);
+
         let attributes_sha256 = self.crypto().sha256(&serialized_attributes);
         let attributes_hash = attributes_sha256.as_managed_buffer();
-
 
         let nonce = self.send().esdt_nft_create(
             self.bet_nft_token().get_token_id_ref(),
