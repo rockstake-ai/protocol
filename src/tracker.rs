@@ -272,11 +272,21 @@ pub trait TrackerModule:
                     self.selection_back_levels(bet.event, bet.selection.id).set(&levels);
                     self.selection_back_liquidity(bet.event, bet.selection.id)
                         .update(|val| *val -= &unmatched_amount);
+                    
+                    require!(
+                        self.selection_back_liquidity(bet.event, bet.selection.id).get() >= BigUint::zero(),
+                        "Invalid liquidity after removal"
+                    );
                 },
                 BetType::Lay => {
                     self.selection_lay_levels(bet.event, bet.selection.id).set(&levels);
                     self.selection_lay_liquidity(bet.event, bet.selection.id)
                         .update(|val| *val -= &unmatched_amount);
+                    
+                    require!(
+                        self.selection_lay_liquidity(bet.event, bet.selection.id).get() >= BigUint::zero(),
+                        "Invalid liquidity after removal"
+                    );
                 },
             }
         }

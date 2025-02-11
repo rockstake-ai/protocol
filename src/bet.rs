@@ -80,9 +80,9 @@ pub trait BetModule:
         let mut bet = self.bet_by_id(bet_nonce).get();
 
         let (token_identifier, payment_nonce, _amount) = self
-        .call_value()
-        .egld_or_single_esdt()
-        .into_tuple();
+            .call_value()
+            .egld_or_single_esdt()
+            .into_tuple();
 
         let token_identifier_wrap = token_identifier.unwrap_esdt();
 
@@ -99,40 +99,42 @@ pub trait BetModule:
         };
         
         self.remove_from_orderbook(&bet);
-        
-        if bet.status == BetStatus::Unmatched {
-            self.send().esdt_local_burn(
-                &token_identifier_wrap,
-                payment_nonce,
-                &BigUint::from(1u64)
-            );
-        } else {
-            let new_stake = bet.total_matched.clone();
-            let new_potential_win = self.calculate_matched_potential_profit(&bet);
 
-            let attributes = BetAttributes {
-                event: bet.event.clone(),
-                selection: bet.selection.clone(),
-                stake: new_stake,             
-                potential_win: new_potential_win,
-                odd: bet.odd.clone(),
-                bet_type: bet.bet_type.clone(),
-                status: bet.status,  
-            };
-    
-            self.send().nft_update_attributes(
-                self.bet_nft_token().get_token_id_ref(),
-                bet.nft_nonce,
-                &attributes
-            );
+        match &bet.status {
+            BetStatus::Unmatched => {
+                self.selection_unmatched_count(bet.event, bet.selection.id)
+                    .update(|val| *val -= 1);
+
+                self.send().esdt_local_burn(
+                    &token_identifier_wrap,
+                    payment_nonce,
+                    &BigUint::from(1u64)
+                );
+
+                bet.status = BetStatus::Canceled;
+            },
+            BetStatus::PartiallyMatched => {
+                self.selection_partially_matched_count(bet.event, bet.selection.id)
+                    .update(|val| *val -= 1);
+                self.selection_matched_count(bet.event, bet.selection.id)
+                    .update(|val| *val += 1);
+
+                bet.status = BetStatus::Matched;
+
+                self.send().direct_esdt(
+                    &caller,
+                    &token_identifier_wrap,
+                    bet_nonce,
+                    &BigUint::from(1u64)
+                );
+            },
+            _ => {}
         }
         
-        bet.status = BetStatus::Canceled;
         bet.stake_amount = bet.total_matched.clone();
         self.bet_by_id(bet_nonce).set(&bet);
         
         self.locked_funds(&caller).update(|val| *val -= &refund_amount);
-        
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
     }
 

@@ -227,4 +227,75 @@ fn get_market_bets_info(&self, market_id: u64) -> MarketStatsResponse<Self::Api>
         bets
     }
 }
+
+#[view(getBetInfo)]
+fn get_bet_info(&self, bet_id: u64) -> MarketStatsResponse<Self::Api> {
+    let bet = self.bet_by_id(bet_id).get();
+    let unmatched = &bet.stake_amount - &bet.total_matched;
+    
+    // Initialize counters
+    let mut bet_counts = BetCounts {
+        total: 1,
+        matched: 0,
+        unmatched: 0,
+        partially_matched: 0
+    };
+    
+    // Initialize volumes
+    let mut volumes = MarketVolumes {
+        back_matched: BigUint::zero(),
+        lay_matched: BigUint::zero(),
+        back_unmatched: BigUint::zero(),
+        lay_unmatched: BigUint::zero()
+    };
+    
+    // Update count based on status
+    match bet.status {
+        BetStatus::Matched => bet_counts.matched = 1,
+        BetStatus::Unmatched => bet_counts.unmatched = 1,
+        BetStatus::PartiallyMatched => bet_counts.partially_matched = 1,
+        _ => {}
+    }
+    
+    // Update volumes based on bet type
+    match bet.bet_type {
+        BetType::Back => {
+            volumes.back_matched = bet.total_matched.clone();
+            volumes.back_unmatched = unmatched.clone();
+        },
+        BetType::Lay => {
+            volumes.lay_matched = bet.total_matched.clone();
+            volumes.lay_unmatched = unmatched.clone();
+        }
+    }
+    
+    // Create bet detail
+    let bet_detail = BetDetailResponse {
+        nft_nonce: bet.nft_nonce,
+        selection_id: bet.selection.id,
+        bettor: bet.bettor,
+        stake: BetAmounts {
+            stake_amount: bet.stake_amount,
+            matched: bet.total_matched,
+            unmatched,
+            liability: bet.liability
+        },
+        odds: bet.odd,
+        status: bet.status,
+        matched_info: BetMatchedInfo {
+            matched_parts: bet.matched_parts,
+            potential_profit: bet.potential_profit
+        }
+    };
+    
+    // Create response with single bet
+    let mut bets = ManagedVec::new();
+    bets.push(bet_detail);
+    
+    MarketStatsResponse {
+        bet_counts,
+        volumes,
+        bets
+    }
+}
 }

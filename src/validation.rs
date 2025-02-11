@@ -15,10 +15,10 @@ pub trait ValidationModule:
 
     fn validate_bet_amount(&self, total_amount: &BigUint) {
         let one_token = BigUint::from(1_000_000_000_000_000_000u64);
-        let tokens = total_amount / &one_token;
-
+        let tokens = (total_amount * &BigUint::from(10u32)) / &one_token; 
+        
         require!(
-            tokens >= BigUint::from(1u32) && tokens <= BigUint::from(10000u32),
+            tokens >= BigUint::from(1u32) && tokens <= BigUint::from(100000u32),
             "Stake amount out of range"
         );
     }
