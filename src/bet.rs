@@ -14,7 +14,6 @@ pub trait BetModule:
     #[endpoint(placeBet)]
     fn place_bet(
         &self,
-        cid: ManagedBuffer,
         market_id: u64,
         selection_id: u64,
         odds: BigUint,
@@ -49,8 +48,8 @@ pub trait BetModule:
             token_nonce
         );
 
-        let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
-        let updated_bet = self.update_bet_status(bet, matched_amount.clone(), unmatched_amount.clone());
+        let (matched_amount, remaining) = self.process_bet(bet.clone());
+        let updated_bet = self.update_bet_status(bet, matched_amount.clone(), remaining.clone());
         self.update_market_and_selection(
             market_id,
             selection_id,
@@ -58,10 +57,9 @@ pub trait BetModule:
         );
 
         self.handle_nft_and_locked_funds(
-            cid,
             &caller,
             &updated_bet,
-            &unmatched_amount,
+            &remaining,
             &final_liability,
             bet_type
         );
@@ -71,7 +69,7 @@ pub trait BetModule:
             &token_identifier,
             token_nonce,
             &matched_amount,
-            &unmatched_amount
+            &remaining
         );
     }
 
@@ -94,8 +92,9 @@ pub trait BetModule:
             "Bet cannot be cancelled"
         );
         
+        let unmatched = &bet.stake_amount - &bet.total_matched;
         let refund_amount = match bet.bet_type {
-            BetType::Back => bet.unmatched_amount.clone(),
+            BetType::Back => unmatched,
             BetType::Lay => bet.liability.clone()
         };
         
@@ -108,10 +107,7 @@ pub trait BetModule:
                 &BigUint::from(1u64)
             );
         } else {
-            let mut new_stake = BigUint::zero();
-            for part in bet.matched_parts.iter() {
-                new_stake += &part.amount;
-            }
+            let new_stake = bet.total_matched.clone();
             let new_potential_win = self.calculate_matched_potential_profit(&bet);
 
             let attributes = BetAttributes {
@@ -132,7 +128,7 @@ pub trait BetModule:
         }
         
         bet.status = BetStatus::Canceled;
-        bet.unmatched_amount = BigUint::zero();
+        bet.stake_amount = bet.total_matched.clone();
         self.bet_by_id(bet_nonce).set(&bet);
         
         self.locked_funds(&caller).update(|val| *val -= &refund_amount);
@@ -158,7 +154,6 @@ pub trait BetModule:
         total_potential_profit
     }
 
-
     #[endpoint(updateBet)]
     #[payable("*")]
     #[allow_multiple_var_args]
@@ -168,7 +163,6 @@ pub trait BetModule:
         new_odds: OptionalValue<BigUint>,
         new_amount: OptionalValue<BigUint>,
     ) {
-
         let (token_identifier, payment_nonce, _amount) = self
         .call_value()
         .egld_or_single_esdt()
@@ -193,8 +187,7 @@ pub trait BetModule:
         );
         require!(payment_nonce == bet_nonce, "Invalid NFT nonce");
 
-        let matched_parts = bet.matched_parts.clone();
-        let old_unmatched = bet.unmatched_amount.clone();
+        let old_unmatched = &bet.stake_amount - &bet.total_matched;
         
         let old_liability = match bet.bet_type {
             BetType::Back => BigUint::zero(),
@@ -231,14 +224,7 @@ pub trait BetModule:
         }
 
         bet.odd = update_odds.clone();
-        bet.unmatched_amount = new_unmatched.clone();
-        
-        bet.stake_amount = BigUint::zero();
-        for part in bet.matched_parts.iter() {
-            bet.stake_amount += &part.amount;
-        }
-        bet.stake_amount += &new_unmatched;
-
+        bet.stake_amount = bet.total_matched.clone() + &new_unmatched;
         bet.potential_profit = self.calculate_total_potential_profit(&bet);
 
         let mut total_liability = BigUint::zero();
@@ -263,7 +249,7 @@ pub trait BetModule:
 
         bet.liability = total_liability.clone();
 
-        let (matched_amount, unmatched_amount) = self.process_bet(bet.clone());
+        let (matched_amount, remaining) = self.process_bet(bet.clone());
 
         let attributes = BetAttributes {
             event: bet.event.clone(),
@@ -282,7 +268,7 @@ pub trait BetModule:
             *val += &total_liability;
         });
 
-        let updated_bet: Bet<<Self as ContractBase>::Api> = self.update_bet_status(bet, matched_amount, unmatched_amount);
+        let updated_bet = self.update_bet_status(bet, matched_amount, remaining);
         self.bet_by_id(bet_nonce).set(&updated_bet);
 
         self.send().nft_update_attributes(
@@ -302,67 +288,63 @@ pub trait BetModule:
         }
     }
 
-
-fn create_bet(
-    &self,
-    market_id: u64,
-    selection_id: u64,
-    caller: &ManagedAddress<Self::Api>,
-    stake: &BigUint,
-    liability: &BigUint,
-    odds: &BigUint,
-    bet_type: BetType,
-    token_identifier: EgldOrEsdtTokenIdentifier<Self::Api>,
-    token_nonce: u64
-) -> Bet<Self::Api> {
-    let market = self.markets(market_id).get();
-    let selection = market.selections
-        .iter()
-        .find(|s| s.id == selection_id)
-        .unwrap_or_else(|| sc_panic!("Invalid selection"))
-        .clone();
-    let bet_id = self.get_last_bet_id() + 1;
-    
-    Bet {
-        bettor: caller.clone(),
-        event: market_id,
-        selection,
-        stake_amount: stake.clone(),
-        liability: liability.clone(),
-        matched_amount: BigUint::zero(),
-        matched_parts: ManagedVec::new(),
-        unmatched_amount: stake.clone(),
-        potential_profit: BigUint::zero(),
-        odd: odds.clone(),
-        bet_type,
-        status: BetStatus::Unmatched,
-        payment_token: token_identifier,
-        payment_nonce: token_nonce,
-        nft_nonce: bet_id,
-        created_at: self.blockchain().get_block_timestamp()
-    }
-}
-
-fn update_bet_status(
-    &self,
-    mut bet: Bet<Self::Api>,
-    matched_amount: BigUint,
-    unmatched_amount: BigUint
-) -> Bet<Self::Api> {
-    bet.matched_amount = matched_amount.clone();
-    bet.unmatched_amount = unmatched_amount.clone();
-    bet.status = if matched_amount > BigUint::zero() {
-        if unmatched_amount > BigUint::zero() {
-            BetStatus::PartiallyMatched
-        } else {
-            BetStatus::Matched
+    fn create_bet(
+        &self,
+        market_id: u64,
+        selection_id: u64,
+        caller: &ManagedAddress<Self::Api>,
+        stake: &BigUint,
+        liability: &BigUint,
+        odds: &BigUint,
+        bet_type: BetType,
+        token_identifier: EgldOrEsdtTokenIdentifier<Self::Api>,
+        token_nonce: u64
+    ) -> Bet<Self::Api> {
+        let market = self.markets(market_id).get();
+        let selection = market.selections
+            .iter()
+            .find(|s| s.id == selection_id)
+            .unwrap_or_else(|| sc_panic!("Invalid selection"))
+            .clone();
+        let bet_id = self.get_last_bet_id() + 1;
+        
+        Bet {
+            bettor: caller.clone(),
+            event: market_id,
+            selection,
+            stake_amount: stake.clone(),
+            liability: liability.clone(),
+            total_matched: BigUint::zero(),
+            matched_parts: ManagedVec::new(),
+            potential_profit: BigUint::zero(),
+            odd: odds.clone(),
+            bet_type,
+            status: BetStatus::Unmatched,
+            payment_token: token_identifier,
+            payment_nonce: token_nonce,
+            nft_nonce: bet_id,
+            created_at: self.blockchain().get_block_timestamp()
         }
-    } else {
-        BetStatus::Unmatched
-    };
-    bet
-}
+    }
 
+    fn update_bet_status(
+        &self,
+        mut bet: Bet<Self::Api>,
+        matched_amount: BigUint,
+        remaining: BigUint
+    ) -> Bet<Self::Api> {
+        bet.total_matched = matched_amount.clone();
+        bet.status = if matched_amount > BigUint::zero() {
+            if remaining > BigUint::zero() {
+                BetStatus::PartiallyMatched
+            } else {
+                BetStatus::Matched
+            }
+        } else {
+            BetStatus::Unmatched
+        };
+        bet
+    }
 
     fn update_market_and_selection(
         &self,
@@ -387,19 +369,18 @@ fn update_bet_status(
 
     fn handle_nft_and_locked_funds(
         &self,
-        cid: ManagedBuffer,
         caller: &ManagedAddress<Self::Api>,
         bet: &Bet<Self::Api>,
-        unmatched_amount: &BigUint,
+        remaining: &BigUint,
         liability: &BigUint,
         bet_type: BetType
     ) {
-        let bet_nft_nonce = self.mint_bet_nft(cid, bet);
+        let bet_nft_nonce = self.mint_bet_nft(bet);
         self.bet_by_id(bet.nft_nonce).set(bet);
 
         self.market_bet_ids(bet.event).insert(bet.nft_nonce);
         let total_locked = match bet_type {
-            BetType::Back => unmatched_amount.clone(),
+            BetType::Back => remaining.clone(),
             BetType::Lay => liability.clone(),
         };
         self.locked_funds(caller).update(|current_locked| *current_locked += &total_locked);
@@ -469,56 +450,31 @@ fn update_bet_status(
         )
     }
 
-//     #[view(getDebugBetState)]
-// fn get_debug_bet_state(
-//     &self,
-//     bet_nonce: u64
-// ) -> MultiValue7<
-//     BetType,
-//     BigUint<Self::Api>,
-//     BigUint<Self::Api>,
-//     BetStatus,
-//     BigUint<Self::Api>,
-//     BigUint<Self::Api>,
-//     ManagedVec<Self::Api, MatchedPart<Self::Api>>
-// > {
-//     let bet = self.bet_by_id(bet_nonce).get();
-    
-//     (
-//         bet.bet_type,
-//         bet.stake_amount,
-//         bet.matched_amount,
-//         bet.status,
-//         bet.odd,
-//         bet.potential_profit,
-//         bet.matched_parts
-//     ).into()
-// }
-
-#[view(getDebugBetState)]
-fn get_debug_bet_state(
-    &self,
-    bet_nonce: u64
-) -> DebugBetState<Self::Api> {
-    let bet = self.bet_by_id(bet_nonce).get();
-    
-    let mut matched_parts = ManagedVec::new();
-    for part in bet.matched_parts.iter() {
-        matched_parts.push(DebugMatchedPart {
-            amount: part.amount,
-            odds: part.odds
-        });
+    #[view(getDebugBetState)]
+    fn get_debug_bet_state(
+        &self,
+        bet_nonce: u64
+    ) -> DebugBetState<Self::Api> {
+        let bet = self.bet_by_id(bet_nonce).get();
+        let unmatched = &bet.stake_amount - &bet.total_matched;
+        
+        let mut matched_parts = ManagedVec::new();
+        for part in bet.matched_parts.iter() {
+            matched_parts.push(DebugMatchedPart {
+                amount: part.amount,
+                odds: part.odds
+            });
+        }
+        
+        DebugBetState {
+            bet_type: bet.bet_type,
+            stake_amount: bet.stake_amount,
+            matched_amount: bet.total_matched,
+            unmatched_amount: unmatched,
+            status: bet.status,
+            current_odds: bet.odd,
+            potential_profit: bet.potential_profit,
+            matched_parts
+        }
     }
-    
-    DebugBetState {
-        bet_type: bet.bet_type,
-        stake_amount: bet.stake_amount,
-        matched_amount: bet.matched_amount,
-        unmatched_amount: bet.unmatched_amount,
-        status: bet.status,
-        current_odds: bet.odd,
-        potential_profit: bet.potential_profit,
-        matched_parts
-    }
-}
 }

@@ -1,4 +1,4 @@
-use crate::types::{Market, MarketStatus, Selection, Tracker};
+use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetMatchedInfo, BetStatus, BetType, Market, MarketStatsResponse, MarketStatus, MarketVolumes, Selection, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -155,4 +155,76 @@ pub trait MarketModule:
         }
         self.market_counter().get()
     }
+
+    #[view(getMarketBetsInfo)]
+fn get_market_bets_info(&self, market_id: u64) -> MarketStatsResponse<Self::Api> {
+    let mut bet_counts = BetCounts {
+        total: 0,
+        matched: 0,
+        unmatched: 0,
+        partially_matched: 0
+    };
+    
+    let mut volumes = MarketVolumes {
+        back_matched: BigUint::zero(),
+        lay_matched: BigUint::zero(),
+        back_unmatched: BigUint::zero(),
+        lay_unmatched: BigUint::zero()
+    };
+    
+    let mut bets = ManagedVec::new();
+
+    for bet_id in self.market_bet_ids(market_id).iter() {
+        let bet = self.bet_by_id(bet_id).get();
+        let unmatched = &bet.stake_amount - &bet.total_matched;
+        
+        // Update counts
+        match bet.status {
+            BetStatus::Matched => bet_counts.matched += 1,
+            BetStatus::Unmatched => bet_counts.unmatched += 1,
+            BetStatus::PartiallyMatched => bet_counts.partially_matched += 1,
+            _ => {}
+        }
+        
+        // Update volumes
+        match bet.bet_type {
+            BetType::Back => {
+                volumes.back_matched += &bet.total_matched;
+                volumes.back_unmatched += &unmatched;
+            },
+            BetType::Lay => {
+                volumes.lay_matched += &bet.total_matched;
+                volumes.lay_unmatched += &unmatched;
+            }
+        }
+        
+        let bet_detail = BetDetailResponse {
+            nft_nonce: bet.nft_nonce,
+            selection_id: bet.selection.id,
+            bettor: bet.bettor,
+            stake: BetAmounts {
+                stake_amount: bet.stake_amount,
+                matched: bet.total_matched,
+                unmatched,
+                liability: bet.liability
+            },
+            odds: bet.odd,
+            status: bet.status,
+            matched_info: BetMatchedInfo {
+                matched_parts: bet.matched_parts,
+                potential_profit: bet.potential_profit
+            }
+        };
+        
+        bets.push(bet_detail);
+    }
+    
+    bet_counts.total = bets.len() as u32;
+    
+    MarketStatsResponse {
+        bet_counts,
+        volumes,
+        bets
+    }
+}
 }

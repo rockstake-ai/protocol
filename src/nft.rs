@@ -2,9 +2,6 @@ use crate::{constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER}, err
 
 multiversx_sc::imports!();
 
-extern crate alloc;
-use alloc::string::ToString;
-
 pub type AttributesAsMultiValue<M> =
     MultiValue7<u64, u64, BigUint<M>, BigUint<M>, BigUint<M>, BetType, BetStatus>;
 
@@ -56,7 +53,7 @@ pub trait NftModule:
             .async_call_and_exit();
     }
 
-    fn mint_bet_nft(&self, metadata_cid: ManagedBuffer, bet: &Bet<Self::Api>) -> u64 {
+    fn mint_bet_nft(&self, bet: &Bet<Self::Api>) -> u64 {
         require!(!self.bet_nft_token().is_empty(), ERR_TOKEN_NOT_ISSUED);
         let big_one = BigUint::from(1u64);
 
@@ -65,12 +62,8 @@ pub trait NftModule:
         token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);
 
-        // self.metadata_cid().set(&metadata_cid);
-        // self.image_cid().set(&metadata_cid);
-        // let metadata = self.build_metadata(bet.nft_nonce);
-        let uri = self.build_uri(bet.nft_nonce);
         let mut uris = ManagedVec::new();
-        uris.push(uri);
+        uris.push(bet_id_buffer);
 
         let attributes = BetAttributes {
             event: bet.event.clone(),
@@ -85,8 +78,6 @@ pub trait NftModule:
         if let core::result::Result::Err(err) = attributes.top_encode(&mut serialized_attributes) {
             sc_panic!("Attributes encode error: {}", err.message_bytes());
         }
-
-        // self.send().nft_update_attributes(token_id, nft_nonce, new_attributes);
 
         let attributes_sha256 = self.crypto().sha256(&serialized_attributes);
         let attributes_hash = attributes_sha256.as_managed_buffer();
@@ -163,52 +154,6 @@ pub trait NftModule:
 
         o
     }
-
-    fn build_uri(&self, number: u64) -> ManagedBuffer {
-        let mut uri = ManagedBuffer::new_from_bytes(b"https://ipfs.io/ipfs/");
-        
-        let cid = self.image_cid().get();
-        
-        let num_buffer = self.u64_to_ascii(number);
-        
-        uri.append(&cid);
-        uri.append_bytes(b"/");
-        // uri.append(&num_buffer);
-        // uri.append_bytes(b".png");
-        
-        uri
-    }
-
-    fn number_to_str(&self, num: u64) -> ManagedBuffer {
-        let mut buf = ManagedBuffer::new();
-        buf.append_bytes(num.to_string().as_bytes());
-        buf
-    }
-
-    fn build_metadata(&self, number: u64) -> ManagedBuffer {
-        let cid = self.metadata_cid().get();
-        let num_buffer = self.u64_to_ascii(number);
-        
-        let total_len = 9 + // "metadata:"
-                       cid.len() +
-                       1 + // "/"
-                       num_buffer.len() +
-                       5; // ".json"
-        
-        let mut metadata = ManagedBuffer::new_from_bytes(b"metadata:");
-        metadata.append(&cid);
-        metadata.append_bytes(b"/");
-        // metadata.append(&num_buffer);
-        // metadata.append_bytes(b".json");
-        
-        metadata
-    }
-
-    #[storage_mapper("imageCid")]
-    fn image_cid(&self) -> SingleValueMapper<ManagedBuffer>;
-
-    #[storage_mapper("metadataCid")]
-    fn metadata_cid(&self) -> SingleValueMapper<ManagedBuffer>;
 
     #[view(getBetslipData)]
     fn get_bet(&self, bet_id: u64) -> Bet<Self::Api>{

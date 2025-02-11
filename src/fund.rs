@@ -45,9 +45,10 @@ pub trait FundModule:
 
     fn process_unmatched_bet(&self, bet_nonce: u64) {
         let mut bet = self.bet_by_id(bet_nonce).get();
+        let unmatched = &bet.stake_amount - &bet.total_matched;
         
-        if bet.unmatched_amount > BigUint::zero() {
-            let refund_amount = bet.unmatched_amount.clone();
+        if unmatched > BigUint::zero() {
+            let refund_amount = unmatched.clone();
             
             self.send().direct(
                 &bet.bettor,
@@ -56,13 +57,10 @@ pub trait FundModule:
                 &refund_amount,
             );
             
-            let original_matched = bet.matched_amount.clone();
-            bet.unmatched_amount = BigUint::zero();
-            bet.matched_amount = original_matched.clone();
             // Actualizăm stake_amount să reflecte doar partea matched
-            bet.stake_amount = original_matched; 
+            bet.stake_amount = bet.total_matched.clone();
             
-            bet.status = if bet.matched_amount > BigUint::zero() {
+            bet.status = if bet.total_matched > BigUint::zero() {
                 BetStatus::Matched
             } else {
                 BetStatus::Canceled
@@ -118,7 +116,7 @@ pub trait FundModule:
             }
 
             let mut bet = self.bet_by_id(bet_id).get();
-            if bet.matched_amount > BigUint::zero() {
+            if bet.total_matched > BigUint::zero() {
                 match bet.bet_type {
                     BetType::Back => {
                         if bet.selection.id == winning_selection {
@@ -237,7 +235,7 @@ pub trait FundModule:
         bet_nonce: u64
     ) -> (BetStatus, BigUint<Self::Api>, BigUint<Self::Api>) {
         let bet = self.bet_by_id(bet_nonce).get();
-        (bet.status, bet.matched_amount, bet.potential_profit)
+        (bet.status, bet.total_matched, bet.potential_profit)
     }
 
     #[view(getProcessingProgress)]
