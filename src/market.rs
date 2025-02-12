@@ -22,9 +22,15 @@ pub trait MarketModule:
     ) -> u64 {
         self.validate_market_creation(close_timestamp);
         
+        let existing_markets = self.markets_by_event(event_id).get();
+        require!(
+            existing_markets.is_empty(),
+            "Market already exists for this event"
+        );
+        
         let market_id = self.get_next_market_id();
         let selections = self.create_selections(market_id, selection_values);
-    
+
         let market = Market {
             market_id,
             event_id,
@@ -36,15 +42,15 @@ pub trait MarketModule:
             total_matched_amount: BigUint::zero(),
             created_at: self.blockchain().get_block_timestamp(),
         };
-    
+
         self.markets(market_id).set(&market);
         
         self.markets_by_event(event_id).update(|markets| {
             markets.push(market_id);
         });
-    
+
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
-    
+
         market_id
     }
 
@@ -68,11 +74,6 @@ pub trait MarketModule:
         require!(
             market.market_status == MarketStatus::Open,
             "Market not open"
-        );
-        
-        require!(
-            self.blockchain().get_block_timestamp() >= market.close_timestamp,
-            "Market timestamp not reached"
         );
 
         self.handle_expired_market(market_id);

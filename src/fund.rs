@@ -44,32 +44,41 @@ pub trait FundModule:
     }
 
     fn process_unmatched_bet(&self, bet_nonce: u64) {
-        let mut bet = self.bet_by_id(bet_nonce).get();
-        let unmatched = &bet.stake_amount - &bet.total_matched;
+    let mut bet = self.bet_by_id(bet_nonce).get();
+    let unmatched = &bet.stake_amount - &bet.total_matched;
+    
+    // Procesăm atât pariurile unmatched cât și cele partially matched
+    if unmatched > BigUint::zero() || bet.status == BetStatus::PartiallyMatched {
+        let refund_amount = if bet.status == BetStatus::PartiallyMatched {
+            // Pentru pariurile partially matched, returnăm întreaga sumă
+            bet.stake_amount.clone()
+        } else {
+            unmatched.clone()
+        };
         
-        if unmatched > BigUint::zero() {
-            let refund_amount = unmatched.clone();
-            
-            self.send().direct(
-                &bet.bettor,
-                &bet.payment_token,
-                bet.payment_nonce,
-                &refund_amount,
-            );
-            
-            // Actualizăm stake_amount să reflecte doar partea matched
-            bet.stake_amount = bet.total_matched.clone();
-            
-            bet.status = if bet.total_matched > BigUint::zero() {
-                BetStatus::Matched
-            } else {
-                BetStatus::Canceled
-            };
-            
-            self.bet_by_id(bet_nonce).set(&bet);
-            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
-        }
+        self.send().direct(
+            &bet.bettor,
+            &bet.payment_token,
+            bet.payment_nonce,
+            &refund_amount,
+        );
+        
+        bet.stake_amount = if bet.status == BetStatus::PartiallyMatched {
+            BigUint::zero()
+        } else {
+            bet.total_matched.clone()
+        };
+        
+        bet.status = if bet.total_matched > BigUint::zero() {
+            BetStatus::Matched
+        } else {
+            BetStatus::Canceled
+        };
+        
+        self.bet_by_id(bet_nonce).set(&bet);
+        self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
     }
+}
 
     #[only_owner]
     #[endpoint(setMarketResult)]

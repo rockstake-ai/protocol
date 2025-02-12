@@ -166,9 +166,9 @@ pub trait BetModule:
         new_amount: OptionalValue<BigUint>,
     ) {
         let (token_identifier, payment_nonce, _amount) = self
-        .call_value()
-        .egld_or_single_esdt()
-        .into_tuple();
+            .call_value()
+            .egld_or_single_esdt()
+            .into_tuple();
 
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_nonce).get();
@@ -281,13 +281,14 @@ pub trait BetModule:
 
         if refund_amount > BigUint::zero() {
             self.send().direct(&caller, &updated_bet.payment_token, 0, &refund_amount);
-            self.send().direct_esdt(
-                &caller,
-                &token_identifier_wrap,
-                bet_nonce,
-                &BigUint::from(1u64)
-            );
         }
+
+        self.send().direct_esdt(
+            &caller,
+            &token_identifier_wrap,
+            bet_nonce,
+            &BigUint::from(1u64)
+        );
     }
 
     fn create_bet(
