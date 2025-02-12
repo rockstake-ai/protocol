@@ -1,4 +1,4 @@
-use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetMatchedInfo, BetStatus, BetType, Market, MarketStatsResponse, MarketStatus, MarketType, MarketVolumes, Selection, Tracker};
+use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetMatchedInfo, BetStatus, BetType, EventMarketsCreationResponse, Market, MarketSelectionInfo, MarketStatsResponse, MarketStatus, MarketType, MarketVolumes, Selection, SelectionInfo, SelectionType, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -16,9 +16,8 @@ pub trait MarketModule:
     fn create_market(
         &self,
         event_id: u64,
-        description: ManagedBuffer,
         close_timestamp: u64
-    ) {
+    ) -> EventMarketsCreationResponse<Self::Api> {
         self.validate_market_creation(close_timestamp);
         
         let existing_markets = self.markets_by_event(event_id).get();
@@ -28,67 +27,87 @@ pub trait MarketModule:
         );
         
         let mut market_ids = ManagedVec::new();
+        let mut markets_info = ManagedVec::new();
         
-        let mut selection_values = ManagedVec::new();
-        selection_values.push(1u64); // 1
-        selection_values.push(2u64); // X
-        selection_values.push(3u64); // 2
-        
-        let market_id_1x2 = self.create_single_market(
+        // 1. FullTimeResult (1X2)
+        let selection_types = [
+            SelectionType::One,
+            SelectionType::Draw,
+            SelectionType::Two
+        ];
+        let (market_id_1x2, selections_1x2) = self.create_single_market(
             event_id,
-            description.clone(),
-            selection_values,
+            &selection_types,
             close_timestamp,
             MarketType::FullTimeResult
         );
         market_ids.push(market_id_1x2);
+        markets_info.push(MarketSelectionInfo {
+            market_id: market_id_1x2,
+            market_type: MarketType::FullTimeResult,
+            selections: selections_1x2
+        });
         
-        let mut selection_values = ManagedVec::new();
-        selection_values.push(1u64); // Over
-        selection_values.push(2u64); // Under
-        
-        let market_id_ou = self.create_single_market(
+        // 2. TotalGoals (Over/Under)
+        let selection_types = [
+            SelectionType::Over,
+            SelectionType::Under
+        ];
+        let (market_id_ou, selections_ou) = self.create_single_market(
             event_id,
-            description.clone(),
-            selection_values,
+            &selection_types,
             close_timestamp,
             MarketType::TotalGoals
         );
         market_ids.push(market_id_ou);
+        markets_info.push(MarketSelectionInfo {
+            market_id: market_id_ou,
+            market_type: MarketType::TotalGoals,
+            selections: selections_ou
+        });
         
-        let mut selection_values = ManagedVec::new();
-        selection_values.push(1u64); // Yes
-        selection_values.push(2u64); // No
-        
-        let market_id_ggng = self.create_single_market(
+        // 3. BothTeamsToScore (GG/NG)
+        let selection_types = [
+            SelectionType::Yes,
+            SelectionType::No
+        ];
+        let (market_id_ggng, selections_ggng) = self.create_single_market(
             event_id,
-            description,
-            selection_values,
+            &selection_types,
             close_timestamp,
             MarketType::BothTeamsToScore
         );
         market_ids.push(market_id_ggng);
+        markets_info.push(MarketSelectionInfo {
+            market_id: market_id_ggng,
+            market_type: MarketType::BothTeamsToScore,
+            selections: selections_ggng
+        });
         
         self.markets_by_event(event_id).set(&market_ids);
+        
+        EventMarketsCreationResponse {
+            event_id,
+            markets: markets_info
+        }
     }
 
     fn create_single_market(
         &self,
         event_id: u64,
-        description: ManagedBuffer,
-        selection_values: ManagedVec<u64>,
+        selection_types: &[SelectionType],
         close_timestamp: u64,
         market_type: MarketType,
-    ) -> u64 {
+    ) -> (u64, ManagedVec<Self::Api, SelectionInfo>) {
         let market_id = self.get_next_market_id();
-        let selections = self.create_selections(market_id, selection_values);
-
+        let selections = self.create_selections(market_id, selection_types);
+        
         let market = Market {
             market_id,
             event_id,
             market_type,
-            description,
-            selections,
+            description: ManagedBuffer::new_from_bytes(market_type.to_description()),
+            selections: selections.clone(),
             liquidity: BigUint::zero(),
             close_timestamp,
             market_status: MarketStatus::Open,
@@ -99,7 +118,34 @@ pub trait MarketModule:
         self.markets(market_id).set(&market);
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
-        market_id
+        let mut selection_infos = ManagedVec::new();
+        for (index, selection_type) in selection_types.iter().enumerate() {
+            selection_infos.push(SelectionInfo {
+                selection_id: (index + 1) as u64,
+                selection_type: *selection_type,
+            });
+        }
+
+        (market_id, selection_infos)
+    }
+
+    fn create_selections(
+        &self,
+        market_id: u64,
+        selection_types: &[SelectionType],
+    ) -> ManagedVec<Selection<Self::Api>> {
+        let mut selections = ManagedVec::new();
+        for (index, selection_type) in selection_types.iter().enumerate() {
+            let id = (index + 1) as u64;
+            self.init_selection_storage(market_id, id);
+            let tracker = self.selection_tracker(market_id, id).get();
+            selections.push(Selection {
+                id,
+                selection_type: *selection_type,
+                priority_queue: tracker,
+            });
+        }
+        selections
     }
 
     #[endpoint(processEventMarkets)]
@@ -125,25 +171,6 @@ pub trait MarketModule:
         );
 
         self.handle_expired_market(market_id);
-    }
-
-    fn create_selections(
-        &self,
-        market_id: u64,
-        descriptions: ManagedVec<u64>
-    ) -> ManagedVec<Selection<Self::Api>> {
-        let mut selections = ManagedVec::new();
-        for (index, value) in descriptions.iter().enumerate() {
-            let id = (index + 1) as u64;
-            self.init_selection_storage(market_id, id);
-            let tracker = self.selection_tracker(market_id, id).get();
-            selections.push(Selection {
-                id,
-                value: value,
-                priority_queue: tracker,
-            });
-        }
-        selections
     }
 
     fn init_selection_storage(&self, market_id: u64, selection_id: u64) {

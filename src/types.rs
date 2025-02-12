@@ -79,6 +79,69 @@ pub struct Market<M: ManagedTypeApi> {
     pub created_at: u64,
 }
 
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem, Copy)]
+pub enum SelectionType {
+    One,    // "1"
+    Draw,   // "X"
+    Two,    // "2"
+    Over,   // "OVER"
+    Under,  // "UNDER"
+    Yes,    // "YES"
+    No      // "NO"
+}
+
+impl SelectionType {
+    pub fn to_string(&self) -> &'static str {
+        match self {
+            SelectionType::One => "1",
+            SelectionType::Draw => "X",
+            SelectionType::Two => "2",
+            SelectionType::Over => "OVER",
+            SelectionType::Under => "UNDER",
+            SelectionType::Yes => "YES",
+            SelectionType::No => "NO",
+        }
+    }
+
+    pub fn from_market_type_and_index(market_type: &MarketType, index: usize) -> Self {
+        match market_type {
+            MarketType::FullTimeResult => match index {
+                0 => SelectionType::One,
+                1 => SelectionType::Draw,
+                2 => SelectionType::Two,
+                _ => panic!("Invalid selection index for FullTimeResult")
+            },
+            MarketType::TotalGoals => match index {
+                0 => SelectionType::Over,
+                1 => SelectionType::Under,
+                _ => panic!("Invalid selection index for TotalGoals")
+            },
+            MarketType::BothTeamsToScore => match index {
+                0 => SelectionType::Yes,
+                1 => SelectionType::No,
+                _ => panic!("Invalid selection index for BothTeamsToScore")
+            }
+        }
+    }
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct SelectionInfo {
+    pub selection_id: u64,
+    pub selection_type: SelectionType,
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
+pub struct Selection<M: ManagedTypeApi> {
+    pub id: u64,
+    pub selection_type: SelectionType,
+    pub priority_queue: Tracker<M>,
+}
+
+#[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct MarketSelectionInfo<M: ManagedTypeApi> {
     pub market_id: u64,
@@ -88,23 +151,9 @@ pub struct MarketSelectionInfo<M: ManagedTypeApi> {
 
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct SelectionInfo {
-    pub selection_id: u64,
-    pub value: u64,
-}
-
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct EventMarketsCreationResponse<M: ManagedTypeApi> {
     pub event_id: u64,
     pub markets: ManagedVec<M, MarketSelectionInfo<M>>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
-pub struct Selection<M: ManagedTypeApi> {
-    pub id: u64,
-    pub value: u64,
-    pub priority_queue: Tracker<M>,
 }
 
 #[type_abi]
@@ -131,7 +180,7 @@ pub struct Tracker<M: ManagedTypeApi> {
 }
 
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem, Copy)]
 pub enum MarketType {
     FullTimeResult,
     TotalGoals,
@@ -158,8 +207,8 @@ impl MarketType {
 
     pub fn to_description(&self) -> &[u8] {
         match self {
-            MarketType::FullTimeResult => b"FullTime Result",
-            MarketType::TotalGoals => b"Total Goals O/U 2.5",
+            MarketType::FullTimeResult => b"Fulltime Result",
+            MarketType::TotalGoals => b"Over/Under 2.5 Goals",
             MarketType::BothTeamsToScore => b"Both Teams To Score",
         }
     }
