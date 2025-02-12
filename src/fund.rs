@@ -82,25 +82,13 @@ pub trait FundModule:
         let mut bet = self.bet_by_id(bet_nonce).get();
         let unmatched = &bet.stake_amount - &bet.total_matched;
         
-        if unmatched > BigUint::zero() || bet.status == BetStatus::PartiallyMatched {
-            let refund_amount = if bet.status == BetStatus::PartiallyMatched {
-                bet.stake_amount.clone()
-            } else {
-                unmatched.clone()
-            };
-            
+        if unmatched > BigUint::zero() {
             self.send().direct(
                 &bet.bettor,
                 &bet.payment_token,
                 bet.payment_nonce,
-                &refund_amount,
+                &unmatched,
             );
-            
-            bet.stake_amount = if bet.status == BetStatus::PartiallyMatched {
-                BigUint::zero()
-            } else {
-                bet.total_matched.clone()
-            };
             
             bet.status = if bet.total_matched > BigUint::zero() {
                 BetStatus::Matched
@@ -109,33 +97,72 @@ pub trait FundModule:
             };
             
             self.bet_by_id(bet_nonce).set(&bet);
-            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
+            self.bet_refunded_event(bet_nonce, &bet.bettor, &unmatched);
         }
     }
     
 
     #[only_owner]
-    #[endpoint(setMarketResult)]
-    fn set_market_result(
+    #[endpoint(setEventResult)]
+    fn set_event_result(
         &self,
         event_id: u64,
-        market_type_id: u64,
         score_home: u32,
         score_away: u32
     ) {
-        let market_id = self.get_market_id(event_id, market_type_id);
-        let mut market = self.markets(market_id).get();
+        self.event_score(event_id).set(&(score_home, score_away));
         
-        require!(market.market_status == MarketStatus::Closed, "Market not closed");
+        let market_ids = self.markets_by_event(event_id).get();
+        require!(!market_ids.is_empty(), "No markets found for event");
         
-        let market_type = MarketType::from_u64(market_type_id);
-        let winning_selection = self.determine_winner(market_type, score_home, score_away);
+        for market_id in market_ids.iter() {
+            let market = self.markets(market_id).get();
+            
+            require!(
+                market.market_status == MarketStatus::Closed,
+                "Market not closed"
+            );
+            
+            let market_type = MarketType::from_u64(market_id);
+            let winning_selection = self.determine_winner(market_type, score_home, score_away);
+            
+            self.winning_selection(market_id).set(winning_selection);
+            
+            self.mark_bets_win_loss(market_id, winning_selection);
+        }
         
-        self.winning_selection(market_id).set(winning_selection);
-        self.current_processing_index(market_id).set(0u64);
-        
-        market.market_status = MarketStatus::Settled;
-        self.markets(market_id).set(&market);
+        self.event_result_set_event(event_id, score_home, score_away);
+    }
+
+    fn mark_bets_win_loss(
+        &self,
+        market_id: u64,
+        winning_selection: u64,
+    ) {
+        for bet_id in self.market_bet_ids(market_id).iter() {
+            let mut bet = self.bet_by_id(bet_id).get();
+            
+            if bet.status == BetStatus::Matched {
+                match bet.bet_type {
+                    BetType::Back => {
+                        bet.status = if bet.selection.id == winning_selection {
+                            BetStatus::Win
+                        } else {
+                            BetStatus::Lost
+                        };
+                    },
+                    BetType::Lay => {
+                        bet.status = if bet.selection.id != winning_selection {
+                            BetStatus::Win
+                        } else {
+                            BetStatus::Lost
+                        };
+                    }
+                }
+                
+                self.bet_by_id(bet_id).set(&bet);
+            }
+        }
     }
 
     #[endpoint(processBatchBets)]

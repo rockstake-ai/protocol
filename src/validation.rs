@@ -78,9 +78,26 @@ pub trait ValidationModule:
         require!(!self.markets(market_id).is_empty(), "Invalid market");
         
         let market = self.markets(market_id).get();
-        let created_at = self.blockchain().get_block_timestamp();
+        let current_timestamp = self.blockchain().get_block_timestamp();
         
-        require!(created_at < market.close_timestamp, "Market already closed");
+        require!(
+            market.market_status == MarketStatus::Open,
+            "Market is not open for betting"
+        );
+        
+        require!(
+            current_timestamp < market.close_timestamp,
+            "Market already closed"
+        );
+    }
+    
+    fn validate_market_status(&self, market_id: u64) -> bool {
+        if self.markets(market_id).is_empty() {
+            return false;
+        }
+        
+        let market = self.markets(market_id).get();
+        market.market_status == MarketStatus::Open
     }
 
     fn validate_selection(&self, market_id: u64, selection_id: u64) {

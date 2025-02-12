@@ -1,4 +1,4 @@
-use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetMatchedInfo, BetStatus, BetType, Market, MarketStatsResponse, MarketStatus, MarketVolumes, Selection, Tracker};
+use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetMatchedInfo, BetStatus, BetType, Market, MarketStatsResponse, MarketStatus, MarketType, MarketVolumes, Selection, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -17,23 +17,76 @@ pub trait MarketModule:
         &self,
         event_id: u64,
         description: ManagedBuffer,
-        selection_values: ManagedVec<u64>,
         close_timestamp: u64
-    ) -> u64 {
+    ) {
         self.validate_market_creation(close_timestamp);
         
         let existing_markets = self.markets_by_event(event_id).get();
         require!(
             existing_markets.is_empty(),
-            "Market already exists for this event"
+            "Markets already exist for this event"
         );
         
+        let mut market_ids = ManagedVec::new();
+        
+        let mut selection_values = ManagedVec::new();
+        selection_values.push(1u64); // 1
+        selection_values.push(2u64); // X
+        selection_values.push(3u64); // 2
+        
+        let market_id_1x2 = self.create_single_market(
+            event_id,
+            description.clone(),
+            selection_values,
+            close_timestamp,
+            MarketType::FullTimeResult
+        );
+        market_ids.push(market_id_1x2);
+        
+        let mut selection_values = ManagedVec::new();
+        selection_values.push(1u64); // Over
+        selection_values.push(2u64); // Under
+        
+        let market_id_ou = self.create_single_market(
+            event_id,
+            description.clone(),
+            selection_values,
+            close_timestamp,
+            MarketType::TotalGoals
+        );
+        market_ids.push(market_id_ou);
+        
+        let mut selection_values = ManagedVec::new();
+        selection_values.push(1u64); // Yes
+        selection_values.push(2u64); // No
+        
+        let market_id_ggng = self.create_single_market(
+            event_id,
+            description,
+            selection_values,
+            close_timestamp,
+            MarketType::BothTeamsToScore
+        );
+        market_ids.push(market_id_ggng);
+        
+        self.markets_by_event(event_id).set(&market_ids);
+    }
+
+    fn create_single_market(
+        &self,
+        event_id: u64,
+        description: ManagedBuffer,
+        selection_values: ManagedVec<u64>,
+        close_timestamp: u64,
+        market_type: MarketType,
+    ) -> u64 {
         let market_id = self.get_next_market_id();
         let selections = self.create_selections(market_id, selection_values);
 
         let market = Market {
             market_id,
             event_id,
+            market_type,
             description,
             selections,
             liquidity: BigUint::zero(),
@@ -44,11 +97,6 @@ pub trait MarketModule:
         };
 
         self.markets(market_id).set(&market);
-        
-        self.markets_by_event(event_id).update(|markets| {
-            markets.push(market_id);
-        });
-
         self.market_created_event(market_id, event_id, &self.get_current_market_counter());
 
         market_id

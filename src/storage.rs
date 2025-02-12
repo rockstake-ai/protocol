@@ -92,5 +92,9 @@ pub trait StorageModule {
     #[storage_mapper("eventsByTimestamp")]
     fn events_by_timestamp(&self, timestamp: u64) -> SingleValueMapper<ManagedVec<u64>>;
 
+    #[view(getEventScore)]
+    #[storage_mapper("event_score")]
+    fn event_score(&self, event_id: u64) -> SingleValueMapper<(u32, u32)>;
+
 }
 

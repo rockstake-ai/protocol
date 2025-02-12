@@ -84,5 +84,13 @@ pub trait EventsModule {
         #[indexed] bettor: &ManagedAddress,
         #[indexed] amount: &BigUint,
     );
+    
+    #[event("event_result_set")]
+    fn event_result_set_event(
+        &self,
+        #[indexed] event_id: u64,
+        #[indexed] score_home: u32,
+        #[indexed] score_away: u32,
+    );
 
 }

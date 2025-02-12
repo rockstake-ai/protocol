@@ -70,12 +70,33 @@ pub struct Market<M: ManagedTypeApi> {
     pub market_id: u64,
     pub event_id: u64,
     pub description: ManagedBuffer<M>,
+    pub market_type: MarketType, 
     pub selections: ManagedVec<M, Selection<M>>,
     pub close_timestamp: u64,
     pub market_status: MarketStatus,
     pub total_matched_amount: BigUint<M>,
     pub liquidity: BigUint<M>,
     pub created_at: u64,
+}
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct MarketSelectionInfo<M: ManagedTypeApi> {
+    pub market_id: u64,
+    pub market_type: MarketType,
+    pub selections: ManagedVec<M, SelectionInfo>
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct SelectionInfo {
+    pub selection_id: u64,
+    pub value: u64,
+}
+
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
+pub struct EventMarketsCreationResponse<M: ManagedTypeApi> {
+    pub event_id: u64,
+    pub markets: ManagedVec<M, MarketSelectionInfo<M>>
 }
 
 #[type_abi]
@@ -109,11 +130,12 @@ pub struct Tracker<M: ManagedTypeApi> {
     pub canceled_count: u64,
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone)]
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem)]
 pub enum MarketType {
-    FullTimeResult = 1,
-    TotalGoals = 2,
-    BothTeamsToScore = 3,
+    FullTimeResult,
+    TotalGoals,
+    BothTeamsToScore,
 }
 
 impl MarketType {
@@ -123,6 +145,14 @@ impl MarketType {
             2 => MarketType::TotalGoals,
             3 => MarketType::BothTeamsToScore,
             _ => panic!("Invalid market type")
+        }
+    }
+
+    pub fn to_u64(&self) -> u64 {
+        match self {
+            MarketType::FullTimeResult => 1,
+            MarketType::TotalGoals => 2,
+            MarketType::BothTeamsToScore => 3,
         }
     }
 
