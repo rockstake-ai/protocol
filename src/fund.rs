@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_MARKET_NOT_SETTLED}, types::{Bet, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus}};
+use crate::{errors::{ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_MARKET_NOT_SETTLED}, types::{Bet, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -7,6 +7,7 @@ pub trait FundModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
     + crate::nft::NftModule
+    + crate::tracker::TrackerModule
 {
     fn handle_expired_market(&self, market_id: u64) {
         let mut market = self.markets(market_id).get();
@@ -14,10 +15,44 @@ pub trait FundModule:
         self.markets(market_id).set(&market);
         
         self.process_unmatched_bets(market_id);
+        
+        self.clear_market_orderbook(market_id);
+        
         self.market_closed_event(
             market_id,
             self.blockchain().get_block_timestamp()
         );
+    }
+    
+    fn clear_market_orderbook(&self, market_id: u64) {
+        let market = self.markets(market_id).get();
+        
+        for selection in market.selections.iter() {
+            self.selection_back_levels(market_id, selection.id)
+                .set(&ManagedVec::new());
+            self.selection_back_liquidity(market_id, selection.id)
+                .set(&BigUint::zero());
+                
+            self.selection_lay_levels(market_id, selection.id)
+                .set(&ManagedVec::new());
+            self.selection_lay_liquidity(market_id, selection.id)
+                .set(&BigUint::zero());
+                
+            let tracker = Tracker {
+                back_levels: ManagedVec::new(),
+                lay_levels: ManagedVec::new(),
+                back_liquidity: BigUint::zero(),
+                lay_liquidity: BigUint::zero(),
+                matched_count: self.selection_matched_count(market_id, selection.id).get(),
+                unmatched_count: self.selection_unmatched_count(market_id, selection.id).get(),
+                partially_matched_count: self.selection_partially_matched_count(market_id, selection.id).get(),
+                win_count: self.selection_win_count(market_id, selection.id).get(),
+                lost_count: self.selection_lost_count(market_id, selection.id).get(),
+                canceled_count: self.selection_canceled_count(market_id, selection.id).get(),
+            };
+            
+            self.selection_tracker(market_id, selection.id).set(&tracker);
+        }
     }
 
     fn process_unmatched_bets(&self, market_id: u64) {
@@ -44,41 +79,40 @@ pub trait FundModule:
     }
 
     fn process_unmatched_bet(&self, bet_nonce: u64) {
-    let mut bet = self.bet_by_id(bet_nonce).get();
-    let unmatched = &bet.stake_amount - &bet.total_matched;
-    
-    // Procesăm atât pariurile unmatched cât și cele partially matched
-    if unmatched > BigUint::zero() || bet.status == BetStatus::PartiallyMatched {
-        let refund_amount = if bet.status == BetStatus::PartiallyMatched {
-            // Pentru pariurile partially matched, returnăm întreaga sumă
-            bet.stake_amount.clone()
-        } else {
-            unmatched.clone()
-        };
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        let unmatched = &bet.stake_amount - &bet.total_matched;
         
-        self.send().direct(
-            &bet.bettor,
-            &bet.payment_token,
-            bet.payment_nonce,
-            &refund_amount,
-        );
-        
-        bet.stake_amount = if bet.status == BetStatus::PartiallyMatched {
-            BigUint::zero()
-        } else {
-            bet.total_matched.clone()
-        };
-        
-        bet.status = if bet.total_matched > BigUint::zero() {
-            BetStatus::Matched
-        } else {
-            BetStatus::Canceled
-        };
-        
-        self.bet_by_id(bet_nonce).set(&bet);
-        self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
+        if unmatched > BigUint::zero() || bet.status == BetStatus::PartiallyMatched {
+            let refund_amount = if bet.status == BetStatus::PartiallyMatched {
+                bet.stake_amount.clone()
+            } else {
+                unmatched.clone()
+            };
+            
+            self.send().direct(
+                &bet.bettor,
+                &bet.payment_token,
+                bet.payment_nonce,
+                &refund_amount,
+            );
+            
+            bet.stake_amount = if bet.status == BetStatus::PartiallyMatched {
+                BigUint::zero()
+            } else {
+                bet.total_matched.clone()
+            };
+            
+            bet.status = if bet.total_matched > BigUint::zero() {
+                BetStatus::Matched
+            } else {
+                BetStatus::Canceled
+            };
+            
+            self.bet_by_id(bet_nonce).set(&bet);
+            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
+        }
     }
-}
+    
 
     #[only_owner]
     #[endpoint(setMarketResult)]
