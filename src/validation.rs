@@ -124,11 +124,12 @@ pub trait ValidationModule:
         );
     }
 
+    #[view(getNextMarketId)]
     fn get_next_market_id(&self) -> u64 {
-        let mut counter = self.market_counter().get();
-        counter += 1;
-        
-        self.market_counter().set(&counter);
-        counter
+        let current_counter = self.market_counter().get();
+        let next_counter = current_counter + 1;
+        self.market_counter().set(&next_counter);
+        next_counter
     }
+    
 }

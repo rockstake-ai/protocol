@@ -99,7 +99,15 @@ pub trait MarketModule:
         close_timestamp: u64,
         market_type: MarketType,
     ) -> (u64, ManagedVec<Self::Api, SelectionInfo>) {
-        let market_id = self.get_next_market_id();
+        let market_type_index = match market_type {
+            MarketType::FullTimeResult => 1,
+            MarketType::TotalGoals => 2,
+            MarketType::BothTeamsToScore => 3,
+        };
+        
+        // Generăm market_id-ul unic
+        let market_id = event_id * 1000 + market_type_index;
+        
         let selections = self.create_selections(market_id, selection_types);
         
         let market = Market {
@@ -136,7 +144,7 @@ pub trait MarketModule:
     ) -> ManagedVec<Selection<Self::Api>> {
         let mut selections = ManagedVec::new();
         for (index, selection_type) in selection_types.iter().enumerate() {
-            let id = (index + 1) as u64;
+            let id = market_id * 10 + (index + 1) as u64;
             self.init_selection_storage(market_id, id);
             let tracker = self.selection_tracker(market_id, id).get();
             selections.push(Selection {
@@ -147,6 +155,7 @@ pub trait MarketModule:
         }
         selections
     }
+
 
     #[endpoint(processEventMarkets)]
     fn process_event_markets(&self, timestamp: u64) {
@@ -223,6 +232,7 @@ pub trait MarketModule:
     fn get_market_status(&self, market_id: u64) -> MarketStatus {
         self.markets(market_id).get().market_status
     }
+
 
     #[view(getCurrentMarketCounter)]
     fn get_current_market_counter(&self) -> u64 {
