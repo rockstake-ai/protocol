@@ -93,4 +93,10 @@ pub trait EventsModule {
         #[indexed] score_away: u32,
     );
 
+    #[event("event_markets_closed")]
+    fn event_markets_closed_event(&self, 
+        #[indexed] event_id: u64, 
+        #[indexed] timestamp: u64);
+    
+
 }

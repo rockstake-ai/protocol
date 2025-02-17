@@ -105,7 +105,6 @@ pub trait MarketModule:
             MarketType::BothTeamsToScore => 3,
         };
         
-        // Generăm market_id-ul unic
         let market_id = event_id * 1000 + market_type_index;
         
         let selections = self.create_selections(market_id, selection_types);
@@ -158,16 +157,23 @@ pub trait MarketModule:
 
 
     #[endpoint(processEventMarkets)]
-    fn process_event_markets(&self, timestamp: u64) {
-        let events = self.events_by_timestamp(timestamp).get();
-        require!(!events.is_empty(), "No events found for timestamp");
+    fn process_event_markets(&self, event_id: u64) {
+        let market_ids = self.markets_by_event(event_id).get();
+        require!(!market_ids.is_empty(), "No markets found for event");
 
-        for event_id in events.iter() {
-            let market_ids = self.markets_by_event(event_id).get();
-            for market_id in market_ids.iter() {
-                self.handle_expired_market(market_id);
-            }
+        for market_id in market_ids.iter() {
+            let market = self.markets(market_id).get();
+            require!(
+                market.market_status == MarketStatus::Open,
+                "Market not open"
+            );
+            self.handle_expired_market(market_id);
         }
+
+        self.event_markets_closed_event(
+            event_id,
+            self.blockchain().get_block_timestamp()
+        );
     }
 
     #[endpoint(processMarketClose)]
@@ -233,6 +239,21 @@ pub trait MarketModule:
         self.markets(market_id).get().market_status
     }
 
+    #[view(areEventMarketsClosed)]
+    fn are_event_markets_closed(&self, event_id: u64) -> bool {
+        let market_ids = self.markets_by_event(event_id).get();
+        require!(!market_ids.is_empty(), "No markets found for event");
+
+        for market_id in market_ids.iter() {
+            let market = self.markets(market_id).get();
+            if market.market_status != MarketStatus::Closed {
+                return false;
+            }
+        }
+
+        true
+    }
+
 
     #[view(getCurrentMarketCounter)]
     fn get_current_market_counter(&self) -> u64 {
@@ -243,76 +264,76 @@ pub trait MarketModule:
     }
 
     #[view(getMarketBetsInfo)]
-fn get_market_bets_info(&self, market_id: u64) -> MarketStatsResponse<Self::Api> {
-    let mut bet_counts = BetCounts {
-        total: 0,
-        matched: 0,
-        unmatched: 0,
-        partially_matched: 0
-    };
-    
-    let mut volumes = MarketVolumes {
-        back_matched: BigUint::zero(),
-        lay_matched: BigUint::zero(),
-        back_unmatched: BigUint::zero(),
-        lay_unmatched: BigUint::zero()
-    };
-    
-    let mut bets = ManagedVec::new();
-
-    for bet_id in self.market_bet_ids(market_id).iter() {
-        let bet = self.bet_by_id(bet_id).get();
-        let unmatched = &bet.stake_amount - &bet.total_matched;
-        
-        // Update counts
-        match bet.status {
-            BetStatus::Matched => bet_counts.matched += 1,
-            BetStatus::Unmatched => bet_counts.unmatched += 1,
-            BetStatus::PartiallyMatched => bet_counts.partially_matched += 1,
-            _ => {}
-        }
-        
-        // Update volumes
-        match bet.bet_type {
-            BetType::Back => {
-                volumes.back_matched += &bet.total_matched;
-                volumes.back_unmatched += &unmatched;
-            },
-            BetType::Lay => {
-                volumes.lay_matched += &bet.total_matched;
-                volumes.lay_unmatched += &unmatched;
-            }
-        }
-        
-        let bet_detail = BetDetailResponse {
-            nft_nonce: bet.nft_nonce,
-            selection_id: bet.selection.id,
-            bettor: bet.bettor,
-            stake: BetAmounts {
-                stake_amount: bet.stake_amount,
-                matched: bet.total_matched,
-                unmatched,
-                liability: bet.liability
-            },
-            odds: bet.odd,
-            status: bet.status,
-            matched_info: BetMatchedInfo {
-                matched_parts: bet.matched_parts,
-                potential_profit: bet.potential_profit
-            }
+    fn get_market_bets_info(&self, market_id: u64) -> MarketStatsResponse<Self::Api> {
+        let mut bet_counts = BetCounts {
+            total: 0,
+            matched: 0,
+            unmatched: 0,
+            partially_matched: 0
         };
         
-        bets.push(bet_detail);
+        let mut volumes = MarketVolumes {
+            back_matched: BigUint::zero(),
+            lay_matched: BigUint::zero(),
+            back_unmatched: BigUint::zero(),
+            lay_unmatched: BigUint::zero()
+        };
+        
+        let mut bets = ManagedVec::new();
+
+        for bet_id in self.market_bet_ids(market_id).iter() {
+            let bet = self.bet_by_id(bet_id).get();
+            let unmatched = &bet.stake_amount - &bet.total_matched;
+            
+            // Update counts
+            match bet.status {
+                BetStatus::Matched => bet_counts.matched += 1,
+                BetStatus::Unmatched => bet_counts.unmatched += 1,
+                BetStatus::PartiallyMatched => bet_counts.partially_matched += 1,
+                _ => {}
+            }
+            
+            // Update volumes
+            match bet.bet_type {
+                BetType::Back => {
+                    volumes.back_matched += &bet.total_matched;
+                    volumes.back_unmatched += &unmatched;
+                },
+                BetType::Lay => {
+                    volumes.lay_matched += &bet.total_matched;
+                    volumes.lay_unmatched += &unmatched;
+                }
+            }
+            
+            let bet_detail = BetDetailResponse {
+                nft_nonce: bet.nft_nonce,
+                selection_id: bet.selection.id,
+                bettor: bet.bettor,
+                stake: BetAmounts {
+                    stake_amount: bet.stake_amount,
+                    matched: bet.total_matched,
+                    unmatched,
+                    liability: bet.liability
+                },
+                odds: bet.odd,
+                status: bet.status,
+                matched_info: BetMatchedInfo {
+                    matched_parts: bet.matched_parts,
+                    potential_profit: bet.potential_profit
+                }
+            };
+            
+            bets.push(bet_detail);
+        }
+        
+        bet_counts.total = bets.len() as u32;
+        
+        MarketStatsResponse {
+            bet_counts,
+            volumes,
+            bets
+        }
     }
-    
-    bet_counts.total = bets.len() as u32;
-    
-    MarketStatsResponse {
-        bet_counts,
-        volumes,
-        bets
-    }
-}
 
 #[view(getBetInfo)]
 fn get_bet_info(&self, bet_id: u64) -> MarketStatsResponse<Self::Api> {

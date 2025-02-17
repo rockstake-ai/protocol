@@ -123,8 +123,7 @@ pub trait FundModule:
                 "Market not closed"
             );
             
-            let market_type = MarketType::from_u64(market_id);
-            let winning_selection = self.determine_winner(market_type, score_home, score_away);
+            let winning_selection = self.determine_winner(market.market_type, score_home, score_away);
             
             self.winning_selection(market_id).set(winning_selection);
             
@@ -225,7 +224,6 @@ pub trait FundModule:
                 total_payout
             },
             BetType::Lay => {
-                // Pentru Lay: suma tuturor părților matched
                 let mut total_matched = BigUint::zero();
                 for part in bet.matched_parts.iter() {
                     total_matched += &part.amount;
@@ -278,7 +276,6 @@ pub trait FundModule:
         }
     }
 
-    // View functions
     #[view(getWinningSelection)]
     fn get_winning_selection(&self, market_id: u64) -> u64 {
         self.winning_selection(market_id).get()

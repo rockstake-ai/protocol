@@ -110,20 +110,6 @@ pub trait ValidationModule:
         require!(selection_exists, "Invalid selection");
     }
 
-    fn validate_user_exposure(
-        &self,
-        user: &ManagedAddress<Self::Api>,
-        stake: &BigUint
-    ) {
-        let current_exposure = self.user_total_exposure(user).get();
-        let new_exposure = &current_exposure + stake;
-        
-        require!(
-            new_exposure <= BigUint::from(constants::MAX_USER_EXPOSURE),
-            "Maximum stake exceeded"
-        );
-    }
-
     #[view(getNextMarketId)]
     fn get_next_market_id(&self) -> u64 {
         let current_counter = self.market_counter().get();
