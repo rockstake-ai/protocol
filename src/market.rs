@@ -1,4 +1,4 @@
-use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetMatchedInfo, BetStatus, BetType, EventMarketsCreationResponse, Market, MarketSelectionInfo, MarketStatsResponse, MarketStatus, MarketType, MarketVolumes, Selection, SelectionInfo, SelectionType, Tracker};
+use crate::types::{BetAmounts, BetCounts, BetDetailResponse, BetDetailsView, BetMatchedInfo, BetStatus, BetStatusExplanation, BetStatusVerificationResponse, BetType, EventMarketsCreationResponse, Market, MarketSelectionInfo, MarketStatsResponse, MarketStatus, MarketType, MarketVolumes, Selection, SelectionInfo, SelectionType, SimpleBetView, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -335,74 +335,72 @@ pub trait MarketModule:
         }
     }
 
-#[view(getBetInfo)]
-fn get_bet_info(&self, bet_id: u64) -> MarketStatsResponse<Self::Api> {
-    let bet = self.bet_by_id(bet_id).get();
-    let unmatched = &bet.stake_amount - &bet.total_matched;
-    
-    // Initialize counters
-    let mut bet_counts = BetCounts {
-        total: 1,
-        matched: 0,
-        unmatched: 0,
-        partially_matched: 0
-    };
-    
-    // Initialize volumes
-    let mut volumes = MarketVolumes {
-        back_matched: BigUint::zero(),
-        lay_matched: BigUint::zero(),
-        back_unmatched: BigUint::zero(),
-        lay_unmatched: BigUint::zero()
-    };
-    
-    // Update count based on status
-    match bet.status {
-        BetStatus::Matched => bet_counts.matched = 1,
-        BetStatus::Unmatched => bet_counts.unmatched = 1,
-        BetStatus::PartiallyMatched => bet_counts.partially_matched = 1,
-        _ => {}
+    #[view(getBetStatus)]
+    fn get_bet_status(&self, bet_id: u64) -> BetStatus {
+        let bet = self.bet_by_id(bet_id).get();
+        bet.status
     }
-    
-    // Update volumes based on bet type
-    match bet.bet_type {
-        BetType::Back => {
-            volumes.back_matched = bet.total_matched.clone();
-            volumes.back_unmatched = unmatched.clone();
-        },
-        BetType::Lay => {
-            volumes.lay_matched = bet.total_matched.clone();
-            volumes.lay_unmatched = unmatched.clone();
-        }
-    }
-    
-    // Create bet detail
-    let bet_detail = BetDetailResponse {
-        nft_nonce: bet.nft_nonce,
+
+    #[view(getBetStatusVerification)]
+fn get_bet_status_verification(&self, bet_nonce: u64) -> BetStatusVerificationResponse {
+    let bet = self.bet_by_id(bet_nonce).get();
+    let winning_selection = self.winning_selection(bet.event).get();
+
+    BetStatusVerificationResponse {
+        bet_type: bet.bet_type,
         selection_id: bet.selection.id,
-        bettor: bet.bettor,
-        stake: BetAmounts {
-            stake_amount: bet.stake_amount,
-            matched: bet.total_matched,
-            unmatched,
-            liability: bet.liability
-        },
-        odds: bet.odd,
         status: bet.status,
-        matched_info: BetMatchedInfo {
-            matched_parts: bet.matched_parts,
-            potential_profit: bet.potential_profit
-        }
-    };
+        winning_selection,
+    }
+}
+
+#[view(explainBetStatus)]
+fn explain_bet_status(&self, bet_nonce: u64) -> BetStatusExplanation {
+    let bet = self.bet_by_id(bet_nonce).get();
+    let winning_selection = self.winning_selection(bet.event).get();
+
+    BetStatusExplanation {
+        bet_type: bet.bet_type,
+        selection_id: bet.selection.id,
+        winning_selection
+    }
+}
+
+#[view(getBetFullDetails)]
+fn get_bet_full_details(&self, bet_nonce: u64) -> BetDetailsView<Self::Api> {
+    let bet = self.bet_by_id(bet_nonce).get();
     
-    // Create response with single bet
-    let mut bets = ManagedVec::new();
-    bets.push(bet_detail);
+    BetDetailsView {
+        bettor: bet.bettor,
+        event: bet.event,
+        selection: bet.selection,
+        bet_type: bet.bet_type,
+        stake_amount: bet.stake_amount,
+        liability: bet.liability,
+        total_matched: bet.total_matched,
+        potential_profit: bet.potential_profit,
+        odd: bet.odd,
+        matched_parts: bet.matched_parts,
+        status: bet.status,
+        payment_token: bet.payment_token,
+        payment_nonce: bet.payment_nonce,
+        nft_nonce: bet.nft_nonce,
+        created_at: bet.created_at
+    }
+}
+
+#[view(getBetSimpleView)]
+fn get_bet_simple_view(&self, bet_nonce: u64) -> SimpleBetView<Self::Api> {
+    let bet = self.bet_by_id(bet_nonce).get();
     
-    MarketStatsResponse {
-        bet_counts,
-        volumes,
-        bets
+    SimpleBetView {
+        bet_type: bet.bet_type,
+        stake: bet.stake_amount,
+        odds: bet.odd,
+        liability: bet.liability,
+        potential_profit: bet.potential_profit,
+        selection_id: bet.selection.id,
+        status: bet.status
     }
 }
 }

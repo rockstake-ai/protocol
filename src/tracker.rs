@@ -11,23 +11,58 @@ pub trait TrackerModule:
         let mut total_matched = bet.total_matched.clone();
         let mut remaining = &bet.stake_amount - &bet.total_matched;
     
+        // Step 1: Initial state
+        // let bet_type_value = match bet.bet_type {
+        //     BetType::Back => 0u64,
+        //     BetType::Lay => 1u64,
+        // };
+        // sc_panic!("{} {} {}", 
+        //     bet_type_value,
+        //     bet.stake_amount,
+        //     bet.odd
+        // );
+    
         let mut opposite_levels = match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).get(),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).get(),
         };
     
+        // Step 2: Opposite levels count
+        // sc_panic!("{}", opposite_levels.len());
+    
         let mut i = 0;
         while i < opposite_levels.len() && remaining > BigUint::zero() {
             let mut level = opposite_levels.get(i);
             
+            // Step 3: Level details
+            // sc_panic!("{} {} {} {}", 
+            //     i,
+            //     level.odds,
+            //     level.total_stake,
+            //     level.bet_nonces.len()
+            // );
+    
             if level.odds == bet.odd {
                 let match_amount = remaining.clone().min(level.total_stake.clone());
                 
+                // Step 4: Match found
+                // sc_panic!("{} {}", 
+                //     match_amount,
+                //     level.total_stake
+                // );
+    
                 if match_amount > BigUint::zero() {
                     bet.matched_parts.push(MatchedPart {
                         amount: match_amount.clone(),
                         odds: level.odds.clone()
                     });
+    
+                    // Step 5: After push
+                    // let new_total = total_matched.clone() + &match_amount;
+                    // sc_panic!("{} {}", 
+                    //     bet.matched_parts.len(),
+                    //     new_total
+                    // );
     
                     total_matched += &match_amount;
                     remaining -= &match_amount;
@@ -39,9 +74,22 @@ pub trait TrackerModule:
                         let mut matched_bet = self.bet_by_id(nonce).get();
                         let current_unmatched = &matched_bet.stake_amount - &matched_bet.total_matched;
                         
+                        // Step 6: Processing opposite bet
+                        // sc_panic!("{} {}", 
+                        //     nonce,
+                        //     current_unmatched
+                        // );
+                        
                         if current_unmatched > BigUint::zero() {
                             let match_this_bet = current_unmatched.clone().min(match_amount.clone());
                             
+                            // Step 7.1: Before updating opposite bet
+                            // let opp_matched_parts_count = matched_bet.matched_parts.len();
+                            // sc_panic!("7.1: {} {}", 
+                            //     opp_matched_parts_count,
+                            //     matched_bet.potential_profit
+                            // );
+                                
                             if match_this_bet > BigUint::zero() {
                                 matched_bet.matched_parts.push(MatchedPart {
                                     amount: match_this_bet.clone(),
@@ -50,6 +98,7 @@ pub trait TrackerModule:
     
                                 matched_bet.total_matched += &match_this_bet;
                                 
+                                // Update status
                                 matched_bet.status = if &matched_bet.total_matched == &matched_bet.stake_amount {
                                     BetStatus::Matched
                                 } else {
@@ -57,6 +106,22 @@ pub trait TrackerModule:
                                 };
                                 
                                 matched_bet.potential_profit = self.calculate_total_potential_profit(&matched_bet);
+    
+                                // Step 7.2: After updating opposite bet
+                                // let status_value = match matched_bet.status {
+                                //     BetStatus::Matched => 0u64,
+                                //     BetStatus::Unmatched => 1u64,
+                                //     BetStatus::PartiallyMatched => 2u64,
+                                //     BetStatus::Win => 3u64,
+                                //     BetStatus::Lost => 4u64,
+                                //     BetStatus::Canceled => 5u64,
+                                //     BetStatus::Claimed => 6u64,
+                                // };
+                                // sc_panic!("7.2: {} {} {}", 
+                                //     matched_bet.matched_parts.len(),
+                                //     matched_bet.total_matched,
+                                //     status_value
+                                // );
                                 
                                 let remaining_unmatched = &matched_bet.stake_amount - &matched_bet.total_matched;
                                 if remaining_unmatched > BigUint::zero() {
@@ -65,6 +130,23 @@ pub trait TrackerModule:
                                 }
                                 
                                 self.bet_by_id(nonce).set(&matched_bet);
+    
+                                // Step 7.3: Verify storage update
+                                // let verified_bet = self.bet_by_id(nonce).get();
+                                // let verified_status = match verified_bet.status {
+                                //     BetStatus::Matched => 0u64,
+                                //     BetStatus::Unmatched => 1u64,
+                                //     BetStatus::PartiallyMatched => 2u64,
+                                //     BetStatus::Win => 3u64,
+                                //     BetStatus::Lost => 4u64,
+                                //     BetStatus::Canceled => 5u64,
+                                //     BetStatus::Claimed => 6u64,
+                                // };
+                                // sc_panic!("7.3: {} {} {}", 
+                                //     verified_bet.matched_parts.len(),
+                                //     verified_bet.total_matched,
+                                //     verified_status
+                                // );
                             }
                         }
                     }
@@ -112,6 +194,22 @@ pub trait TrackerModule:
         };
     
         bet.potential_profit = self.calculate_total_potential_profit(&bet);
+        
+        // Step 9: After profit calculation
+        // let status_value = match bet.status {
+        //     BetStatus::Matched => 0u64,
+        //     BetStatus::Unmatched => 1u64,
+        //     BetStatus::PartiallyMatched => 2u64,
+        //     BetStatus::Win => 3u64,
+        //     BetStatus::Lost => 4u64,
+        //     BetStatus::Canceled => 5u64,
+        //     BetStatus::Claimed => 6u64,
+        // };
+        // sc_panic!("9: {} {} {}", 
+        //     bet.potential_profit,
+        //     status_value,
+        //     bet.matched_parts.len()
+        // );
     
         if total_matched > BigUint::zero() {
             let new_matches = &total_matched - &bet.total_matched;
@@ -123,6 +221,23 @@ pub trait TrackerModule:
         }
     
         self.bet_by_id(bet.nft_nonce).set(&bet);
+    
+        // Step 10: Final state
+        // let final_status_value = match bet.status {
+        //     BetStatus::Matched => 0u64,
+        //     BetStatus::Unmatched => 1u64,
+        //     BetStatus::PartiallyMatched => 2u64,
+        //     BetStatus::Win => 3u64,
+        //     BetStatus::Lost => 4u64,
+        //     BetStatus::Canceled => 5u64,
+        //     BetStatus::Claimed => 6u64,
+        // };
+        // sc_panic!("10: {} {} {} {}", 
+        //     bet.potential_profit,
+        //     final_status_value,
+        //     bet.matched_parts.len(),
+        //     bet.total_matched
+        // );
     
         (total_matched, remaining)
     }
@@ -138,7 +253,9 @@ pub trait TrackerModule:
                     total_profit += profit;
                 },
                 BetType::Lay => {
-                    total_profit += &matched_part.amount;
+                    let liability = (matched_part.odds.clone() - BigUint::from(100u32)) 
+                        * &matched_part.amount / BigUint::from(100u32);
+                    total_profit += liability;
                 }
             }
         }

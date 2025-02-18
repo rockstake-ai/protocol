@@ -10,6 +10,7 @@ pub enum BetStatus {
     Win,
     Lost,
     Canceled,
+    Claimed,
 }
 
 #[type_abi]
@@ -357,9 +358,71 @@ pub struct BetAmounts<M: ManagedTypeApi> {
     pub liability: BigUint<M>
 }
 
+
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
 pub struct BetMatchedInfo<M: ManagedTypeApi> {
     pub matched_parts: ManagedVec<M, MatchedPart<M>>,
     pub potential_profit: BigUint<M>
 }
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
+pub struct BetStatusVerificationResponse {
+    pub bet_type: BetType,
+    pub selection_id: u64,
+    pub status: BetStatus,
+    pub winning_selection: u64,
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
+pub struct BetStatusExplanation{
+    pub bet_type: BetType,
+    pub selection_id: u64,
+    pub winning_selection: u64
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
+pub struct BetDetailsView<M: ManagedTypeApi> {
+    // Bet identification
+    pub bettor: ManagedAddress<M>,
+    pub event: u64,
+    pub selection: Selection<M>,
+    pub bet_type: BetType,
+    
+    // Amounts
+    pub stake_amount: BigUint<M>,
+    pub liability: BigUint<M>,
+    pub total_matched: BigUint<M>,
+    pub potential_profit: BigUint<M>,
+    pub odd: BigUint<M>,
+    
+    // Matching details
+    pub matched_parts: ManagedVec<M, MatchedPart<M>>,
+    
+    // Status
+    pub status: BetStatus,
+    
+    // Payment details
+    pub payment_token: EgldOrEsdtTokenIdentifier<M>,
+    pub payment_nonce: u64,
+    pub nft_nonce: u64,
+    
+    // Timestamps
+    pub created_at: u64
+}
+
+#[type_abi]
+#[derive(TopEncode, TopDecode)]
+pub struct SimpleBetView<M: ManagedTypeApi> {
+    pub bet_type: BetType,
+    pub stake: BigUint<M>,
+    pub odds: BigUint<M>,
+    pub liability: BigUint<M>,
+    pub potential_profit: BigUint<M>,
+    pub selection_id: u64,
+    pub status: BetStatus
+}
+

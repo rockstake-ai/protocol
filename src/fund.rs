@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_MARKET_NOT_SETTLED}, types::{Bet, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus, Tracker}};
+use crate::{errors::{ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_MARKET_NOT_SETTLED}, types::{Bet, BetAttributes, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -116,18 +116,27 @@ pub trait FundModule:
         require!(!market_ids.is_empty(), "No markets found for event");
         
         for market_id in market_ids.iter() {
-            let market = self.markets(market_id).get();
+            let mut market = self.markets(market_id).get();
             
             require!(
                 market.market_status == MarketStatus::Closed,
-                "Market not closed"
+                ERR_MARKET_NOT_CLOSED
             );
             
-            let winning_selection = self.determine_winner(market.market_type, score_home, score_away);
+            let winning_selection = self.determine_winner(market.market_type, score_home, score_away, event_id);
             
             self.winning_selection(market_id).set(winning_selection);
             
+            market.market_status = MarketStatus::Settled;
+            self.markets(market_id).set(&market);
+            
             self.mark_bets_win_loss(market_id, winning_selection);
+            
+            self.market_settled_event(
+                market_id,
+                winning_selection,
+                self.blockchain().get_block_timestamp()
+            );
         }
         
         self.event_result_set_event(event_id, score_home, score_away);
@@ -138,142 +147,125 @@ pub trait FundModule:
         market_id: u64,
         winning_selection: u64,
     ) {
-        for bet_id in self.market_bet_ids(market_id).iter() {
+        let bet_ids = self.market_bet_ids(market_id);
+        
+        for bet_id in bet_ids.iter() {
             let mut bet = self.bet_by_id(bet_id).get();
             
             if bet.status == BetStatus::Matched {
-                match bet.bet_type {
-                    BetType::Back => {
-                        bet.status = if bet.selection.id == winning_selection {
-                            BetStatus::Win
-                        } else {
-                            BetStatus::Lost
-                        };
-                    },
-                    BetType::Lay => {
-                        bet.status = if bet.selection.id != winning_selection {
-                            BetStatus::Win
-                        } else {
-                            BetStatus::Lost
-                        };
-                    }
+                let is_winner = match bet.bet_type {
+                    BetType::Back => bet.selection.id == winning_selection,
+                    BetType::Lay => bet.selection.id != winning_selection
+                };
+                
+                bet.status = if is_winner {
+                    BetStatus::Win
+                } else {
+                    BetStatus::Lost
+                };
+                
+                if is_winner {
+                    self.selection_win_count(market_id, bet.selection.id)
+                        .update(|count| *count += 1);
+                } else {
+                    self.selection_lost_count(market_id, bet.selection.id)
+                        .update(|count| *count += 1);
                 }
                 
                 self.bet_by_id(bet_id).set(&bet);
+                
+                // Emit bet settled event
+                // self.bet_settled_event(
+                //     bet_id,
+                //     &bet.bettor,
+                //     bet.status,
+                //     &bet.potential_profit
+                // );
             }
         }
     }
 
-    #[endpoint(processBatchBets)]
-    fn process_batch_bets(
-        &self,
-        market_id: u64,
-        batch_size: u64
-    ) -> ProcessingStatus {
-        let market = self.markets(market_id).get();
-        require!(
-            market.market_status == MarketStatus::Settled,
-            "Market not settled"
-        );
-
-        let winning_selection = self.winning_selection(market_id).get();
-        let mut processed_count = 0u64;
-
-        for bet_id in self.market_bet_ids(market_id).iter() {
-            if processed_count >= batch_size {
-                return ProcessingStatus::InProgress;
-            }
-
-            let mut bet = self.bet_by_id(bet_id).get();
-            if bet.total_matched > BigUint::zero() {
-                match bet.bet_type {
-                    BetType::Back => {
-                        if bet.selection.id == winning_selection {
-                            self.process_winning_bet(&mut bet);
-                        } else {
-                            bet.status = BetStatus::Lost;
-                        }
-                    },
-                    BetType::Lay => {
-                        if bet.selection.id != winning_selection {
-                            self.process_winning_bet(&mut bet);
-                        } else {
-                            bet.status = BetStatus::Lost;
-                        }
-                    }
-                }
-                self.bet_by_id(bet_id).set(&bet);
-                processed_count += 1;
-            }
-        }
-        ProcessingStatus::Completed
-    }
-
-    fn process_winning_bet(&self, bet: &mut Bet<Self::Api>) {
-        bet.status = BetStatus::Win;
+    #[payable("*")]
+    #[endpoint(claimWinnings)]
+    fn claim_winnings(&self, bet_nonce: u64) {
+        let caller = self.blockchain().get_caller();
+        let (token_identifier, payment_nonce, _amount) = self
+            .call_value()
+            .egld_or_single_esdt()
+            .into_tuple();
+        let token_identifier_wrap = token_identifier.unwrap_esdt();
         
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        require!(bet.bettor == caller, "Not bet owner");
+        require!(bet.status == BetStatus::Win, "Bet not won");
+
         let payout = match bet.bet_type {
             BetType::Back => {
-                let mut total_payout = BigUint::zero();
-                
-                for part in bet.matched_parts.iter() {
-                    let part_profit = (part.odds.clone() - BigUint::from(100u32)) * &part.amount / BigUint::from(100u32);
-                    total_payout += &part.amount + &part_profit;
-                }
-                
-                total_payout
+                &bet.stake_amount + &bet.potential_profit
             },
             BetType::Lay => {
-                let mut total_matched = BigUint::zero();
-                for part in bet.matched_parts.iter() {
-                    total_matched += &part.amount;
-                }
-                total_matched
+                bet.potential_profit.clone()  // Clone to get owned value
             }
         };
-        
-        self.send().direct(
-            &bet.bettor,
-            &bet.payment_token,
-            bet.payment_nonce,
-            &payout
-        );
-    
-        self.reward_distributed_event(
-            bet.nft_nonce,
-            &bet.bettor,
-            &payout
-        );
-    }
 
-    #[inline]
-    fn get_market_id(&self, event_id: u64, market_type_id: u64) -> u64 {
-        let markets = self.markets_by_event(event_id).get();
-        require!(!markets.is_empty(), "Invalid market");
-        markets.get(market_type_id as usize - 1)
+        bet.status = BetStatus::Claimed;
+        self.bet_by_id(bet_nonce).set(&bet);
+
+        self.send().direct(
+            &caller,
+            &bet.payment_token,
+            0,
+            &payout
+        );
+
+        self.send().direct_esdt(
+            &caller,
+            &token_identifier_wrap,
+            bet_nonce,
+            &BigUint::from(1u64)
+        );
+
+        self.reward_distributed_event(
+            bet_nonce,
+            &caller,
+            &payout
+        );
     }
 
     fn determine_winner(
         &self,
         market_type: MarketType,
         score_home: u32,
-        score_away: u32
+        score_away: u32,
+        event_id: u64,
     ) -> u64 {
-        match market_type {
+        let market_ids = self.markets_by_event(event_id).get();
+        let market_id = market_ids.iter()
+            .find(|&id| {
+                let market = self.markets(id).get();
+                market.market_type == market_type
+            })
+            .unwrap_or_else(|| sc_panic!("Market not found"));
+            
+        let market = self.markets(market_id).get();
+        
+        let winning_index = match market_type {
             MarketType::FullTimeResult => {
-                if score_home > score_away { 1u64 }
-                else if score_home < score_away { 2u64 }
-                else { 3u64 }
+                if score_home > score_away { 0 }     
+                else if score_home < score_away { 2 } 
+                else { 1 }                           
             },
             MarketType::TotalGoals => {
-                if score_home + score_away > 2 { 1u64 }
-                else { 2u64 }
+                if score_home + score_away > 2 { 0 } 
+                else { 1 }                          
             },
             MarketType::BothTeamsToScore => {
-                if score_home > 0 && score_away > 0 { 1u64 }
-                else { 2u64 }
+                if score_home > 0 && score_away > 0 { 0 } 
+                else { 1 }                               
             }
-        }
+        };
+        
+        market.selections.get(winning_index).id
     }
 
     #[view(getWinningSelection)]

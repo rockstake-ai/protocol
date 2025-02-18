@@ -432,20 +432,6 @@ pub trait BetModule:
         }
     }
 
-    fn calculate_potential_profit(
-        &self, 
-        bet_type: &BetType, 
-        stake: &BigUint, 
-        odds: &BigUint
-    ) -> BigUint {
-        match bet_type {
-            BetType::Back => {
-                (odds - &BigUint::from(100u32)) * stake / &BigUint::from(100u32)
-            },
-            BetType::Lay => stake.clone()
-        }
-    }
-
     fn get_last_bet_id(&self) -> u64 {
         self.blockchain().get_current_esdt_nft_nonce(
             &self.blockchain().get_sc_address(),
