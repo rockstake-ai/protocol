@@ -6,15 +6,5 @@ pub mod constants {
     pub const NFT_AMOUNT: u32 = 1;
     pub const TOKEN_NAME: &[u8] = b"BetcubeTickets";
     pub const TOKEN_TICKER: &[u8] = b"BET";
-    
-    //Bet
-    pub const MIN_ODDS: u32 = 101;      // 1.01
-    pub const MAX_ODDS: u32 = 100000;   // 1000.00
-
-    // Market constants
-    pub const MAX_SELECTIONS: usize = 100;
-    
-    // User constants
-    pub const MAX_USER_EXPOSURE: u64 = 10_000_000_000_000_000_000; // 10 EGLD
 }
 

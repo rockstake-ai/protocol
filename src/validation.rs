@@ -30,11 +30,14 @@ pub trait ValidationModule:
         );
     }
     
+    
     fn validate_lay_bet(&self, total_amount: &BigUint, odds: &BigUint) -> (BigUint, BigUint) {
         let odds_minus_one = odds - &BigUint::from(100u32);
-        let max_stake = total_amount.clone() * &BigUint::from(100u32) / (odds.clone());
+        
+        let max_stake = total_amount.clone() * &BigUint::from(100u32) / odds.clone();
         let stake = max_stake.clone();
-        let liability = (stake.clone() * odds_minus_one) / &BigUint::from(100u32);
+        
+        let liability = (stake.clone() * odds_minus_one.clone()) / &BigUint::from(100u32);
         
         require!(
             total_amount >= &(&stake + &liability),
@@ -45,9 +48,9 @@ pub trait ValidationModule:
     }
 
     fn validate_back_bet(&self, total_amount: &BigUint) -> (BigUint, BigUint) {
+        // Pentru back bet, total_amount = stake și liability = 0
         (total_amount.clone(), BigUint::zero())
     }
-
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Market Validation (FOR ADMIN) -----------------------------//
     //--------------------------------------------------------------------------------------------//

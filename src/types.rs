@@ -43,6 +43,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub selection: Selection<M>,
     pub stake_amount: BigUint<M>,
     pub liability: BigUint<M>,
+    pub total_amount: BigUint<M>,
     pub total_matched: BigUint<M>,
     pub matched_parts: ManagedVec<M, MatchedPart<M>>,
     pub potential_profit: BigUint<M>,

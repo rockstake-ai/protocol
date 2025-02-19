@@ -14,7 +14,6 @@ pub trait FundModule:
         market.market_status = MarketStatus::Closed;
         self.markets(market_id).set(&market);
         
-        // Procesăm direct din price levels
         for selection in market.selections.iter() {
             let back_levels = self.selection_back_levels(market_id, selection.id).get();
             for level in back_levels.iter() {
@@ -59,23 +58,38 @@ pub trait FundModule:
         let unmatched = &bet.stake_amount - &bet.total_matched;
         
         if unmatched > BigUint::zero() {
+            let refund_amount = match bet.bet_type {
+                BetType::Back => unmatched.clone(),
+                BetType::Lay => {
+                    let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &bet.stake_amount;
+                    (&bet.total_amount * &unmatched_ratio) / &BigUint::from(100u64)
+                }
+            };
+    
             self.send().direct(
                 &bet.bettor,
                 &bet.payment_token,
                 bet.payment_nonce,
-                &unmatched
+                &refund_amount
             );
     
             if bet.total_matched > BigUint::zero() {
                 bet.stake_amount = bet.total_matched.clone();
+                bet.total_amount = if bet.bet_type == BetType::Lay {
+                    let matched_ratio = &bet.total_matched / &bet.stake_amount;
+                    &bet.total_amount * &matched_ratio
+                } else {
+                    bet.total_matched.clone()
+                };
                 bet.potential_profit = self.calculate_total_potential_profit(&bet);
                 bet.status = BetStatus::Matched;
             } else {
                 bet.status = BetStatus::Canceled;
+                bet.total_amount = BigUint::zero();
             }
             
             self.bet_by_id(bet_nonce).set(&bet);
-            self.bet_refunded_event(bet_nonce, &bet.bettor, &unmatched);
+            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     }
 
@@ -107,21 +121,37 @@ pub trait FundModule:
         let unmatched = &bet.stake_amount - &bet.total_matched;
         
         if unmatched > BigUint::zero() {
+            let refund_amount = match bet.bet_type {
+                BetType::Back => unmatched.clone(),
+                BetType::Lay => {
+                    let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &bet.stake_amount;
+                    (&bet.total_amount * &unmatched_ratio) / &BigUint::from(100u64)
+                }
+            };
+    
             self.send().direct(
                 &bet.bettor,
                 &bet.payment_token,
                 bet.payment_nonce,
-                &unmatched,
+                &refund_amount,
             );
             
             bet.status = if bet.total_matched > BigUint::zero() {
+                bet.stake_amount = bet.total_matched.clone();
+                bet.total_amount = if bet.bet_type == BetType::Lay {
+                    let matched_ratio = &bet.total_matched / &bet.stake_amount;
+                    &bet.total_amount * &matched_ratio
+                } else {
+                    bet.total_matched.clone()
+                };
                 BetStatus::Matched
             } else {
+                bet.total_amount = BigUint::zero();
                 BetStatus::Canceled
             };
             
             self.bet_by_id(bet_nonce).set(&bet);
-            self.bet_refunded_event(bet_nonce, &bet.bettor, &unmatched);
+            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     }
     
@@ -228,7 +258,7 @@ pub trait FundModule:
                 &bet.stake_amount + &bet.potential_profit
             },
             BetType::Lay => {
-                &bet.liability + &bet.potential_profit
+                bet.total_amount.clone()
             }
         };
 
