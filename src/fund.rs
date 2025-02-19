@@ -14,30 +14,27 @@ pub trait FundModule:
         market.market_status = MarketStatus::Closed;
         self.markets(market_id).set(&market);
         
-        self.process_unmatched_bets(market_id);
-        
-        self.clear_market_orderbook(market_id);
-        
-        self.market_closed_event(
-            market_id,
-            self.blockchain().get_block_timestamp()
-        );
-    }
-    
-    fn clear_market_orderbook(&self, market_id: u64) {
-        let market = self.markets(market_id).get();
-        
+        // Procesăm direct din price levels
         for selection in market.selections.iter() {
-            self.selection_back_levels(market_id, selection.id)
-                .set(&ManagedVec::new());
-            self.selection_back_liquidity(market_id, selection.id)
-                .set(&BigUint::zero());
-                
-            self.selection_lay_levels(market_id, selection.id)
-                .set(&ManagedVec::new());
-            self.selection_lay_liquidity(market_id, selection.id)
-                .set(&BigUint::zero());
-                
+            let back_levels = self.selection_back_levels(market_id, selection.id).get();
+            for level in back_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    self.return_unmatched_amount(bet_nonce);
+                }
+            }
+    
+            let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
+            for level in lay_levels.iter() {
+                for bet_nonce in level.bet_nonces.iter() {
+                    self.return_unmatched_amount(bet_nonce);
+                }
+            }
+    
+            self.selection_back_levels(market_id, selection.id).set(&ManagedVec::new());
+            self.selection_lay_levels(market_id, selection.id).set(&ManagedVec::new());
+            self.selection_back_liquidity(market_id, selection.id).set(&BigUint::zero());
+            self.selection_lay_liquidity(market_id, selection.id).set(&BigUint::zero());
+    
             let tracker = Tracker {
                 back_levels: ManagedVec::new(),
                 lay_levels: ManagedVec::new(),
@@ -52,6 +49,33 @@ pub trait FundModule:
             };
             
             self.selection_tracker(market_id, selection.id).set(&tracker);
+        }
+        
+        self.market_closed_event(market_id, self.blockchain().get_block_timestamp());
+    }
+    
+    fn return_unmatched_amount(&self, bet_nonce: u64) {
+        let mut bet = self.bet_by_id(bet_nonce).get();
+        let unmatched = &bet.stake_amount - &bet.total_matched;
+        
+        if unmatched > BigUint::zero() {
+            self.send().direct(
+                &bet.bettor,
+                &bet.payment_token,
+                bet.payment_nonce,
+                &unmatched
+            );
+    
+            if bet.total_matched > BigUint::zero() {
+                bet.stake_amount = bet.total_matched.clone();
+                bet.potential_profit = self.calculate_total_potential_profit(&bet);
+                bet.status = BetStatus::Matched;
+            } else {
+                bet.status = BetStatus::Canceled;
+            }
+            
+            self.bet_by_id(bet_nonce).set(&bet);
+            self.bet_refunded_event(bet_nonce, &bet.bettor, &unmatched);
         }
     }
 
@@ -204,7 +228,7 @@ pub trait FundModule:
                 &bet.stake_amount + &bet.potential_profit
             },
             BetType::Lay => {
-                bet.potential_profit.clone()  // Clone to get owned value
+                &bet.liability + &bet.potential_profit
             }
         };
 

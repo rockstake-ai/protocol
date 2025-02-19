@@ -7,19 +7,27 @@ pub trait TrackerModule:
     crate::storage::StorageModule +
     crate::events::EventsModule
 {
+    
     fn process_bet(&self, mut bet: Bet<Self::Api>) -> (BigUint, BigUint) {
         let mut total_matched = bet.total_matched.clone();
         let mut remaining = &bet.stake_amount - &bet.total_matched;
+        let mut liability_locked = match bet.bet_type {
+            BetType::Back => BigUint::zero(),
+            BetType::Lay => {
+                let odds_minus_one = &bet.odd - &BigUint::from(100u64);
+                (&remaining * &odds_minus_one) / &BigUint::from(100u64)
+            }
+        };
     
-        // Step 1: Initial state
-        // let bet_type_value = match bet.bet_type {
-        //     BetType::Back => 0u64,
-        //     BetType::Lay => 1u64,
-        // };
-        // sc_panic!("{} {} {}", 
+        let bet_type_value = match bet.bet_type {
+            BetType::Back => 0u64,
+            BetType::Lay => 1u64,
+        };
+        // sc_panic!("Initial bet state - type(0=Back,1=Lay) stake remaining totalMatched: {} {} {} {}", 
         //     bet_type_value,
         //     bet.stake_amount,
-        //     bet.odd
+        //     remaining,
+        //     total_matched
         // );
     
         let mut opposite_levels = match bet.bet_type {
@@ -27,15 +35,13 @@ pub trait TrackerModule:
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).get(),
         };
     
-        // Step 2: Opposite levels count
-        // sc_panic!("{}", opposite_levels.len());
+        // sc_panic!("Opposite levels count: {}", opposite_levels.len());
     
         let mut i = 0;
         while i < opposite_levels.len() && remaining > BigUint::zero() {
             let mut level = opposite_levels.get(i);
-            
-            // Step 3: Level details
-            // sc_panic!("{} {} {} {}", 
+    
+            // sc_panic!("Processing level - index odds totalStake noncesCount: {} {} {} {}", 
             //     i,
             //     level.odds,
             //     level.total_stake,
@@ -44,22 +50,23 @@ pub trait TrackerModule:
     
             if level.odds == bet.odd {
                 let match_amount = remaining.clone().min(level.total_stake.clone());
-                
-                // Step 4: Match found
-                // sc_panic!("{} {}", 
-                //     match_amount,
-                //     level.total_stake
-                // );
+    
+                // sc_panic!("Match amount found: {}", match_amount);
     
                 if match_amount > BigUint::zero() {
+                    if bet.bet_type == BetType::Lay {
+                        let matched_liability = (&match_amount * &(&bet.odd - &BigUint::from(100u64))) 
+                            / &BigUint::from(100u64);
+                        liability_locked -= &matched_liability;
+                    }
+
                     bet.matched_parts.push(MatchedPart {
                         amount: match_amount.clone(),
-                        odds: level.odds.clone()
+                        odds: level.odds.clone(),
                     });
     
-                    // Step 5: After push
-                    // let new_total = total_matched.clone() + &match_amount;
-                    // sc_panic!("{} {}", 
+                    let new_total = total_matched.clone() + &match_amount;
+                    // sc_panic!("Matched parts - count totalMatchedAfterAdd: {} {}", 
                     //     bet.matched_parts.len(),
                     //     new_total
                     // );
@@ -73,80 +80,56 @@ pub trait TrackerModule:
                     for nonce in level.bet_nonces.iter() {
                         let mut matched_bet = self.bet_by_id(nonce).get();
                         let current_unmatched = &matched_bet.stake_amount - &matched_bet.total_matched;
-                        
-                        // Step 6: Processing opposite bet
-                        // sc_panic!("{} {}", 
+    
+                        // sc_panic!("Processing opposite bet - nonce unmatchedAmount: {} {}", 
                         //     nonce,
                         //     current_unmatched
                         // );
-                        
+    
                         if current_unmatched > BigUint::zero() {
                             let match_this_bet = current_unmatched.clone().min(match_amount.clone());
-                            
-                            // Step 7.1: Before updating opposite bet
-                            // let opp_matched_parts_count = matched_bet.matched_parts.len();
-                            // sc_panic!("7.1: {} {}", 
-                            //     opp_matched_parts_count,
-                            //     matched_bet.potential_profit
-                            // );
-                                
+    
+                            // sc_panic!("Match amount for this bet: {}", match_this_bet);
+    
                             if match_this_bet > BigUint::zero() {
                                 matched_bet.matched_parts.push(MatchedPart {
                                     amount: match_this_bet.clone(),
-                                    odds: matched_bet.odd.clone()
+                                    odds: matched_bet.odd.clone(),
                                 });
     
                                 matched_bet.total_matched += &match_this_bet;
-                                
-                                // Update status
+    
                                 matched_bet.status = if &matched_bet.total_matched == &matched_bet.stake_amount {
                                     BetStatus::Matched
                                 } else {
                                     BetStatus::PartiallyMatched
                                 };
-                                
+    
                                 matched_bet.potential_profit = self.calculate_total_potential_profit(&matched_bet);
     
-                                // Step 7.2: After updating opposite bet
-                                // let status_value = match matched_bet.status {
-                                //     BetStatus::Matched => 0u64,
-                                //     BetStatus::Unmatched => 1u64,
-                                //     BetStatus::PartiallyMatched => 2u64,
-                                //     BetStatus::Win => 3u64,
-                                //     BetStatus::Lost => 4u64,
-                                //     BetStatus::Canceled => 5u64,
-                                //     BetStatus::Claimed => 6u64,
-                                // };
-                                // sc_panic!("7.2: {} {} {}", 
-                                //     matched_bet.matched_parts.len(),
+                                let matched_bet_status = match matched_bet.status {
+                                    BetStatus::Matched => 0u64,
+                                    BetStatus::Unmatched => 1u64,
+                                    BetStatus::PartiallyMatched => 2u64,
+                                    BetStatus::Win => 3u64,
+                                    BetStatus::Lost => 4u64,
+                                    BetStatus::Canceled => 5u64,
+                                    BetStatus::Claimed => 6u64,
+                                };
+    
+                                // sc_panic!("Opposite bet updated - nonce totalMatched status(0=M,1=U,2=PM,3=W,4=L,5=C,6=CL): {} {} {}", 
+                                //     nonce,
                                 //     matched_bet.total_matched,
-                                //     status_value
+                                //     matched_bet_status
                                 // );
-                                
+    
                                 let remaining_unmatched = &matched_bet.stake_amount - &matched_bet.total_matched;
                                 if remaining_unmatched > BigUint::zero() {
                                     updated_nonces.push(nonce);
                                     total_level_stake += remaining_unmatched;
                                 }
-                                
-                                self.bet_by_id(nonce).set(&matched_bet);
     
-                                // Step 7.3: Verify storage update
-                                // let verified_bet = self.bet_by_id(nonce).get();
-                                // let verified_status = match verified_bet.status {
-                                //     BetStatus::Matched => 0u64,
-                                //     BetStatus::Unmatched => 1u64,
-                                //     BetStatus::PartiallyMatched => 2u64,
-                                //     BetStatus::Win => 3u64,
-                                //     BetStatus::Lost => 4u64,
-                                //     BetStatus::Canceled => 5u64,
-                                //     BetStatus::Claimed => 6u64,
-                                // };
-                                // sc_panic!("7.3: {} {} {}", 
-                                //     verified_bet.matched_parts.len(),
-                                //     verified_bet.total_matched,
-                                //     verified_status
-                                // );
+                                self.bet_by_id(nonce).set(&matched_bet);
                             }
                         }
                     }
@@ -157,7 +140,6 @@ pub trait TrackerModule:
                         let _ = opposite_levels.set(i, level);
                         i += 1;
                     } else {
-                        // Eliminăm price level-ul dacă nu mai are pariuri active
                         if i < opposite_levels.len() - 1 {
                             let last = opposite_levels.get(opposite_levels.len() - 1);
                             let _ = opposite_levels.set(i, last);
@@ -171,101 +153,78 @@ pub trait TrackerModule:
                 i += 1;
             }
         }
-        
+    
         match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).set(&opposite_levels),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).set(&opposite_levels),
         }
     
         bet.total_matched = total_matched.clone();
-        
-        bet.status = if remaining == BigUint::zero() {
-            self.selection_matched_count(bet.event, bet.selection.id)
-                .update(|val| *val += 1);
-            BetStatus::Matched
-        } else if total_matched > BigUint::zero() {
-            self.selection_partially_matched_count(bet.event, bet.selection.id)
-                .update(|val| *val += 1);
-            BetStatus::PartiallyMatched
-        } else {
-            self.selection_unmatched_count(bet.event, bet.selection.id)
-                .update(|val| *val += 1);
-            BetStatus::Unmatched
-        };
+
+    // Modificăm această parte
+    bet.status = if remaining == BigUint::zero() {
+        // Doar pentru fully matched actualizăm stake_amount
+        bet.stake_amount = total_matched.clone();
+        self.selection_matched_count(bet.event, bet.selection.id)
+            .update(|val| *val += 1);
+        BetStatus::Matched
+    } else if total_matched > BigUint::zero() {
+        self.selection_partially_matched_count(bet.event, bet.selection.id)
+            .update(|val| *val += 1);
+        BetStatus::PartiallyMatched
+    } else {
+        self.selection_unmatched_count(bet.event, bet.selection.id)
+            .update(|val| *val += 1);
+        BetStatus::Unmatched
+    };
+
+    bet.potential_profit = self.calculate_total_potential_profit(&bet);
+
     
-        bet.potential_profit = self.calculate_total_potential_profit(&bet);
-        
-        // Step 9: After profit calculation
-        // let status_value = match bet.status {
-        //     BetStatus::Matched => 0u64,
-        //     BetStatus::Unmatched => 1u64,
-        //     BetStatus::PartiallyMatched => 2u64,
-        //     BetStatus::Win => 3u64,
-        //     BetStatus::Lost => 4u64,
-        //     BetStatus::Canceled => 5u64,
-        //     BetStatus::Claimed => 6u64,
-        // };
-        // sc_panic!("9: {} {} {}", 
+        let final_status = match bet.status {
+            BetStatus::Matched => 0u64,
+            BetStatus::Unmatched => 1u64,
+            BetStatus::PartiallyMatched => 2u64,
+            BetStatus::Win => 3u64,
+            BetStatus::Lost => 4u64,
+            BetStatus::Canceled => 5u64,
+            BetStatus::Claimed => 6u64,
+        };
+
+        // sc_panic!("Final bet state - profit status(0=M,1=U,2=PM,3=W,4=L,5=C,6=CL) matchedPartsCount totalMatched: {} {} {} {}", 
         //     bet.potential_profit,
-        //     status_value,
-        //     bet.matched_parts.len()
+        //     final_status,
+        //     bet.matched_parts.len(),
+        //     bet.total_matched
         // );
     
         if total_matched > BigUint::zero() {
             let new_matches = &total_matched - &bet.total_matched;
             self.update_total_matched(bet.event, bet.selection.id, &new_matches);
         }
-        
+    
         if remaining > BigUint::zero() {
             self.add_to_orderbook(&bet);
         }
     
+        bet.liability = liability_locked;
         self.bet_by_id(bet.nft_nonce).set(&bet);
-    
-        // Step 10: Final state
-        // let final_status_value = match bet.status {
-        //     BetStatus::Matched => 0u64,
-        //     BetStatus::Unmatched => 1u64,
-        //     BetStatus::PartiallyMatched => 2u64,
-        //     BetStatus::Win => 3u64,
-        //     BetStatus::Lost => 4u64,
-        //     BetStatus::Canceled => 5u64,
-        //     BetStatus::Claimed => 6u64,
-        // };
-        // sc_panic!("10: {} {} {} {}", 
-        //     bet.potential_profit,
-        //     final_status_value,
-        //     bet.matched_parts.len(),
-        //     bet.total_matched
-        // );
     
         (total_matched, remaining)
     }
 
-    fn calculate_total_potential_profit(&self, bet: &Bet<Self::Api>) -> BigUint<Self::Api> {
-        let mut total_profit = BigUint::zero();
-        
-        for matched_part in bet.matched_parts.iter() {
-            match bet.bet_type {
-                BetType::Back => {
-                    let profit = (matched_part.odds.clone() - BigUint::from(100u32)) 
-                        * &matched_part.amount / BigUint::from(100u32);
-                    total_profit += profit;
-                },
-                BetType::Lay => {
-                    let liability = (matched_part.odds.clone() - BigUint::from(100u32)) 
-                        * &matched_part.amount / BigUint::from(100u32);
-                    total_profit += liability;
-                }
-            }
+    fn calculate_total_potential_profit(&self, bet: &Bet<Self::Api>) -> BigUint {
+        match bet.bet_type {
+            BetType::Back => &bet.total_matched * &(&bet.odd - &BigUint::from(100u64)) / &BigUint::from(100u64),
+            BetType::Lay => bet.total_matched.clone()
         }
-        
-        total_profit
     }
 
     fn add_to_orderbook(&self, bet: &Bet<Self::Api>) {
         let unmatched_amount = &bet.stake_amount - &bet.total_matched;
-        require!(unmatched_amount > BigUint::zero(), "No unmatched amount to add to orderbook");
+        if unmatched_amount == BigUint::zero() {
+            return; 
+        }        
         
         let mut levels = match bet.bet_type {
             BetType::Back => self.selection_back_levels(bet.event, bet.selection.id).get(),

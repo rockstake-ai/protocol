@@ -382,12 +382,16 @@ pub trait BetModule:
         self.bet_by_id(bet.nft_nonce).set(bet);
 
         self.market_bet_ids(bet.event).insert(bet.nft_nonce);
-        let total_locked = match bet_type {
+        let amount_to_lock = match bet_type {
             BetType::Back => remaining.clone(),
-            BetType::Lay => liability.clone(),
+            BetType::Lay => {
+                remaining + liability
+            }
         };
-        self.locked_funds(caller).update(|current_locked| *current_locked += &total_locked);
-
+        if amount_to_lock > BigUint::zero() {
+            self.locked_funds(&caller).update(|funds| *funds += &amount_to_lock);
+        }
+    
         self.send().direct_esdt(
             caller,
             self.bet_nft_token().get_token_id_ref(),

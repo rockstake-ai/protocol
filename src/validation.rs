@@ -32,13 +32,17 @@ pub trait ValidationModule:
     
     fn validate_lay_bet(&self, total_amount: &BigUint, odds: &BigUint) -> (BigUint, BigUint) {
         let odds_minus_one = odds - &BigUint::from(100u32);
-        let stake = total_amount.clone();
-        let calculated_liability = (stake.clone() * odds_minus_one) / &BigUint::from(100u32);
+        let max_stake = total_amount.clone() * &BigUint::from(100u32) / (odds.clone());
+        let stake = max_stake.clone();
+        let liability = (stake.clone() * odds_minus_one) / &BigUint::from(100u32);
         
-        require!(calculated_liability > BigUint::zero(), "Invalid liability calculation");
+        require!(
+            total_amount >= &(&stake + &liability),
+            "Insufficient funds for lay bet liability"
+        );
         
-        (stake, calculated_liability)
-     }
+        (stake, liability)
+    }
 
     fn validate_back_bet(&self, total_amount: &BigUint) -> (BigUint, BigUint) {
         (total_amount.clone(), BigUint::zero())
