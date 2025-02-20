@@ -21,6 +21,17 @@ pub enum BetType {
 }
 
 #[type_abi]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem, Copy)]
+pub enum Sport {
+    Football,
+    Tennis,
+    Basketball,
+    LeagueOfLegends,
+    CounterStrike2,
+    Dota2
+}
+
+#[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq)]
 pub enum MarketStatus {
     Open,    
@@ -39,6 +50,7 @@ pub struct MatchedPart<M: ManagedTypeApi> {
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct Bet<M: ManagedTypeApi> {
     pub bettor: ManagedAddress<M>,
+    pub sport: Sport,
     pub event: u64,
     pub selection: Selection<M>,
     pub stake_amount: BigUint<M>,
@@ -230,200 +242,3 @@ pub struct ProcessingProgress {
     pub processed_bets: u64,
     pub status: ProcessingStatus
 }
-
-//Debugging
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct BetMatchingState<M: ManagedTypeApi> {
-    pub bet_type: BetType,
-    pub original_stake: BigUint<M>,
-    pub matched_amount: BigUint<M>,
-    pub unmatched_amount: BigUint<M>,
-    pub status: BetStatus,
-    pub odds: BigUint<M>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct MatchingDetails<M: ManagedTypeApi> {
-    pub back_levels: ManagedVec<M,PriceLevelView<M>>,
-    pub lay_levels: ManagedVec<M,PriceLevelView<M>>,
-    pub back_liquidity: BigUint<M>,
-    pub lay_liquidity: BigUint<M>,
-    pub matched_count: u64,
-    pub unmatched_count: u64,
-    pub partially_matched_count: u64
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct PriceLevelView<M: ManagedTypeApi> {
-    pub odds: BigUint<M>,
-    pub total_stake: BigUint<M>,
-    pub bets: ManagedVec<M, BetView<M>>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct BetView<M: ManagedTypeApi> {
-    pub nonce: u64,
-    pub bettor: ManagedAddress<M>,
-    pub stake: BigUint<M>,
-    pub matched: BigUint<M>,
-    pub unmatched: BigUint<M>,
-    pub status: BetStatus
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, ManagedVecItem, Debug)]
-pub struct OrderbookView<M: ManagedTypeApi> {
-    pub price_level: BigUint<M>,
-    pub total_amount: BigUint<M>,
-    pub bet_count: u32
-}
-
-///
-///
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct DebugMatchedPart<M: ManagedTypeApi> {
-    pub amount: BigUint<M>,
-    pub odds: BigUint<M>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct DebugBetState<M: ManagedTypeApi> {
-    pub bet_type: BetType,
-    pub stake_amount: BigUint<M>,
-    pub matched_amount: BigUint<M>,
-    pub unmatched_amount: BigUint<M>,
-    pub status: BetStatus,
-    pub current_odds: BigUint<M>,
-    pub potential_profit: BigUint<M>,
-    pub matched_parts: ManagedVec<M, DebugMatchedPart<M>>
-}
-
-///
-/// 
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct MarketStatsResponse<M: ManagedTypeApi> {
-    // Stats grupate pe categorii
-    pub bet_counts: BetCounts,
-    pub volumes: MarketVolumes<M>,
-    pub bets: ManagedVec<M, BetDetailResponse<M>>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct BetCounts {
-    pub total: u32,
-    pub matched: u32,
-    pub unmatched: u32,
-    pub partially_matched: u32
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct MarketVolumes<M: ManagedTypeApi> {
-    pub back_matched: BigUint<M>,
-    pub lay_matched: BigUint<M>,
-    pub back_unmatched: BigUint<M>,
-    pub lay_unmatched: BigUint<M>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct BetDetailResponse<M: ManagedTypeApi> {
-    // Identificare
-    pub nft_nonce: u64,
-    pub selection_id: u64,
-    pub bettor: ManagedAddress<M>,
-    
-    // Sume și stare
-    pub stake: BetAmounts<M>,
-    pub odds: BigUint<M>,
-    pub status: BetStatus,
-    
-    // Date matched
-    pub matched_info: BetMatchedInfo<M>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct BetAmounts<M: ManagedTypeApi> {
-    pub stake_amount: BigUint<M>,
-    pub matched: BigUint<M>,
-    pub unmatched: BigUint<M>,
-    pub liability: BigUint<M>
-}
-
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct BetMatchedInfo<M: ManagedTypeApi> {
-    pub matched_parts: ManagedVec<M, MatchedPart<M>>,
-    pub potential_profit: BigUint<M>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
-pub struct BetStatusVerificationResponse {
-    pub bet_type: BetType,
-    pub selection_id: u64,
-    pub status: BetStatus,
-    pub winning_selection: u64,
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
-pub struct BetStatusExplanation{
-    pub bet_type: BetType,
-    pub selection_id: u64,
-    pub winning_selection: u64
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
-pub struct BetDetailsView<M: ManagedTypeApi> {
-    // Bet identification
-    pub bettor: ManagedAddress<M>,
-    pub event: u64,
-    pub selection: Selection<M>,
-    pub bet_type: BetType,
-    
-    // Amounts
-    pub stake_amount: BigUint<M>,
-    pub liability: BigUint<M>,
-    pub total_matched: BigUint<M>,
-    pub potential_profit: BigUint<M>,
-    pub odd: BigUint<M>,
-    
-    // Matching details
-    pub matched_parts: ManagedVec<M, MatchedPart<M>>,
-    
-    // Status
-    pub status: BetStatus,
-    
-    // Payment details
-    pub payment_token: EgldOrEsdtTokenIdentifier<M>,
-    pub payment_nonce: u64,
-    pub nft_nonce: u64,
-    
-    // Timestamps
-    pub created_at: u64
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode)]
-pub struct SimpleBetView<M: ManagedTypeApi> {
-    pub bet_type: BetType,
-    pub stake: BigUint<M>,
-    pub odds: BigUint<M>,
-    pub liability: BigUint<M>,
-    pub potential_profit: BigUint<M>,
-    pub selection_id: u64,
-    pub status: BetStatus
-}
-

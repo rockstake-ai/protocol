@@ -50,7 +50,6 @@ pub trait FundModule:
             self.selection_tracker(market_id, selection.id).set(&tracker);
         }
         
-        self.market_closed_event(market_id, self.blockchain().get_block_timestamp());
     }
     
     fn return_unmatched_amount(&self, bet_nonce: u64) {
@@ -89,7 +88,7 @@ pub trait FundModule:
             }
             
             self.bet_by_id(bet_nonce).set(&bet);
-            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
+            // self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     }
 
@@ -151,7 +150,7 @@ pub trait FundModule:
             };
             
             self.bet_by_id(bet_nonce).set(&bet);
-            self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
+            // self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     }
     
@@ -185,15 +184,8 @@ pub trait FundModule:
             self.markets(market_id).set(&market);
             
             self.mark_bets_win_loss(market_id, winning_selection);
-            
-            self.market_settled_event(
-                market_id,
-                winning_selection,
-                self.blockchain().get_block_timestamp()
-            );
         }
-        
-        self.event_result_set_event(event_id, score_home, score_away);
+        // self.event_result_set_event(event_id, score_home, score_away);
     }
 
     fn mark_bets_win_loss(
@@ -277,12 +269,6 @@ pub trait FundModule:
             &token_identifier_wrap,
             bet_nonce,
             &BigUint::from(1u64)
-        );
-
-        self.reward_distributed_event(
-            bet_nonce,
-            &caller,
-            &payout
         );
     }
 

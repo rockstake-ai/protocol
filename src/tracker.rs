@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetMatchingState, BetStatus, BetType, BetView, MatchedPart, MatchingDetails, OrderbookView, PriceLevel, PriceLevelView};
+use crate::types::{Bet, BetStatus, BetType, MatchedPart, PriceLevel};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 

@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetAttributes, BetStatus, BetType, DebugBetState, DebugMatchedPart};
+use crate::types::{Bet, BetAttributes, BetStatus, BetType, Sport};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -14,6 +14,7 @@ pub trait BetModule:
     #[endpoint(placeBet)]
     fn place_bet(
         &self,
+        sport: Sport,
         market_id: u64,
         selection_id: u64,
         odds: BigUint,
@@ -37,6 +38,7 @@ pub trait BetModule:
         );
 
         let bet = self.create_bet(
+            sport,
             market_id,
             selection_id,
             &caller,
@@ -185,10 +187,13 @@ pub trait BetModule:
         new_odds: OptionalValue<BigUint>,
         new_amount: OptionalValue<BigUint>,
     ) {
-        let (token_identifier, payment_nonce, total_amount) = self
+        let (nft_token_identifier, nft_payment_nonce, nft_amount) = self
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
+
+        let payment = self.call_value().egld_or_single_esdt();
+        let (payment_token_identifier, payment_token_nonce, payment_amount) = payment.into_tuple();
 
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_nonce).get();
@@ -204,10 +209,10 @@ pub trait BetModule:
         );
 
         require!(
-            token_identifier == self.bet_nft_token().get_token_id(),
+            nft_token_identifier == self.bet_nft_token().get_token_id(),
             "Invalid NFT token identifier"
         );
-        require!(payment_nonce == bet_nonce, "Invalid NFT nonce");
+        require!(nft_payment_nonce == bet_nonce, "Invalid NFT nonce");
 
         let old_unmatched = &bet.stake_amount - &bet.total_matched;
         let old_total = bet.total_amount.clone();
@@ -221,13 +226,7 @@ pub trait BetModule:
         };
 
         let new_unmatched = match &new_amount {
-            OptionalValue::Some(amount) => {
-                require!(
-                    amount <= &old_unmatched,
-                    "New amount cannot exceed unmatched amount"
-                );
-                amount.clone()
-            },
+            OptionalValue::Some(amount) => amount.clone(),
             OptionalValue::None => old_unmatched.clone()
         };
 
@@ -243,17 +242,23 @@ pub trait BetModule:
             }
         };
 
-        require!(
-            total_amount >= new_total,
-            "Insufficient total amount for updated bet"
-        );
-
-        let refund_amount = if new_amount.is_some() {
-            old_total.clone() - &new_total
+        let refund_amount;
+        let additional_funds;
+        if new_total > old_total {
+            additional_funds = &new_total - &old_total;
+            refund_amount = BigUint::zero();
+            require!(
+                payment_amount >= additional_funds,
+                "Insufficient payment amount for increased stake"
+            );
+            require!(
+                payment_token_identifier == bet.payment_token,
+                "Payment token must match bet payment token"
+            );
         } else {
-            BigUint::zero()
-        };
-        
+            additional_funds = BigUint::zero();
+            refund_amount = &old_total - &new_total;
+        }
 
         if new_amount.is_some() || new_odds.is_some() {
             self.remove_from_orderbook(&bet);
@@ -263,7 +268,6 @@ pub trait BetModule:
         bet.stake_amount = bet.total_matched.clone() + &new_unmatched;
         bet.total_amount = new_total.clone();
 
-        // Recalculăm liability și potential_profit pentru matched și unmatched
         let mut total_liability = BigUint::zero();
         
         for part in bet.matched_parts.iter() {
@@ -299,7 +303,7 @@ pub trait BetModule:
             status: bet.status.clone(),
         };
 
-        let token_identifier_wrap = token_identifier.unwrap_esdt();
+        let nft_token_identifier_wrap = nft_token_identifier.unwrap_esdt();
 
         self.locked_funds(&caller).update(|val| {
             *val -= &old_total;
@@ -310,25 +314,32 @@ pub trait BetModule:
         self.bet_by_id(bet_nonce).set(&updated_bet);
 
         self.send().nft_update_attributes(
-            &token_identifier_wrap,
-            payment_nonce,
+            &nft_token_identifier_wrap,
+            nft_payment_nonce,
             &attributes
         );
 
         if refund_amount > BigUint::zero() {
             self.send().direct(&caller, &updated_bet.payment_token, 0, &refund_amount);
         }
+        if additional_funds > BigUint::zero() {
+            let excess_payment = &payment_amount - &additional_funds;
+            if excess_payment > BigUint::zero() {
+                self.send().direct(&caller, &payment_token_identifier, payment_token_nonce, &excess_payment);
+            }
+        }
 
         self.send().direct_esdt(
             &caller,
-            &token_identifier_wrap,
+            &nft_token_identifier_wrap,
             bet_nonce,
-            &BigUint::from(1u64)
+            &nft_amount
         );
     }
 
     fn create_bet(
         &self,
+        sport: Sport,
         market_id: u64,
         selection_id: u64,
         caller: &ManagedAddress<Self::Api>,
@@ -350,6 +361,7 @@ pub trait BetModule:
         
         Bet {
             bettor: caller.clone(),
+            sport: sport,
             event: market_id,
             selection,
             stake_amount: stake.clone(),
@@ -420,7 +432,6 @@ pub trait BetModule:
         self.bet_by_id(bet.nft_nonce).set(bet);
         self.market_bet_ids(bet.event).insert(bet.nft_nonce);
 
-        // Calculăm suma totală care trebuie blocată
         let amount_to_lock = match bet_type {
             BetType::Back => remaining.clone(),
             BetType::Lay => {
@@ -482,33 +493,5 @@ pub trait BetModule:
             &self.blockchain().get_sc_address(),
             self.bet_nft_token().get_token_id_ref(),
         )
-    }
-
-    #[view(getDebugBetState)]
-    fn get_debug_bet_state(
-        &self,
-        bet_nonce: u64
-    ) -> DebugBetState<Self::Api> {
-        let bet = self.bet_by_id(bet_nonce).get();
-        let unmatched = &bet.stake_amount - &bet.total_matched;
-        
-        let mut matched_parts = ManagedVec::new();
-        for part in bet.matched_parts.iter() {
-            matched_parts.push(DebugMatchedPart {
-                amount: part.amount,
-                odds: part.odds
-            });
-        }
-        
-        DebugBetState {
-            bet_type: bet.bet_type,
-            stake_amount: bet.stake_amount,
-            matched_amount: bet.total_matched,
-            unmatched_amount: unmatched,
-            status: bet.status,
-            current_odds: bet.odd,
-            potential_profit: bet.potential_profit,
-            matched_parts
-        }
     }
 }
