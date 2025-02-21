@@ -19,11 +19,8 @@ pub trait TrackerModule:
                 (&remaining * &odds_minus_one) / &BigUint::from(100u64)
             }
         };
-
-        let bet_type_value = match bet.bet_type {
-            BetType::Back => 0u64,
-            BetType::Lay => 1u64,
-        };
+    
+        let current_timestamp = self.blockchain().get_block_timestamp();
     
         let mut opposite_levels = match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).get(),
@@ -43,11 +40,6 @@ pub trait TrackerModule:
                             / &BigUint::from(100u64);
                         remaining_liability -= &matched_liability;
                     }
-
-                    bet.matched_parts.push(MatchedPart {
-                        amount: match_amount.clone(),
-                        odds: level.odds.clone(),
-                    });
     
                     total_matched += &match_amount;
                     remaining -= &match_amount;
@@ -63,13 +55,30 @@ pub trait TrackerModule:
                             let match_this_bet = current_unmatched.clone().min(match_amount.clone());
     
                             if match_this_bet > BigUint::zero() {
+                                // Add matched part to the current bet
+                                bet.matched_parts.push(MatchedPart {
+                                    matched_with: matched_bet.bettor.clone(),
+                                    amount: match_this_bet.clone(),
+                                    odds: level.odds.clone(),
+                                    matched_at: current_timestamp,
+                                    counterparty_bet_id: matched_bet.nft_nonce,
+                                    counterparty_payment_token: matched_bet.payment_token.clone(),
+                                    counterparty_payment_nonce: matched_bet.payment_nonce
+                                });
+    
+                                // Add matched part to the counterparty bet
                                 matched_bet.matched_parts.push(MatchedPart {
+                                    matched_with: bet.bettor.clone(),
                                     amount: match_this_bet.clone(),
                                     odds: matched_bet.odd.clone(),
+                                    matched_at: current_timestamp,
+                                    counterparty_bet_id: bet.nft_nonce,
+                                    counterparty_payment_token: bet.payment_token.clone(),
+                                    counterparty_payment_nonce: bet.payment_nonce
                                 });
     
                                 matched_bet.total_matched += &match_this_bet;
-
+    
                                 if matched_bet.bet_type == BetType::Lay {
                                     let matched_ratio = &match_this_bet / &matched_bet.stake_amount;
                                     let matched_total = &matched_bet.total_amount * &matched_ratio;
@@ -114,13 +123,14 @@ pub trait TrackerModule:
                 i += 1;
             }
         }
+    
         match bet.bet_type {
             BetType::Back => self.selection_lay_levels(bet.event, bet.selection.id).set(&opposite_levels),
             BetType::Lay => self.selection_back_levels(bet.event, bet.selection.id).set(&opposite_levels),
         }
     
         bet.total_matched = total_matched.clone();
-
+    
         bet.status = if remaining == BigUint::zero() {
             bet.stake_amount = total_matched.clone();
             bet.total_amount = if bet.bet_type == BetType::Lay {
@@ -142,9 +152,9 @@ pub trait TrackerModule:
                 .update(|val| *val += 1);
             BetStatus::Unmatched
         };
-
+    
         bet.potential_profit = self.calculate_total_potential_profit(&bet);
-        bet.liability = remaining_liability; // Actualizăm liability-ul rămas
+        bet.liability = remaining_liability;
     
         if total_matched > BigUint::zero() {
             let new_matches = &total_matched - &bet.total_matched;
@@ -163,11 +173,9 @@ pub trait TrackerModule:
     fn calculate_total_potential_profit(&self, bet: &Bet<Self::Api>) -> BigUint {
         match bet.bet_type {
             BetType::Back => {
-                // Pentru Back: (matched_amount * (odds-1))
                 &bet.total_matched * &(&bet.odd - &BigUint::from(100u64)) / &BigUint::from(100u64)
             },
             BetType::Lay => {
-                // Pentru Lay: matched_amount (profitul este stake-ul)
                 bet.total_matched.clone()
             }
         }

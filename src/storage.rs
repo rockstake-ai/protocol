@@ -1,4 +1,4 @@
-use crate::types::{Bet, Market, PriceLevel, Tracker};
+use crate::types::{Bet, Market, PriceLevel, Sport, Tracker};
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -13,9 +13,6 @@ pub trait StorageModule {
 
     #[storage_mapper("betNftToken")]
     fn bet_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
-
-    #[storage_mapper("betNftBaseUri")]
-    fn bet_nft_base_uri(&self) -> SingleValueMapper<ManagedBuffer>;
 
     #[storage_mapper("market_counter")]
     fn market_counter(&self) -> SingleValueMapper<u64>;
@@ -73,12 +70,6 @@ pub trait StorageModule {
 
     #[storage_mapper("locked_funds")]
     fn locked_funds(&self, address: &ManagedAddress) -> SingleValueMapper<BigUint<Self::Api>>;
-    
-    #[storage_mapper("user_exposure")]
-    fn user_total_exposure(
-        &self,
-        user: &ManagedAddress<Self::Api>
-    ) -> SingleValueMapper<BigUint>;
 
     #[storage_mapper("marketsByEvent")]
     fn markets_by_event(&self, event_id: u64) -> SingleValueMapper<ManagedVec<u64>>;
@@ -89,12 +80,12 @@ pub trait StorageModule {
     #[storage_mapper("currentProcessingIndex")]
     fn current_processing_index(&self, market_id: u64) -> SingleValueMapper<u64>;
 
-    #[storage_mapper("eventsByTimestamp")]
-    fn events_by_timestamp(&self, timestamp: u64) -> SingleValueMapper<ManagedVec<u64>>;
-
     #[view(getEventScore)]
     #[storage_mapper("event_score")]
     fn event_score(&self, event_id: u64) -> SingleValueMapper<(u32, u32)>;
+
+    #[storage_mapper("markets_by_event_and_sport")]
+    fn markets_by_event_and_sport(&self, sport: Sport, event_id: u64) -> SingleValueMapper<ManagedVec<Self::Api, u64>>;
 
 }
 

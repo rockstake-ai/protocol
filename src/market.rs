@@ -18,11 +18,11 @@ pub trait MarketModule:
         sport: Sport,
         event_id: u64,
         close_timestamp: u64
-    ) -> EventMarketsCreationResponse<Self::Api> {
+    ){
         self.validate_market_creation(close_timestamp);
         
-        let existing_markets = self.markets_by_event(event_id).get();
-        require!(
+        let existing_markets = self.markets_by_event_and_sport(sport, event_id).get();
+            require!(
             existing_markets.is_empty(),
             "Markets already exist for this event"
         );
@@ -43,6 +43,7 @@ pub trait MarketModule:
         };
         
         let (market_id_1x2, selections_1x2) = self.create_single_market(
+            sport,
             event_id,
             ft_result_selections,
             close_timestamp,
@@ -60,7 +61,7 @@ pub trait MarketModule:
                 SelectionType::Over,
                 SelectionType::Under
             ];
-            let (market_id_ou, selections_ou) = self.create_single_market(
+            let (market_id_ou, selections_ou) = self.create_single_market(sport,
                 event_id,
                 &selection_types,
                 close_timestamp,
@@ -78,6 +79,7 @@ pub trait MarketModule:
                 SelectionType::No
             ];
             let (market_id_ggng, selections_ggng) = self.create_single_market(
+                sport,
                 event_id,
                 &selection_types,
                 close_timestamp,
@@ -91,16 +93,23 @@ pub trait MarketModule:
             });
         }
         
-        self.markets_by_event(event_id).set(&market_ids);
+        self.markets_by_event_and_sport(sport, event_id).set(&market_ids);
+
+        let sport_index = match sport {
+            Sport::Football => 1u8,
+            Sport::Basketball => 2u8,
+            Sport::Tennis => 3u8,
+            Sport::LeagueOfLegends => 4u8,
+            Sport::CounterStrike2 => 5u8,
+            Sport::Dota2 => 6u8,
+        };
         
-        EventMarketsCreationResponse {
-            event_id,
-            markets: markets_info
-        }
+        self.create_market_event(sport_index, event_id, &markets_info);
     }
 
     fn create_single_market(
         &self,
+        sport: Sport,
         event_id: u64,
         selection_types: &[SelectionType],
         close_timestamp: u64,
@@ -112,8 +121,16 @@ pub trait MarketModule:
             MarketType::BothTeamsToScore => 3,
         };
         
-        let market_id = event_id * 1000 + market_type_index;
-        
+    let sport_index = match sport {
+        Sport::Football => 1,
+        Sport::Basketball => 2,
+        Sport::Tennis => 3,
+        Sport::LeagueOfLegends => 4,
+        Sport::CounterStrike2 => 5,
+        Sport::Dota2 => 6,
+    };
+    let market_id = (sport_index * 1_000_000) + (event_id * 1000) + market_type_index;
+
         let selections = self.create_selections(market_id, selection_types);
         
         let market = Market {
@@ -176,19 +193,7 @@ pub trait MarketModule:
             self.handle_expired_market(market_id);
         }
     }
-
-    #[endpoint(processMarketClose)]
-    fn process_market_close(&self, market_id: u64) {
-        let market = self.markets(market_id).get();
-        
-        require!(
-            market.market_status == MarketStatus::Open,
-            "Market not open"
-        );
-
-        self.handle_expired_market(market_id);
-    }
-
+    
     fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
         let tracker = Tracker {
             back_levels: ManagedVec::new(),

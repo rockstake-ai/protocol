@@ -460,22 +460,29 @@ pub trait BetModule:
         matched_amount: &BigUint,
         unmatched_amount: &BigUint
     ) {
+        let sport_index = match bet.sport {
+            Sport::Football => 1u8,
+            Sport::Basketball => 2u8,
+            Sport::Tennis => 3u8,
+            Sport::LeagueOfLegends => 4u8,
+            Sport::CounterStrike2 => 5u8,
+            Sport::Dota2 => 6u8,
+        };
+    
         self.place_bet_event(
             &bet.bettor,
-            self.bet_nft_token().get_token_id_ref(),
-            &bet.event,
+            sport_index, // Index numeric pentru sport
+            &bet.event,  // market_id ca u64
             &bet.selection.id,
             &bet.stake_amount,
             &bet.odd,
             bet.bet_type,
             token_identifier,
-            token_nonce,
-            matched_amount,
-            unmatched_amount,
-            &bet.liability
+            &bet.liability,
+            bet.status,
+            &bet.matched_parts // Adăugat, corespunde cu definiția evenimentului
         );
     }
-
     fn calculate_stake_and_liability(
         &self,
         bet_type: &BetType,

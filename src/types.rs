@@ -42,8 +42,13 @@ pub enum MarketStatus {
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, ManagedVecItem)]
 pub struct MatchedPart<M: ManagedTypeApi> {
-    pub amount: BigUint<M>,
-    pub odds: BigUint<M>
+    pub matched_with: ManagedAddress<M>,        
+    pub amount: BigUint<M>,                     
+    pub odds: BigUint<M>,                        
+    pub matched_at: u64,                         
+    pub counterparty_bet_id: u64,                
+    pub counterparty_payment_token: EgldOrEsdtTokenIdentifier<M>, 
+    pub counterparty_payment_nonce: u64         
 }
 
 #[type_abi]
