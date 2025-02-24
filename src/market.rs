@@ -1,4 +1,4 @@
-use crate::types::{EventMarketsCreationResponse, Market, MarketSelectionInfo, MarketStatus, MarketType, Selection, SelectionInfo, SelectionType, Sport, Tracker};
+use crate::types::{Market, MarketSelectionInfo, MarketStatus, MarketType, Selection, SelectionInfo, SelectionType, Sport, Tracker};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 

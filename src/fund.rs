@@ -1,4 +1,4 @@
-use crate::{errors::{ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_MARKET_NOT_SETTLED}, types::{Bet, BetAttributes, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus, Tracker}};
+use crate::{errors::{ERR_MARKET_NOT_CLOSED}, types::{Bet, BetAttributes, BetStatus, BetType, MarketStatus, MarketType, ProcessingProgress, ProcessingStatus, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -88,7 +88,6 @@ pub trait FundModule:
             }
             
             self.bet_by_id(bet_nonce).set(&bet);
-            // self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     }
 
@@ -150,7 +149,6 @@ pub trait FundModule:
             };
             
             self.bet_by_id(bet_nonce).set(&bet);
-            // self.bet_refunded_event(bet_nonce, &bet.bettor, &refund_amount);
         }
     }
     
@@ -185,7 +183,6 @@ pub trait FundModule:
             
             self.mark_bets_win_loss(market_id, winning_selection);
         }
-        // self.event_result_set_event(event_id, score_home, score_away);
     }
 
     fn mark_bets_win_loss(

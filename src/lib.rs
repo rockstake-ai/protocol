@@ -29,6 +29,6 @@ storage::StorageModule
 
     #[init]
     fn init(&self) {
-        self.market_counter().set(0);
+        self.next_bet_id().set(0)
     }
 }

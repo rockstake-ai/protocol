@@ -48,7 +48,6 @@ pub trait ValidationModule:
     }
 
     fn validate_back_bet(&self, total_amount: &BigUint) -> (BigUint, BigUint) {
-        // Pentru back bet, total_amount = stake și liability = 0
         (total_amount.clone(), BigUint::zero())
     }
     //--------------------------------------------------------------------------------------------//

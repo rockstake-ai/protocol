@@ -54,6 +54,7 @@ pub struct MatchedPart<M: ManagedTypeApi> {
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Clone)]
 pub struct Bet<M: ManagedTypeApi> {
+    pub bet_id: u64,
     pub bettor: ManagedAddress<M>,
     pub sport: Sport,
     pub event: u64,
@@ -69,7 +70,7 @@ pub struct Bet<M: ManagedTypeApi> {
     pub status: BetStatus,
     pub payment_token: EgldOrEsdtTokenIdentifier<M>,
     pub payment_nonce: u64,
-    pub nft_nonce: u64,
+    pub nft_nonce: u64, 
     pub created_at: u64,
 }
 
@@ -166,13 +167,6 @@ pub struct MarketSelectionInfo<M: ManagedTypeApi> {
     pub market_id: u64,
     pub market_type: MarketType,
     pub selections: ManagedVec<M, SelectionInfo>
-}
-
-#[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem)]
-pub struct EventMarketsCreationResponse<M: ManagedTypeApi> {
-    pub event_id: u64,
-    pub markets: ManagedVec<M, MarketSelectionInfo<M>>
 }
 
 #[type_abi]
