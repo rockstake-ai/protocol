@@ -1,4 +1,4 @@
-use crate::{errors::ERR_MARKET_NOT_CLOSED, types::{BetStatus, BetType, MarketStatus, MarketType, Tracker, Sport}};
+use crate::{errors::{ERR_BET_ALREADY_CLAIMED, ERR_BET_NOT_WON, ERR_INVALID_MARKET, ERR_MARKET_NOT_CLOSED, ERR_NOT_BET_OWNER, ERR_NO_MARKETS_FOUND}, types::{BetStatus, BetType, MarketStatus, MarketType, Sport, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -9,9 +9,21 @@ pub trait FundModule:
     + crate::nft::NftModule
     + crate::tracker::TrackerModule
 {
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Market Handling -------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Handles an expired market by closing it and processing unmatched bets.
+    /// Parameters:
+    /// - sport: The type of sport (e.g., Football, Basketball).
+    /// - event_id: The unique ID of the event.
+    /// - market_id: The ID of the market to handle.
     fn handle_expired_market(&self, sport: Sport, event_id: u64, market_id: u64) {
         let market_ids = self.markets_by_event_and_sport(sport, event_id).get();
-        require!(market_ids.contains(&market_id), "Market not found for sport and event");
+        require!(
+            market_ids.contains(&market_id),
+           ERR_INVALID_MARKET
+        );
 
         let mut market = self.markets(market_id).get();
         market.market_status = MarketStatus::Closed;
@@ -53,7 +65,14 @@ pub trait FundModule:
             self.selection_tracker(market_id, selection.id).set(&tracker);
         }
     }
-    
+
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Bet Processing --------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Returns unmatched amounts to the bettor for a specific bet.
+    /// Parameters:
+    /// - bet_nonce: The unique identifier (nonce) of the bet.
     fn return_unmatched_amount(&self, bet_nonce: u64) {
         let mut bet = self.bet_by_id(bet_nonce).get();
         let unmatched = &bet.stake_amount - &bet.total_matched;
@@ -101,6 +120,10 @@ pub trait FundModule:
         }
     }
 
+    /// Processes all unmatched bets for an event across all markets.
+    /// Parameters:
+    /// - sport: The type of sport.
+    /// - event_id: The unique ID of the event.
     fn process_unmatched_bets(&self, sport: Sport, event_id: u64) {
         let market_ids = self.markets_by_event_and_sport(sport, event_id).get();
         for market_id in market_ids.iter() {
@@ -127,6 +150,9 @@ pub trait FundModule:
         }
     }
 
+    /// Processes a single unmatched bet, refunding the unmatched amount.
+    /// Parameters:
+    /// - bet_nonce: The unique identifier (nonce) of the bet.
     fn process_unmatched_bet(&self, bet_nonce: u64) {
         let mut bet = self.bet_by_id(bet_nonce).get();
         let unmatched = &bet.stake_amount - &bet.total_matched;
@@ -165,9 +191,19 @@ pub trait FundModule:
         }
     }
 
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Event Settlement ------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Sets the result of an event and settles the associated markets (only owner).
+    /// Parameters:
+    /// - sport: The type of sport.
+    /// - event_id: The unique ID of the event.
+    /// - score_home: The score of the home team.
+    /// - score_away: The score of the away team.
     #[only_owner]
-    #[endpoint(setEventResult)]
-    fn set_event_result(
+    #[endpoint(setEventScore)]
+    fn set_event_score(
         &self,
         sport: Sport,
         event_id: u64,
@@ -177,7 +213,10 @@ pub trait FundModule:
         self.event_score(event_id).set(&(score_home, score_away));
         
         let market_ids = self.markets_by_event_and_sport(sport, event_id).get();
-        require!(!market_ids.is_empty(), "No markets found for event and sport");
+        require!(
+            !market_ids.is_empty(),
+            ERR_NO_MARKETS_FOUND
+        );
         
         for market_id in market_ids.iter() {
             let mut market = self.markets(market_id).get();
@@ -198,6 +237,11 @@ pub trait FundModule:
         }
     }
 
+    /// Marks bets as won or lost based on the winning selection.
+    /// Parameters:
+    /// - sport: The type of sport.
+    /// - market_id: The ID of the market.
+    /// - winning_selection: The ID of the winning selection.
     fn mark_bets_win_loss(
         &self,
         _sport: Sport,        
@@ -234,9 +278,12 @@ pub trait FundModule:
         }
     }
 
+    /// Allows a bettor to claim win from a winning bet.
+    /// Parameters:
+    /// - bet_id: The ID of the bet to claim winnings for.
     #[payable("*")]
-    #[endpoint(claimWinnings)]
-    fn claim_winnings(&self, bet_id: u64) {
+    #[endpoint(claimWin)]
+    fn claim_win(&self, bet_id: u64) {
         let caller = self.blockchain().get_caller();
         let (token_identifier, _payment_nonce, _amount) = self
             .call_value()
@@ -245,9 +292,9 @@ pub trait FundModule:
         let token_identifier_wrap = token_identifier.unwrap_esdt();
         
         let mut bet = self.bet_by_id(bet_id).get();
-        require!(bet.bettor == caller, "Not bet owner");
-        require!(bet.status != BetStatus::Claimed, "Bet already claimed");
-        require!(bet.status == BetStatus::Win, "Bet not won");
+        require!(bet.bettor == caller, ERR_NOT_BET_OWNER);
+        require!(bet.status != BetStatus::Claimed, ERR_BET_ALREADY_CLAIMED);
+        require!(bet.status == BetStatus::Win, ERR_BET_NOT_WON);
 
         let payout = match bet.bet_type {
             BetType::Back => &bet.stake_amount + &bet.potential_profit,
@@ -273,9 +320,20 @@ pub trait FundModule:
             bet_id,
             &BigUint::from(1u64)
         );
-
     }
 
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Helper Functions ------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Determines the winning selection based on the event result.
+    /// Parameters:
+    /// - sport: The type of sport.
+    /// - market_type: The type of market (e.g., FullTimeResult, TotalGoals).
+    /// - score_home: The score of the home team.
+    /// - score_away: The score of the away team.
+    /// - event_id: The unique ID of the event.
+    /// Returns: The ID of the winning selection.
     fn determine_winner(
         &self,
         sport: Sport,
@@ -290,7 +348,7 @@ pub trait FundModule:
                 let market = self.markets(id).get();
                 market.market_type == market_type
             })
-            .unwrap_or_else(|| sc_panic!("Market not found for sport and event"));
+            .unwrap_or_else(|| sc_panic!(ERR_INVALID_MARKET));
         
         let market = self.markets(market_id).get();
         
