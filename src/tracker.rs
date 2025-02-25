@@ -324,25 +324,4 @@ pub trait TrackerModule:
                 );
             });
     }
-
-    #[view(getMatchingStats)]
-    fn get_matching_stats(
-        &self,
-        market_id: u64,
-        selection_id: u64
-    ) -> (u32, BigUint<Self::Api>) {
-        let matched_count = self.selection_matched_count(market_id, selection_id).get() as u32;
-        let total_matched = self.total_matched_amount(market_id, selection_id).get();
-        (matched_count, total_matched)
-    }
-
-    #[view(getBackLevels)]
-    fn get_back_levels(&self, market_id: u64, selection_id: u64) -> ManagedVec<Self::Api, PriceLevel<Self::Api>> {
-        self.selection_back_levels(market_id, selection_id).get()
-    }
-
-    #[view(getLayLevels)]
-    fn get_lay_levels(&self, market_id: u64, selection_id: u64) -> ManagedVec<Self::Api, PriceLevel<Self::Api>> {
-        self.selection_lay_levels(market_id, selection_id).get()
-    }
 }

@@ -1,4 +1,3 @@
-use crate::constants::constants;
 use crate::types::{Market, MarketStatus};
 
 multiversx_sc::imports!();
@@ -114,14 +113,6 @@ pub trait ValidationModule:
             .any(|s| s.id == selection_id);
             
         require!(selection_exists, "Invalid selection");
-    }
-
-    #[view(getNextMarketId)]
-    fn get_next_market_id(&self) -> u64 {
-        let current_counter = self.market_counter().get();
-        let next_counter = current_counter + 1;
-        self.market_counter().set(&next_counter);
-        next_counter
     }
     
 }

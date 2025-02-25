@@ -1,4 +1,4 @@
-use crate::types::{BetStatus, BetType, MarketSelectionInfo, MatchedPart, Sport};
+use crate::types::{MarketSelectionInfo, MatchedPart};
 
 multiversx_sc::imports!();
 

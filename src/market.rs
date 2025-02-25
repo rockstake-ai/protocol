@@ -169,7 +169,7 @@ pub trait MarketModule:
             let id = market_id * 10 + (index + 1) as u64;
             self.init_selection_storage(market_id, id);
             let tracker = self.selection_tracker(market_id, id).get();
-            selections.push(Selection {
+            selections.push(Selection { 
                 id,
                 selection_type: *selection_type,
                 priority_queue: tracker,
@@ -180,17 +180,19 @@ pub trait MarketModule:
 
 
     #[endpoint(processEventMarkets)]
-    fn process_event_markets(&self, event_id: u64) {
-        let market_ids = self.markets_by_event(event_id).get();
-        require!(!market_ids.is_empty(), "No markets found for event");
-
+    fn process_event_markets(&self, sport: Sport, event_id: u64) {
+        let market_ids = self.markets_by_event_and_sport(sport, event_id).get();
+        require!(!market_ids.is_empty(), "No markets found for event and sport");
+    
         for market_id in market_ids.iter() {
-            let market = self.markets(market_id).get();
+            let mut market = self.markets(market_id).get();
             require!(
                 market.market_status == MarketStatus::Open,
                 "Market not open"
             );
-            self.handle_expired_market(market_id);
+            self.handle_expired_market(sport, event_id, market_id);
+            market.market_status = MarketStatus::Closed;
+            self.markets(market_id).set(&market);
         }
     }
     
@@ -258,13 +260,5 @@ pub trait MarketModule:
         }
 
         true
-    }
-
-    #[view(getCurrentMarketCounter)]
-    fn get_current_market_counter(&self) -> u64 {
-        if self.market_counter().is_empty() {
-            return 0;
-        }
-        self.market_counter().get()
     }
 }

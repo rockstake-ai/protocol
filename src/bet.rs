@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetAttributes, BetStatus, BetType, MatchedPart, Sport};
+use crate::types::{Bet, BetStatus, BetType, Sport};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -276,7 +276,7 @@ pub trait BetModule:
         caller: &ManagedAddress<Self::Api>,
         bet: &Bet<Self::Api>,
         remaining: &BigUint,
-        liability: &BigUint,
+        _liability: &BigUint,
         bet_type: BetType
     ) {
         let bet_nft_nonce = self.mint_bet_nft(bet);
@@ -307,9 +307,9 @@ pub trait BetModule:
         &self,
         bet: &Bet<Self::Api>,
         token_identifier: &EgldOrEsdtTokenIdentifier<Self::Api>,
-        token_nonce: u64,
-        matched_amount: &BigUint,
-        unmatched_amount: &BigUint,
+        _token_nonce: u64,
+        _matched_amount: &BigUint,
+        _unmatched_amount: &BigUint,
         bet_id: u64,
     ) {
         let sport_index = match bet.sport {
@@ -359,9 +359,6 @@ pub trait BetModule:
             &potential_profit,
         );
     }
-    
-    #[event("debugVecLength")]
-    fn debug_vec_length(&self, #[indexed] length: usize);
 
     fn calculate_stake_and_liability(
         &self,
