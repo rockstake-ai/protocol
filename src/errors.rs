@@ -1,10 +1,7 @@
-pub const ERR_INVALID_MARKET: &str = "Market doesn't exist!";
+pub const ERR_NO_MARKETS_FOUND: &str = "No markets found for event and sport";
 pub const ERR_MARKET_NOT_OPEN: &str = "Market is not open for betting";
 pub const ERR_MARKET_NOT_CLOSED: &str = "Market is not closed";
-pub const ERR_MARKET_NOT_SETTLED: &str = "Market is not settled";
-pub const ERR_MARKET_CLOSED: &str = "Cannot place bets after event start time";
 pub const ERR_MARKET_ALREADY_EXISTS: &str = "Market already exists";
-pub const ERR_MARKET_TIMESTAMP: &str = "Invalid closing timestamp";
 
 pub const ERR_TOO_MANY_SELECTIONS: &str = "Too many selections";
 pub const ERR_INVALID_SELECTION: &str = "Invalid selection ID";
@@ -26,11 +23,10 @@ pub const ERR_INVALID_TIMESTAMP: &str = "Close timestamp must be in the future";
 
 pub const ERR_MAXIMUM_STAKE: &str = "Exceeds maximum user exposure limit";
 
-// Erori noi pentru calculate_stake_and_liability
 pub const ERR_ODDS_TOO_LOW: &str = "Odds must be greater than 1.00";
 pub const ERR_INVALID_STAKE: &str = "Invalid stake calculation for Lay bet";
 pub const ERR_INVALID_LIABILITY: &str = "Invalid liability calculation for Lay bet";
 
-// Erori noi pentru cancel_bet
 pub const ERR_NOT_BET_OWNER: &str = "Not bet owner";
 pub const ERR_BET_CANNOT_BE_CANCELLED: &str = "Bet cannot be cancelled";
+

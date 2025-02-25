@@ -1,4 +1,4 @@
-use crate::types::{Market, MarketSelectionInfo, MarketStatus, MarketType, Selection, SelectionInfo, SelectionType, Sport, Tracker};
+use crate::{errors::{ERR_MARKET_ALREADY_EXISTS, ERR_MARKET_NOT_OPEN, ERR_NO_MARKETS_FOUND}, types::{Market, MarketSelectionInfo, MarketStatus, MarketType, Selection, SelectionInfo, SelectionType, Sport, Tracker}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -11,9 +11,18 @@ pub trait MarketModule:
     crate::tracker::TrackerModule +
     crate::validation::ValidationModule
 {
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Markets Creation -------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Creates markets for a specific event and sport, restricted to the contract owner.
+    /// Parameters:
+    /// - sport: The type of sport (e.g., Football, Basketball).
+    /// - event_id: The unique ID of the event.
+    /// - close_timestamp: The timestamp when betting on the market closes.
     #[only_owner]
-    #[endpoint(createMarket)]
-    fn create_market(
+    #[endpoint(createMarkets)]
+    fn create_markets(
         &self,
         sport: Sport,
         event_id: u64,
@@ -22,9 +31,9 @@ pub trait MarketModule:
         self.validate_market_creation(close_timestamp);
         
         let existing_markets = self.markets_by_event_and_sport(sport, event_id).get();
-            require!(
+        require!(
             existing_markets.is_empty(),
-            "Markets already exist for this event"
+            ERR_MARKET_ALREADY_EXISTS
         );
         
         let mut market_ids = ManagedVec::new();
@@ -61,7 +70,8 @@ pub trait MarketModule:
                 SelectionType::Over,
                 SelectionType::Under
             ];
-            let (market_id_ou, selections_ou) = self.create_single_market(sport,
+            let (market_id_ou, selections_ou) = self.create_single_market(
+                sport,
                 event_id,
                 &selection_types,
                 close_timestamp,
@@ -107,6 +117,14 @@ pub trait MarketModule:
         self.create_market_event(sport_index, event_id, &markets_info);
     }
 
+    /// Creates a single market with specified selections for an event.
+    /// Parameters:
+    /// - sport: The type of sport.
+    /// - event_id: The unique ID of the event.
+    /// - selection_types: Array of selection types for the market.
+    /// - close_timestamp: The timestamp when the market closes.
+    /// - market_type: The type of market (e.g., FullTimeResult, TotalGoals).
+    /// Returns: A tuple containing the market ID and a vector of selection info.
     fn create_single_market(
         &self,
         sport: Sport,
@@ -121,15 +139,15 @@ pub trait MarketModule:
             MarketType::BothTeamsToScore => 3,
         };
         
-    let sport_index = match sport {
-        Sport::Football => 1,
-        Sport::Basketball => 2,
-        Sport::Tennis => 3,
-        Sport::LeagueOfLegends => 4,
-        Sport::CounterStrike2 => 5,
-        Sport::Dota2 => 6,
-    };
-    let market_id = (sport_index * 1_000_000) + (event_id * 1000) + market_type_index;
+        let sport_index = match sport {
+            Sport::Football => 1,
+            Sport::Basketball => 2,
+            Sport::Tennis => 3,
+            Sport::LeagueOfLegends => 4,
+            Sport::CounterStrike2 => 5,
+            Sport::Dota2 => 6,
+        };
+        let market_id = (sport_index * 1_000_000) + (event_id * 1000) + market_type_index;
 
         let selections = self.create_selections(market_id, selection_types);
         
@@ -159,6 +177,11 @@ pub trait MarketModule:
         (market_id, selection_infos)
     }
 
+    /// Creates selections for a market based on provided selection types.
+    /// Parameters:
+    /// - market_id: The ID of the market.
+    /// - selection_types: Array of selection types to create.
+    /// Returns: A vector of Selection objects.
     fn create_selections(
         &self,
         market_id: u64,
@@ -178,24 +201,42 @@ pub trait MarketModule:
         selections
     }
 
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Markets Closing -----------------------------------------//
+    //--------------------------------------------------------------------------------------------//
 
-    #[endpoint(processEventMarkets)]
-    fn process_event_markets(&self, sport: Sport, event_id: u64) {
+    /// Processes all markets for a given event, closing them if they are open.
+    /// Parameters:
+    /// - sport: The type of sport.
+    /// - event_id: The unique ID of the event.
+    #[endpoint(closeMarkets)]
+    fn close_markets(&self, sport: Sport, event_id: u64) {
         let market_ids = self.markets_by_event_and_sport(sport, event_id).get();
-        require!(!market_ids.is_empty(), "No markets found for event and sport");
+        require!(
+            !market_ids.is_empty(),
+            ERR_NO_MARKETS_FOUND
+        );
     
         for market_id in market_ids.iter() {
             let mut market = self.markets(market_id).get();
             require!(
                 market.market_status == MarketStatus::Open,
-                "Market not open"
+               ERR_MARKET_NOT_OPEN
             );
             self.handle_expired_market(sport, event_id, market_id);
             market.market_status = MarketStatus::Closed;
             self.markets(market_id).set(&market);
         }
     }
-    
+
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Helper Functions ------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Initializes storage for a selection in a market.
+    /// Parameters:
+    /// - market_id: The ID of the market.
+    /// - selection_id: The ID of the selection.
     fn init_selection_storage(&self, market_id: u64, selection_id: u64) {
         let tracker = Tracker {
             back_levels: ManagedVec::new(),
@@ -232,6 +273,11 @@ pub trait MarketModule:
         self.total_matched_amount(market_id, selection_id).set(&BigUint::zero());
     }
 
+    /// Retrieves a specific selection from a market.
+    /// Parameters:
+    /// - market: The market object containing selections.
+    /// - selection_id: The ID of the selection to retrieve.
+    /// Returns: The Selection object if found, otherwise panics.
     fn get_selection(
         &self,
         market: &Market<Self::Api>,
@@ -239,8 +285,12 @@ pub trait MarketModule:
     ) -> Selection<Self::Api> {
         market.selections.iter()
             .find(|s| s.id == selection_id)
-            .unwrap_or_else(|| sc_panic!("Selection not found"))
+            .unwrap_or_else(|| sc_panic!(crate::errors::ERR_INVALID_SELECTION))
     }
+
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- View Functions --------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
 
     #[view(getMarketStatus)]
     fn get_market_status(&self, market_id: u64) -> MarketStatus {
@@ -250,7 +300,10 @@ pub trait MarketModule:
     #[view(areEventMarketsClosed)]
     fn are_event_markets_closed(&self, event_id: u64) -> bool {
         let market_ids = self.markets_by_event(event_id).get();
-        require!(!market_ids.is_empty(), "No markets found for event");
+        require!(
+            !market_ids.is_empty(),
+            ERR_NO_MARKETS_FOUND
+        );
 
         for market_id in market_ids.iter() {
             let market = self.markets(market_id).get();
