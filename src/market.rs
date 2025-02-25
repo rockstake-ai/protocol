@@ -8,7 +8,7 @@ pub trait MarketModule:
     crate::events::EventsModule +
     crate::fund::FundModule + 
     crate::nft::NftModule +
-    crate::tracker::TrackerModule +
+    crate::orderbook::OrderbookModule +
     crate::validation::ValidationModule
 {
     //--------------------------------------------------------------------------------------------//
@@ -209,6 +209,7 @@ pub trait MarketModule:
     /// Parameters:
     /// - sport: The type of sport.
     /// - event_id: The unique ID of the event.
+    #[only_owner]
     #[endpoint(closeMarkets)]
     fn close_markets(&self, sport: Sport, event_id: u64) {
         let market_ids = self.markets_by_event_and_sport(sport, event_id).get();

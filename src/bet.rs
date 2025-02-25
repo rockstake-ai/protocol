@@ -7,7 +7,7 @@ pub trait BetModule:
     crate::storage::StorageModule +
     crate::events::EventsModule +
     crate::nft::NftModule +
-    crate::tracker::TrackerModule +
+    crate::orderbook::OrderbookModule +
     crate::validation::ValidationModule 
 {
     //--------------------------------------------------------------------------------------------//

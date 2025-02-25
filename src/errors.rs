@@ -15,6 +15,11 @@ pub const ERR_BET_CANNOT_BE_CANCELLED: &str = "Bet cannot be cancelled";
 pub const ERR_BET_ALREADY_CLAIMED: &str = "Bet already claimed";
 pub const ERR_BET_NOT_WON: &str = "Bet not won";
 
+//Orderbook
+pub const ERR_INVALID_BACK_LIQUIDITY: &str = "Invalid back liquidity after removal";
+pub const ERR_INVALID_LAY_LIQUIDITY: &str = "Invalid lay liquidity after removal";
+pub const ERR_INVALID_MATCHED_AMOUNT: &str = "Invalid matched amount";
+
 //NFT
 pub const ERR_TOKEN_ALREADY_ISSUED: &str = "Token already issued";
 pub const ERR_TOKEN_NOT_ISSUED: &str = "Token not issued";

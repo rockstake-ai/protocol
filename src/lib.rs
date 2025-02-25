@@ -8,8 +8,8 @@ pub mod errors;
 pub mod nft;
 pub mod fund;
 pub mod market;
+pub mod orderbook;
 pub mod validation;
-pub mod tracker;
 pub mod types;
 
 multiversx_sc::imports!();
@@ -22,7 +22,7 @@ storage::StorageModule
 + fund::FundModule
 + bet::BetModule
 + market::MarketModule
-+ tracker::TrackerModule
++ orderbook::OrderbookModule
 + validation::ValidationModule{
     #[upgrade]
     fn upgrade(&self) {}
