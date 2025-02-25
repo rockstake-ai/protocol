@@ -26,4 +26,6 @@ pub const ERR_TOKEN_NOT_ISSUED: &str = "Token not issued";
 pub const ERR_INVALID_NFT_TOKEN: &str = "Invalid token";
 pub const ERR_INVALID_NFT_TOKEN_NONCE: &str = "Invalid token nonce";
 pub const ERR_INVALID_ROLE: &str = "Unauthorized! Invalid Role";
+pub const ERR_INVALID_PAYMENT_COUNT: &str = "Invalid number of payments";
+pub const ERR_INVALID_BET_ID: &str = "Invalid bet ID";
 
