@@ -1,4 +1,4 @@
-use crate::types::{Bet, BetStatus, BetType, Sport};
+use crate::{errors::{ERR_BET_CANNOT_BE_CANCELLED, ERR_INVALID_LIABILITY, ERR_INVALID_STAKE, ERR_NOT_BET_OWNER, ERR_ODDS_TOO_LOW}, types::{Bet, BetStatus, BetType, Sport}};
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
@@ -10,6 +10,17 @@ pub trait BetModule:
     crate::tracker::TrackerModule +
     crate::validation::ValidationModule 
 {
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Bet Placement ---------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Places a bet on a specified market and selection.
+    /// Parameters:
+    /// - sport: The type of sport for the bet (e.g., Football, Basketball).
+    /// - market_id: The ID of the market the bet is placed on.
+    /// - selection_id: The ID of the selection within the market.
+    /// - odds: The odds at which the bet is placed (in BigUint format).
+    /// - bet_type: The type of bet (Back or Lay).
     #[payable("*")]
     #[endpoint(placeBet)]
     fn place_bet(
@@ -85,11 +96,18 @@ pub trait BetModule:
         );
     }
 
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Bet Cancellation ------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Cancels a bet if the caller is the bettor and the bet is cancellable.
+    /// Parameters:
+    /// - bet_id: The ID of the bet to be canceled.
     #[payable("*")]
     #[endpoint(cancelBet)]
     fn cancel_bet(&self, bet_id: u64) { 
         let caller = self.blockchain().get_caller();
-        let mut bet = self.bet_by_id(bet_id).get(); // Folosim bet_id pentru a accesa bet-ul
+        let mut bet = self.bet_by_id(bet_id).get();
 
         let (token_identifier, payment_nonce, _amount) = self
             .call_value()
@@ -98,10 +116,10 @@ pub trait BetModule:
 
         let token_identifier_wrap = token_identifier.unwrap_esdt();
 
-        require!(bet.bettor == caller, "Not bet owner");
+        require!(bet.bettor == caller, ERR_NOT_BET_OWNER);
         require!(
             bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
-            "Bet cannot be cancelled"
+           ERR_BET_CANNOT_BE_CANCELLED
         );
         
         let unmatched = &bet.stake_amount - &bet.total_matched;
@@ -166,6 +184,14 @@ pub trait BetModule:
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
     }
 
+    //--------------------------------------------------------------------------------------------//
+    //-------------------------------- Helper Functions ------------------------------------------//
+    //--------------------------------------------------------------------------------------------//
+
+    /// Calculates the potential profit for a matched bet.
+    /// Parameters:
+    /// - bet: The bet object containing matched parts and bet type.
+    /// Returns: The total potential profit as BigUint.
     fn calculate_matched_potential_profit(&self, bet: &Bet<Self::Api>) -> BigUint {
         let mut total_potential_profit = BigUint::zero();
         
@@ -184,6 +210,21 @@ pub trait BetModule:
         total_potential_profit
     }
 
+    /// Creates a new bet object with the provided details.
+    /// Parameters:
+    /// - sport: The sport type.
+    /// - market_id: The market ID.
+    /// - selection_id: The selection ID.
+    /// - caller: The address of the bettor.
+    /// - stake: The stake amount.
+    /// - liability: The liability amount.
+    /// - total_amount: The total amount paid.
+    /// - odds: The odds of the bet.
+    /// - bet_type: The type of bet (Back or Lay).
+    /// - token_identifier: The token used for payment.
+    /// - token_nonce: The nonce of the token.
+    /// - bet_id: The unique ID of the bet.
+    /// Returns: A new Bet object.
     fn create_bet(
         &self,
         sport: Sport,
@@ -203,7 +244,7 @@ pub trait BetModule:
         let selection = market.selections
             .iter()
             .find(|s| s.id == selection_id)
-            .unwrap_or_else(|| sc_panic!("Invalid selection"))
+            .unwrap_or_else(|| sc_panic!(crate::errors::ERR_INVALID_SELECTION))
             .clone();
         
         Bet {
@@ -231,6 +272,12 @@ pub trait BetModule:
         }
     }
 
+    /// Updates the status of a bet based on matched and remaining amounts.
+    /// Parameters:
+    /// - bet: The bet object to update.
+    /// - matched_amount: The amount that has been matched.
+    /// - remaining: The remaining unmatched amount.
+    /// Returns: The updated Bet object.
     fn update_bet_status(
         &self,
         mut bet: Bet<Self::Api>,
@@ -250,6 +297,11 @@ pub trait BetModule:
         bet
     }
 
+    /// Updates the market and selection data after a bet is placed.
+    /// Parameters:
+    /// - market_id: The ID of the market.
+    /// - selection_id: The ID of the selection.
+    /// - matched_amount: The amount matched in the bet.
     fn update_market_and_selection(
         &self,
         market_id: u64,
@@ -261,7 +313,7 @@ pub trait BetModule:
             .selections
             .iter()
             .position(|s| s.id == selection_id)
-            .unwrap_or_else(|| sc_panic!("Invalid selection"));
+            .unwrap_or_else(|| sc_panic!(crate::errors::ERR_INVALID_SELECTION));
         
         let mut selection = market.selections.get(selection_index);
         selection.priority_queue = self.selection_tracker(market_id, selection_id).get();
@@ -271,6 +323,13 @@ pub trait BetModule:
         self.markets(market_id).set(&market);
     }
 
+    /// Handles NFT minting and locked funds for a bet.
+    /// Parameters:
+    /// - caller: The address of the bettor.
+    /// - bet: The bet object.
+    /// - remaining: The remaining unmatched amount.
+    /// - liability: The liability amount.
+    /// - bet_type: The type of bet (Back or Lay).
     fn handle_nft_and_locked_funds(
         &self,
         caller: &ManagedAddress<Self::Api>,
@@ -303,6 +362,14 @@ pub trait BetModule:
         );
     }
 
+    /// Emits an event when a bet is placed.
+    /// Parameters:
+    /// - bet: The bet object.
+    /// - token_identifier: The token used for payment.
+    /// - token_nonce: The nonce of the token.
+    /// - matched_amount: The matched amount.
+    /// - unmatched_amount: The remaining unmatched amount.
+    /// - bet_id: The ID of the bet.
     fn emit_bet_placed_event(
         &self,
         bet: &Bet<Self::Api>,
@@ -360,6 +427,12 @@ pub trait BetModule:
         );
     }
 
+    /// Calculates the stake and liability for a bet based on its type.
+    /// Parameters:
+    /// - bet_type: The type of bet (Back or Lay).
+    /// - total_amount: The total amount paid.
+    /// - odds: The odds of the bet.
+    /// Returns: A tuple of (stake, liability) as BigUint.
     fn calculate_stake_and_liability(
         &self,
         bet_type: &BetType,
@@ -371,15 +444,14 @@ pub trait BetModule:
                 (total_amount.clone(), BigUint::zero())
             },
             BetType::Lay => {
-                
                 let odds_minus_one = odds - &BigUint::from(100u64); 
-                require!(odds_minus_one > 0, "Odds must be greater than 1.00");
+                require!(odds_minus_one > 0, ERR_ODDS_TOO_LOW);
                 
                 let stake = (total_amount * &BigUint::from(100u64)) / odds;
-                require!(stake > 0, "Invalid stake calculation for Lay bet");
+                require!(stake > 0, ERR_INVALID_STAKE);
                 
                 let liability = total_amount - &stake;
-                require!(liability >= BigUint::zero(), "Invalid liability calculation for Lay bet");
+                require!(liability >= BigUint::zero(), ERR_INVALID_LIABILITY);
                 
                 (stake, liability) 
             }
