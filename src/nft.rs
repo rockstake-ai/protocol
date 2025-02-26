@@ -87,7 +87,7 @@ pub trait NftModule:
         require!(!self.bet_nft_token().is_empty(), ERR_TOKEN_NOT_ISSUED);
         let big_one = BigUint::from(1u64);
 
-        let mut token_name = ManagedBuffer::new_from_bytes(b"BetCube Ticket #");
+        let mut token_name = ManagedBuffer::new_from_bytes(b"Betslip #");
         let bet_id_buffer = self.u64_to_ascii(bet.nft_nonce);
         token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);

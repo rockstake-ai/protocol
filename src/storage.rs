@@ -17,9 +17,6 @@ pub trait StorageModule {
     #[storage_mapper("betNftToken")]
     fn bet_nft_token(&self) -> NonFungibleTokenMapper<Self::Api>;
 
-    #[storage_mapper("market_counter")]
-    fn market_counter(&self) -> SingleValueMapper<u64>;
-
     #[storage_mapper("selection_back_levels")]
     fn selection_back_levels(&self, market_id: u64, selection_id: u64)
         -> SingleValueMapper<ManagedVec<Self::Api, PriceLevel<Self::Api>>>;
@@ -80,10 +77,6 @@ pub trait StorageModule {
     #[storage_mapper("winningSelection")]
     fn winning_selection(&self, market_id: u64) -> SingleValueMapper<u64>;
 
-    #[storage_mapper("currentProcessingIndex")]
-    fn current_processing_index(&self, market_id: u64) -> SingleValueMapper<u64>;
-
-    #[view(getEventScore)]
     #[storage_mapper("event_score")]
     fn event_score(&self, event_id: u64) -> SingleValueMapper<(u32, u32)>;
 

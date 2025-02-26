@@ -161,7 +161,7 @@ pub trait OrderbookModule:
     /// - bet: The bet to add to the order book.
     fn add_to_orderbook(&self, bet: &Bet<Self::Api>) {
         let unmatched_amount = &bet.stake_amount - &bet.total_matched;
-        if unmatched_amount == BigUint::zero() {  // Comparaison correcte avec une référence
+        if unmatched_amount == BigUint::zero() { 
             return;
         }
     
@@ -174,21 +174,21 @@ pub trait OrderbookModule:
         match level_index {
             Some(i) => {
                 let mut level = levels.get(i);
-                level.total_stake += &unmatched_amount;  // Utilisation de la référence
+                level.total_stake += &unmatched_amount;  
                 level.bet_nonces.push(bet.bet_id);
                 let _ = levels.set(i, level);
             },
             None => {
                 let new_level = PriceLevel {
                     odds: bet.odd.clone(),
-                    total_stake: unmatched_amount.clone(),  // Clone ici pour ownership
+                    total_stake: unmatched_amount.clone(),  
                     bet_nonces: ManagedVec::from_single_item(bet.bet_id),
                 };
                 levels.push(new_level);
             }
         };
     
-        self.update_levels_and_liquidity(bet, levels, unmatched_amount.clone());  // Clone pour éviter le move
+        self.update_levels_and_liquidity(bet, levels, unmatched_amount.clone());  
     }
 
     /// Removes a bet from the order book if it has unmatched amounts.
@@ -204,7 +204,7 @@ pub trait OrderbookModule:
         let level_index = self.find_level_index(&levels, &bet.odd);
         if let Some(i) = level_index {
             let mut level = levels.get(i);
-            level.total_stake -= &unmatched_amount;  // Utilisation de la référence
+            level.total_stake -= &unmatched_amount;  
     
             let mut updated_nonces = ManagedVec::new();
             for nonce in level.bet_nonces.iter() {
@@ -224,7 +224,6 @@ pub trait OrderbookModule:
                 let _ = levels.set(i, level);
             }
     
-            // Pour le négatif, on crée une nouvelle BigUint avec la valeur opposée
             let negative_amount = BigUint::zero() - &unmatched_amount;
             self.update_levels_and_liquidity(bet, levels, negative_amount);
         }

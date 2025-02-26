@@ -78,38 +78,27 @@ pub trait FundModule:
         let unmatched = &bet.stake_amount - &bet.total_matched;
         
         if unmatched > BigUint::zero() {
+            let original_stake_amount = bet.stake_amount.clone();
             let refund_amount = match bet.bet_type {
                 BetType::Back => unmatched.clone(),
                 BetType::Lay => {
-                    let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &bet.stake_amount;
+                    let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &original_stake_amount;
                     (&bet.total_amount * &unmatched_ratio) / &BigUint::from(100u64)
                 }
             };
-    
-            self.locked_funds(&bet.bettor).update(|funds| {
-                if *funds >= refund_amount {
-                    *funds -= &refund_amount;
-                } else {
-                    *funds = BigUint::zero();
-                }
-            });
-
-            self.send().direct(
-                &bet.bettor,
-                &bet.payment_token,
-                bet.payment_nonce,
-                &refund_amount
-            );
-    
+        
+            self.locked_funds(&bet.bettor).update(|funds| *funds -= &refund_amount);
+            self.send().direct(&bet.bettor, &bet.payment_token, bet.payment_nonce, &refund_amount);
+        
             if bet.total_matched > BigUint::zero() {
                 bet.stake_amount = bet.total_matched.clone();
                 bet.total_amount = if bet.bet_type == BetType::Lay {
-                    let matched_ratio = &bet.total_matched / &bet.stake_amount;
-                    &bet.total_amount * &matched_ratio
+                    let matched_liability = (&bet.liability * &bet.total_matched) / &original_stake_amount;
+                    &bet.total_matched + &matched_liability
                 } else {
                     bet.total_matched.clone()
                 };
-                bet.potential_profit = self.calculate_total_potential_profit(&bet);
+                bet.potential_profit = self.calculate_total_potential_profit(&bet); 
                 bet.status = BetStatus::Matched;
             } else {
                 bet.status = BetStatus::Canceled;
@@ -295,25 +284,22 @@ pub trait FundModule:
         require!(bet.bettor == caller, ERR_NOT_BET_OWNER);
         require!(bet.status != BetStatus::Claimed, ERR_BET_ALREADY_CLAIMED);
         require!(bet.status == BetStatus::Win, ERR_BET_NOT_WON);
-
+    
         let payout = match bet.bet_type {
-            BetType::Back => &bet.stake_amount + &bet.potential_profit,
-            BetType::Lay => {
-                let matched_liability = (&bet.total_matched * &(&bet.odd - &BigUint::from(100u64))) / &BigUint::from(100u64);
-                &bet.total_matched + &bet.total_matched + &matched_liability
-            }
+            BetType::Back => &bet.stake_amount + &bet.potential_profit, 
+            BetType::Lay => &bet.total_amount + &bet.potential_profit 
         };
-
+    
         bet.status = BetStatus::Claimed;
         self.bet_by_id(bet_id).set(&bet);
-
+    
         self.send().direct(
             &caller,
             &bet.payment_token,
             0,
             &payout
         );
-
+    
         self.send().direct_esdt(
             &caller,
             &token_identifier_wrap,

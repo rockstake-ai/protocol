@@ -109,30 +109,53 @@ pub trait BetModule:
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_id).get();
 
-        let (token_identifier, payment_nonce, _amount) = self
+        let (token_identifier, payment_nonce, amount) = self
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
-
         let token_identifier_wrap = token_identifier.unwrap_esdt();
 
-        require!(bet.bettor == caller, ERR_NOT_BET_OWNER);
+        require!(
+            token_identifier_wrap == self.bet_nft_token().get_token_id(),
+            "Must send the bet NFT to cancel"
+        );
+        require!(
+            payment_nonce == bet.nft_nonce,
+            "Invalid NFT nonce"
+        );
+        require!(
+            amount == BigUint::from(1u64),
+            "Must send exactly 1 NFT"
+        );
+
+        require!(bet.bettor == caller, "Only the bet owner can cancel the bet");
         require!(
             bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
-           ERR_BET_CANNOT_BE_CANCELLED
+            "Bet cannot be cancelled in this state"
         );
-        
+
         let unmatched = &bet.stake_amount - &bet.total_matched;
-        
         let refund_amount = match bet.bet_type {
-            BetType::Back => unmatched.clone(),
+            BetType::Back => {
+                if bet.status == BetStatus::Unmatched {
+                    bet.stake_amount.clone()
+                } else {
+                    unmatched.clone()
+                }
+            },
             BetType::Lay => {
                 let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &bet.stake_amount;
-                &bet.total_amount * &unmatched_ratio / &BigUint::from(100u64)
+                let refund = &bet.total_amount * &unmatched_ratio / &BigUint::from(100u64);
+                if bet.status == BetStatus::Unmatched {
+                    bet.total_amount.clone()
+                } else {
+                    refund
+                }
             }
         };
-        
-        self.remove_from_orderbook(&bet);
+
+        let locked_funds = self.locked_funds(&caller).get();
+        require!(locked_funds >= refund_amount, "Insufficient locked funds to refund");
 
         match &bet.status {
             BetStatus::Unmatched => {
@@ -164,26 +187,33 @@ pub trait BetModule:
             },
             _ => {}
         };
-        
+
+        let original_stake_amount = bet.stake_amount.clone();
         bet.stake_amount = bet.total_matched.clone();
         if bet.total_matched > BigUint::zero() {
             bet.total_amount = match bet.bet_type {
                 BetType::Back => bet.total_matched.clone(),
                 BetType::Lay => {
-                    let matched_liability = &bet.liability * &bet.total_matched / &bet.stake_amount;
-                    &bet.total_matched + &matched_liability
+                    let matched_liability = (&bet.liability * &bet.total_matched) / &original_stake_amount; // 4
+                    &bet.total_matched + &matched_liability // 8
                 }
             };
-        } else {
+        }else {
             bet.total_amount = BigUint::zero();
         }
+        bet.potential_profit = self.calculate_total_potential_profit(&bet);
 
         self.bet_by_id(bet_id).set(&bet); 
-        
-        self.locked_funds(&caller).update(|val| *val -= &refund_amount);
+
+        self.locked_funds(&caller).update(|val| {
+            if *val >= refund_amount {
+                *val -= &refund_amount;
+            } else {
+                *val = BigUint::zero();
+            }
+        });
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
     }
-
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Helper Functions ------------------------------------------//
     //--------------------------------------------------------------------------------------------//
