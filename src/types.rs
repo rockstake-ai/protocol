@@ -9,7 +9,6 @@ pub enum BetStatus {
     PartiallyMatched,
     Win,
     Lost,
-    Canceled,
     Claimed,
 }
 

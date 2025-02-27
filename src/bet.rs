@@ -108,13 +108,13 @@ pub trait BetModule:
     fn cancel_bet(&self, bet_id: u64) { 
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_id).get();
-
+    
         let (token_identifier, payment_nonce, amount) = self
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
         let token_identifier_wrap = token_identifier.unwrap_esdt();
-
+    
         require!(
             token_identifier_wrap == self.bet_nft_token().get_token_id(),
             "Must send the bet NFT to cancel"
@@ -127,13 +127,13 @@ pub trait BetModule:
             amount == BigUint::from(1u64),
             "Must send exactly 1 NFT"
         );
-
+    
         require!(bet.bettor == caller, "Only the bet owner can cancel the bet");
         require!(
             bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
             "Bet cannot be cancelled in this state"
         );
-
+    
         let unmatched = &bet.stake_amount - &bet.total_matched;
         let refund_amount = match bet.bet_type {
             BetType::Back => {
@@ -153,58 +153,64 @@ pub trait BetModule:
                 }
             }
         };
-
+    
         let locked_funds = self.locked_funds(&caller).get();
         require!(locked_funds >= refund_amount, "Insufficient locked funds to refund");
-
-        match &bet.status {
+    
+        let status_for_event: u8 = match &bet.status {
             BetStatus::Unmatched => {
                 self.selection_unmatched_count(bet.event, bet.selection.id)
                     .update(|val| *val -= 1);
-
+    
                 self.send().esdt_local_burn(
                     &token_identifier_wrap,
                     payment_nonce,
                     &BigUint::from(1u64)
                 );
-
-                bet.status = BetStatus::Canceled;
+    
+                self.bet_by_id(bet_id).clear();
+                BetStatus::Unmatched as u8 // 1
             },
             BetStatus::PartiallyMatched => {
                 self.selection_partially_matched_count(bet.event, bet.selection.id)
                     .update(|val| *val -= 1);
                 self.selection_matched_count(bet.event, bet.selection.id)
                     .update(|val| *val += 1);
-
+    
                 bet.status = BetStatus::Matched;
-
+    
+                let original_stake_amount = bet.stake_amount.clone();
+                bet.stake_amount = bet.total_matched.clone();
+                let matched_liability = if bet.bet_type == BetType::Lay {
+                    (&bet.liability * &bet.total_matched) / &original_stake_amount
+                } else {
+                    BigUint::zero()
+                };
+                if bet.total_matched > BigUint::zero() {
+                    bet.total_amount = match bet.bet_type {
+                        BetType::Back => bet.total_matched.clone(),
+                        BetType::Lay => &bet.total_matched + &matched_liability,
+                    };
+                } else {
+                    bet.total_amount = BigUint::zero();
+                }
+                // Actualizăm explicit liability
+                bet.liability = matched_liability.clone();
+                bet.potential_profit = self.calculate_total_potential_profit(&bet);
+    
                 self.send().direct_esdt(
                     &caller,
                     &token_identifier_wrap,
                     bet.nft_nonce, 
                     &BigUint::from(1u64)
                 );
+    
+                self.bet_by_id(bet_id).set(&bet);
+                BetStatus::Matched as u8 // 0
             },
-            _ => {}
+            _ => sc_panic!("Invalid bet status for cancellation"),
         };
-
-        let original_stake_amount = bet.stake_amount.clone();
-        bet.stake_amount = bet.total_matched.clone();
-        if bet.total_matched > BigUint::zero() {
-            bet.total_amount = match bet.bet_type {
-                BetType::Back => bet.total_matched.clone(),
-                BetType::Lay => {
-                    let matched_liability = (&bet.liability * &bet.total_matched) / &original_stake_amount; // 4
-                    &bet.total_matched + &matched_liability // 8
-                }
-            };
-        }else {
-            bet.total_amount = BigUint::zero();
-        }
-        bet.potential_profit = self.calculate_total_potential_profit(&bet);
-
-        self.bet_by_id(bet_id).set(&bet); 
-
+    
         self.locked_funds(&caller).update(|val| {
             if *val >= refund_amount {
                 *val -= &refund_amount;
@@ -213,6 +219,18 @@ pub trait BetModule:
             }
         });
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
+    
+        // Emitem evenimentul cu liability inclus
+        self.cancel_bet_event(
+            &caller,
+            bet_id,
+            status_for_event,
+            &refund_amount,
+            &bet.total_matched,
+            &bet.total_amount,
+            &bet.potential_profit,
+            &bet.liability // Adăugăm liability
+        );
     }
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Helper Functions ------------------------------------------//
@@ -431,8 +449,7 @@ pub trait BetModule:
             BetStatus::PartiallyMatched => 3u8,
             BetStatus::Win => 4u8,
             BetStatus::Lost => 5u8,
-            BetStatus::Canceled => 6u8,
-            BetStatus::Claimed => 7u8,
+            BetStatus::Claimed => 6u8,
         };
         
         let potential_profit = match bet.bet_type {

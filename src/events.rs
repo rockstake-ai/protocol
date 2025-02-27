@@ -21,6 +21,29 @@ pub trait EventsModule {
         #[indexed] bet_id: u64,
         #[indexed] potential_profit: &BigUint,
     );
+
+    #[event("cancelBet")]
+    fn cancel_bet_event(
+        &self,
+        #[indexed] bettor: &ManagedAddress,
+        #[indexed] bet_id: u64,
+        #[indexed] status: u8,           
+        #[indexed] refund_amount: &BigUint,
+        #[indexed] total_matched: &BigUint,
+        #[indexed] total_amount: &BigUint,
+        #[indexed] potential_profit: &BigUint,
+        #[indexed] liability: &BigUint, 
+    );
+
+    #[event("claimWin")]
+    fn claim_win_event(
+        &self,
+        #[indexed] bettor: &ManagedAddress,
+        #[indexed] bet_id: u64,
+        #[indexed] status: u8,
+        #[indexed] payout: &BigUint,
+    );
+
     #[event("create_market")]
     fn create_market_event(
         &self,
@@ -28,28 +51,5 @@ pub trait EventsModule {
         #[indexed] event_id: u64,                       
         markets: &ManagedVec<Self::Api, MarketSelectionInfo<Self::Api>>
     );
-
-    #[event("debugProcessBet")]
-    fn debug_process_bet_event(
-        &self,
-        #[indexed] bet_type: u8,
-        #[indexed] odds: &BigUint,
-        #[indexed] event_id: u64,
-        #[indexed] selection_id: u64,
-        #[indexed] opposite_levels_len: u64
-    );
-
-    #[event("debugOrderbook")]
-    fn debug_orderbook_event(
-        &self,
-        #[indexed] bet_type: u8,
-        #[indexed] odds: &BigUint,
-        #[indexed] event_id: u64,
-        #[indexed] selection_id: u64,
-        #[indexed] remaining: &BigUint
-    );
-
-    #[event("debugMatchedParts")]
-    fn debug_matched_parts_event(&self, #[indexed] nonce: u64, #[indexed] amount: &BigUint);
 
 }

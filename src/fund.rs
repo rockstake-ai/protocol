@@ -76,7 +76,7 @@ pub trait FundModule:
     fn return_unmatched_amount(&self, bet_nonce: u64) {
         let mut bet = self.bet_by_id(bet_nonce).get();
         let unmatched = &bet.stake_amount - &bet.total_matched;
-        
+    
         if unmatched > BigUint::zero() {
             let original_stake_amount = bet.stake_amount.clone();
             let refund_amount = match bet.bet_type {
@@ -86,10 +86,16 @@ pub trait FundModule:
                     (&bet.total_amount * &unmatched_ratio) / &BigUint::from(100u64)
                 }
             };
-        
-            self.locked_funds(&bet.bettor).update(|funds| *funds -= &refund_amount);
+    
+            self.locked_funds(&bet.bettor).update(|funds| {
+                if *funds >= refund_amount {
+                    *funds -= &refund_amount;
+                } else {
+                    *funds = BigUint::zero();
+                }
+            });
             self.send().direct(&bet.bettor, &bet.payment_token, bet.payment_nonce, &refund_amount);
-        
+    
             if bet.total_matched > BigUint::zero() {
                 bet.stake_amount = bet.total_matched.clone();
                 bet.total_amount = if bet.bet_type == BetType::Lay {
@@ -98,14 +104,12 @@ pub trait FundModule:
                 } else {
                     bet.total_matched.clone()
                 };
-                bet.potential_profit = self.calculate_total_potential_profit(&bet); 
+                bet.potential_profit = self.calculate_total_potential_profit(&bet);
                 bet.status = BetStatus::Matched;
+                self.bet_by_id(bet_nonce).set(&bet);
             } else {
-                bet.status = BetStatus::Canceled;
-                bet.total_amount = BigUint::zero();
+                self.bet_by_id(bet_nonce).clear();
             }
-            
-            self.bet_by_id(bet_nonce).set(&bet);
         }
     }
 
@@ -145,7 +149,7 @@ pub trait FundModule:
     fn process_unmatched_bet(&self, bet_nonce: u64) {
         let mut bet = self.bet_by_id(bet_nonce).get();
         let unmatched = &bet.stake_amount - &bet.total_matched;
-        
+    
         if unmatched > BigUint::zero() {
             let refund_amount = match bet.bet_type {
                 BetType::Back => unmatched.clone(),
@@ -161,8 +165,8 @@ pub trait FundModule:
                 bet.payment_nonce,
                 &refund_amount,
             );
-            
-            bet.status = if bet.total_matched > BigUint::zero() {
+    
+            if bet.total_matched > BigUint::zero() {
                 bet.stake_amount = bet.total_matched.clone();
                 bet.total_amount = if bet.bet_type == BetType::Lay {
                     let matched_ratio = &bet.total_matched / &bet.stake_amount;
@@ -170,13 +174,12 @@ pub trait FundModule:
                 } else {
                     bet.total_matched.clone()
                 };
-                BetStatus::Matched
+                bet.status = BetStatus::Matched;
+                bet.potential_profit = self.calculate_total_potential_profit(&bet); 
+                self.bet_by_id(bet_nonce).set(&bet);
             } else {
-                bet.total_amount = BigUint::zero();
-                BetStatus::Canceled
-            };
-            
-            self.bet_by_id(bet_nonce).set(&bet);
+                self.bet_by_id(bet_nonce).clear();
+            }
         }
     }
 
@@ -274,37 +277,57 @@ pub trait FundModule:
     #[endpoint(claimWin)]
     fn claim_win(&self, bet_id: u64) {
         let caller = self.blockchain().get_caller();
-        let (token_identifier, _payment_nonce, _amount) = self
+        let (token_identifier, payment_nonce, amount) = self
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
         let token_identifier_wrap = token_identifier.unwrap_esdt();
-        
+
         let mut bet = self.bet_by_id(bet_id).get();
-        require!(bet.bettor == caller, ERR_NOT_BET_OWNER);
-        require!(bet.status != BetStatus::Claimed, ERR_BET_ALREADY_CLAIMED);
-        require!(bet.status == BetStatus::Win, ERR_BET_NOT_WON);
-    
+        require!(bet.bettor == caller, "Only the bet owner can claim the win");
+        require!(bet.status != BetStatus::Claimed, "Bet already claimed");
+        require!(bet.status == BetStatus::Win, "Bet must be in Won state to claim");
+
+        require!(
+            token_identifier_wrap == self.bet_nft_token().get_token_id(),
+            "Must send the bet NFT to claim"
+        );
+        require!(
+            payment_nonce == bet.nft_nonce,
+            "Invalid NFT nonce"
+        );
+        require!(
+            amount == BigUint::from(1u64),
+            "Must send exactly 1 NFT"
+        );
+
         let payout = match bet.bet_type {
-            BetType::Back => &bet.stake_amount + &bet.potential_profit, 
-            BetType::Lay => &bet.total_amount + &bet.potential_profit 
+            BetType::Back => &bet.stake_amount + &bet.potential_profit,
+            BetType::Lay => &bet.total_amount + &bet.potential_profit
         };
-    
+
         bet.status = BetStatus::Claimed;
         self.bet_by_id(bet_id).set(&bet);
-    
+
         self.send().direct(
             &caller,
             &bet.payment_token,
             0,
             &payout
         );
-    
+
         self.send().direct_esdt(
             &caller,
             &token_identifier_wrap,
             bet_id,
             &BigUint::from(1u64)
+        );
+
+        self.claim_win_event(
+            &caller,
+            bet_id,
+            BetStatus::Claimed as u8,
+            &payout,
         );
     }
 
