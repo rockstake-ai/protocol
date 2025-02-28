@@ -40,8 +40,8 @@ pub trait OrderbookModule:
     fn match_bet_against_levels(
         &self,
         bet: &mut Bet<Self::Api>,
-        total_matched: &mut BigUint<Self::Api>,  
-        remaining: &mut BigUint<Self::Api>,      
+        total_matched: &mut BigUint<Self::Api>,
+        remaining: &mut BigUint<Self::Api>,
         mut opposite_levels: ManagedVec<Self::Api, PriceLevel<Self::Api>>,
     ) {
         let current_timestamp = self.blockchain().get_block_timestamp();
@@ -50,28 +50,48 @@ pub trait OrderbookModule:
         while i < opposite_levels.len() && *remaining > BigUint::zero() {
             let mut level = opposite_levels.get(i);
             if level.odds == bet.odd {
-                let mut to_match = BigUint::zero();
-                if *remaining < level.total_stake {
-                    to_match = remaining.clone();
-                } else {
-                    to_match = level.total_stake.clone();
+                let mut updated_nonces = ManagedVec::new();
+                let mut total_level_stake = BigUint::zero();
+    
+                for nonce in level.bet_nonces.iter() {
+                    if *remaining == BigUint::zero() {
+                        updated_nonces.push(nonce);
+                        let matched_bet = self.bet_by_id(nonce).get();
+                        total_level_stake += &matched_bet.stake_amount - &matched_bet.total_matched;
+                        continue;
+                    }
+    
+                    let mut matched_bet = self.bet_by_id(nonce).get();
+                    let current_unmatched = &matched_bet.stake_amount - &matched_bet.total_matched;
+    
+                    if current_unmatched > BigUint::zero() {
+                        let to_match = core::cmp::min(current_unmatched, remaining.clone());
+                        if to_match > BigUint::zero() {
+                            *total_matched += &to_match;
+                            *remaining -= &to_match;
+                            self.add_matched_part(bet, &mut matched_bet, &to_match, current_timestamp);
+                            self.update_matched_bet(&mut matched_bet, &to_match);
+    
+                            let remaining_unmatched = &matched_bet.stake_amount - &matched_bet.total_matched;
+                            if remaining_unmatched > BigUint::zero() {
+                                updated_nonces.push(nonce);
+                                total_level_stake += remaining_unmatched;
+                            }
+    
+                            self.bet_by_id(nonce).set(&matched_bet);
+                        }
+                    }
                 }
-                
-                if &to_match > &BigUint::zero() {
-                    *total_matched += &to_match;
-                    *remaining -= &to_match;
-                    self.process_level_matches(bet, &to_match, &mut level, current_timestamp);
-                    self.update_opposite_levels(&mut opposite_levels, i, level);
-                }
-                i += 1;
-            } else {
-                i += 1;
+    
+                level.bet_nonces = updated_nonces;
+                level.total_stake = total_level_stake;
+                self.update_opposite_levels(&mut opposite_levels, i, level);
             }
+            i += 1;
         }
     
-        self.save_opposite_levels(bet, opposite_levels);  
+        self.save_opposite_levels(bet, opposite_levels);
     }
-
     /// Processes matches for a specific price level and updates counterparty bets.
     /// Parameters:
     /// - bet: The bet being matched.
@@ -164,31 +184,46 @@ pub trait OrderbookModule:
         if unmatched_amount == BigUint::zero() { 
             return;
         }
-    
+        
         let mut levels = match bet.bet_type {
             BetType::Back => self.selection_back_levels(bet.event, bet.selection.id).get(),
             BetType::Lay => self.selection_lay_levels(bet.event, bet.selection.id).get(),
         };
-    
+        
         let level_index = self.find_level_index(&levels, &bet.odd);
         match level_index {
             Some(i) => {
                 let mut level = levels.get(i);
-                level.total_stake += &unmatched_amount;  
-                level.bet_nonces.push(bet.bet_id);
+                level.total_stake += &unmatched_amount;
+    
+                let mut new_nonces = ManagedVec::new();
+                let mut inserted = false;
+                for nonce in level.bet_nonces.iter() {
+                    let existing_bet = self.bet_by_id(nonce).get();
+                    if !inserted && bet.created_at < existing_bet.created_at {
+                        new_nonces.push(bet.bet_id);
+                        inserted = true;
+                    }
+                    new_nonces.push(nonce);
+                }
+                if !inserted {
+                    new_nonces.push(bet.bet_id);
+                }
+                level.bet_nonces = new_nonces;
+    
                 let _ = levels.set(i, level);
             },
             None => {
                 let new_level = PriceLevel {
                     odds: bet.odd.clone(),
-                    total_stake: unmatched_amount.clone(),  
+                    total_stake: unmatched_amount.clone(),
                     bet_nonces: ManagedVec::from_single_item(bet.bet_id),
                 };
                 levels.push(new_level);
             }
         };
-    
-        self.update_levels_and_liquidity(bet, levels, unmatched_amount.clone());  
+        
+        self.update_levels_and_liquidity(bet, levels, unmatched_amount.clone());
     }
 
     /// Removes a bet from the order book if it has unmatched amounts.

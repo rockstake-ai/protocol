@@ -4,6 +4,7 @@ multiversx_sc::imports!();
 
 #[multiversx_sc::module]
 pub trait EventsModule {
+    
     #[event("placeBet")]
     fn place_bet_event(
         &self,

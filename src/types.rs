@@ -101,13 +101,13 @@ pub struct Market<M: ManagedTypeApi> {
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem, Copy)]
 pub enum SelectionType {
-    One,    // "1"
-    Draw,   // "X"
-    Two,    // "2"
-    Over,   // "OVER"
-    Under,  // "UNDER"
-    Yes,    // "YES"
-    No      // "NO"
+    One,    
+    Draw,   
+    Two,    
+    Over,  
+    Under, 
+    Yes,   
+    No  
 }
 
 impl SelectionType {
