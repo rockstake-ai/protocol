@@ -194,7 +194,6 @@ pub trait BetModule:
                 } else {
                     bet.total_amount = BigUint::zero();
                 }
-                // Actualizăm explicit liability
                 bet.liability = matched_liability.clone();
                 bet.potential_profit = self.calculate_total_potential_profit(&bet);
     
@@ -220,7 +219,6 @@ pub trait BetModule:
         });
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
     
-        // Emitem evenimentul cu liability inclus
         self.cancel_bet_event(
             &caller,
             bet_id,
@@ -388,8 +386,8 @@ pub trait BetModule:
     ) {
         let bet_nft_nonce = self.mint_bet_nft(bet);
         self.bet_by_id(bet.bet_id).set(bet); 
-        self.market_bet_ids(bet.event).insert(bet.nft_nonce); 
-
+        self.market_bet_ids(bet.event).insert(bet.bet_id);
+        
         let amount_to_lock = match bet_type {
             BetType::Back => remaining.clone(),
             BetType::Lay => {
@@ -430,10 +428,9 @@ pub trait BetModule:
         let sport_index = match bet.sport {
             Sport::Football => 1u8,
             Sport::Basketball => 2u8,
-            Sport::Tennis => 3u8,
-            Sport::LeagueOfLegends => 4u8,
-            Sport::CounterStrike2 => 5u8,
-            Sport::Dota2 => 6u8,
+            Sport::CounterStrike => 3u8,
+            Sport::Dota => 4u8,
+            Sport::LeagueOfLegends => 5u8,
         };
         
         let user_hex = bet.bettor.hex_expr();

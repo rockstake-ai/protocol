@@ -23,11 +23,10 @@ pub enum BetType {
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, PartialEq, Clone, ManagedVecItem, Copy)]
 pub enum Sport {
     Football,
-    Tennis,
     Basketball,
+    CounterStrike,
+    Dota,
     LeagueOfLegends,
-    CounterStrike2,
-    Dota2
 }
 
 #[type_abi]
@@ -140,7 +139,12 @@ impl SelectionType {
                 0 => SelectionType::Yes,
                 1 => SelectionType::No,
                 _ => panic!("Invalid selection index for BothTeamsToScore")
-            }
+            },
+            MarketType::Winner => match index {
+                0 => SelectionType::One,
+                2 => SelectionType::Two,
+                _ => panic!("Invalid selection index for Winner")
+            },
         }
     }
 }
@@ -197,6 +201,7 @@ pub enum MarketType {
     FullTimeResult,
     TotalGoals,
     BothTeamsToScore,
+    Winner,
 }
 
 impl MarketType {
@@ -205,6 +210,7 @@ impl MarketType {
             1 => MarketType::FullTimeResult,
             2 => MarketType::TotalGoals,
             3 => MarketType::BothTeamsToScore,
+            4 => MarketType::Winner,
             _ => panic!("Invalid market type")
         }
     }
@@ -214,6 +220,7 @@ impl MarketType {
             MarketType::FullTimeResult => 1,
             MarketType::TotalGoals => 2,
             MarketType::BothTeamsToScore => 3,
+            MarketType::Winner => 4,
         }
     }
 
@@ -222,6 +229,7 @@ impl MarketType {
             MarketType::FullTimeResult => b"Fulltime Result",
             MarketType::TotalGoals => b"Over/Under 2.5 Goals",
             MarketType::BothTeamsToScore => b"Both Teams To Score",
+            MarketType::Winner => b"Winner",
         }
     }
 }

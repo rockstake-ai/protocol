@@ -39,33 +39,32 @@ pub trait MarketModule:
         let mut market_ids = ManagedVec::new();
         let mut markets_info = ManagedVec::new();
         
-        let ft_result_selections: &[SelectionType] = match sport {
-            Sport::Football => &[
+        // Create markets based on sport type
+        if sport == Sport::Football {
+            // Football specific markets
+            
+            // 1X2 market (Home, Draw, Away)
+            let ft_result_selections = [
                 SelectionType::One,
                 SelectionType::Draw,
                 SelectionType::Two
-            ],
-            _ => &[
-                SelectionType::One,
-                SelectionType::Two
-            ],
-        };
-        
-        let (market_id_1x2, selections_1x2) = self.create_single_market(
-            sport,
-            event_id,
-            ft_result_selections,
-            close_timestamp,
-            MarketType::FullTimeResult
-        );
-        market_ids.push(market_id_1x2);
-        markets_info.push(MarketSelectionInfo {
-            market_id: market_id_1x2,
-            market_type: MarketType::FullTimeResult,
-            selections: selections_1x2
-        });
-        
-        if sport == Sport::Football {
+            ];
+            
+            let (market_id_1x2, selections_1x2) = self.create_single_market(
+                sport,
+                event_id,
+                &ft_result_selections,
+                close_timestamp,
+                MarketType::FullTimeResult
+            );
+            market_ids.push(market_id_1x2);
+            markets_info.push(MarketSelectionInfo {
+                market_id: market_id_1x2,
+                market_type: MarketType::FullTimeResult,
+                selections: selections_1x2
+            });
+            
+            // Over/Under market
             let selection_types = [
                 SelectionType::Over,
                 SelectionType::Under
@@ -84,6 +83,7 @@ pub trait MarketModule:
                 selections: selections_ou
             });
             
+            // Both teams to score market
             let selection_types = [
                 SelectionType::Yes,
                 SelectionType::No
@@ -101,6 +101,26 @@ pub trait MarketModule:
                 market_type: MarketType::BothTeamsToScore,
                 selections: selections_ggng
             });
+        } else {
+            // For all other sports, create only Winner market
+            let winner_selections = [
+                SelectionType::One,
+                SelectionType::Two
+            ];
+            
+            let (market_id_winner, selections_winner) = self.create_single_market(
+                sport,
+                event_id,
+                &winner_selections,
+                close_timestamp,
+                MarketType::Winner
+            );
+            market_ids.push(market_id_winner);
+            markets_info.push(MarketSelectionInfo {
+                market_id: market_id_winner,
+                market_type: MarketType::Winner,
+                selections: selections_winner
+            });
         }
         
         self.markets_by_event_and_sport(sport, event_id).set(&market_ids);
@@ -108,14 +128,14 @@ pub trait MarketModule:
         let sport_index = match sport {
             Sport::Football => 1u8,
             Sport::Basketball => 2u8,
-            Sport::Tennis => 3u8,
-            Sport::LeagueOfLegends => 4u8,
-            Sport::CounterStrike2 => 5u8,
-            Sport::Dota2 => 6u8,
+            Sport::CounterStrike => 3u8,
+            Sport::Dota => 4u8,
+            Sport::LeagueOfLegends => 5u8,
         };
         
         self.create_market_event(sport_index, event_id, &markets_info);
     }
+
 
     /// Creates a single market with specified selections for an event.
     /// Parameters:
@@ -137,15 +157,15 @@ pub trait MarketModule:
             MarketType::FullTimeResult => 1,
             MarketType::TotalGoals => 2,
             MarketType::BothTeamsToScore => 3,
+            MarketType::Winner => 4,
         };
         
         let sport_index = match sport {
             Sport::Football => 1,
             Sport::Basketball => 2,
-            Sport::Tennis => 3,
-            Sport::LeagueOfLegends => 4,
-            Sport::CounterStrike2 => 5,
-            Sport::Dota2 => 6,
+            Sport::CounterStrike => 3,
+            Sport::Dota => 4,
+            Sport::LeagueOfLegends => 5,
         };
         let market_id = (sport_index * 1_000_000) + (event_id * 1000) + market_type_index;
 

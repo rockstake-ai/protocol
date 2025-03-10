@@ -243,29 +243,31 @@ pub trait FundModule:
         let bet_ids = self.market_bet_ids(market_id);
         
         for bet_id in bet_ids.iter() {
-            let mut bet = self.bet_by_id(bet_id).get();
-            
-            if bet.status == BetStatus::Matched {
-                let is_winner = match bet.bet_type {
-                    BetType::Back => bet.selection.id == winning_selection,
-                    BetType::Lay => bet.selection.id != winning_selection
-                };
+            if !self.bet_by_id(bet_id).is_empty() {
+                let mut bet = self.bet_by_id(bet_id).get();
                 
-                bet.status = if is_winner {
-                    BetStatus::Win
-                } else {
-                    BetStatus::Lost
-                };
-                
-                if is_winner {
-                    self.selection_win_count(market_id, bet.selection.id)
-                        .update(|count| *count += 1);
-                } else {
-                    self.selection_lost_count(market_id, bet.selection.id)
-                        .update(|count| *count += 1);
+                if bet.status == BetStatus::Matched {
+                    let is_winner = match bet.bet_type {
+                        BetType::Back => bet.selection.id == winning_selection,
+                        BetType::Lay => bet.selection.id != winning_selection
+                    };
+                    
+                    bet.status = if is_winner {
+                        BetStatus::Win
+                    } else {
+                        BetStatus::Lost
+                    };
+                    
+                    if is_winner {
+                        self.selection_win_count(market_id, bet.selection.id)
+                            .update(|count| *count += 1);
+                    } else {
+                        self.selection_lost_count(market_id, bet.selection.id)
+                            .update(|count| *count += 1);
+                    }
+                    
+                    self.bet_by_id(bet_id).set(&bet);
                 }
-                
-                self.bet_by_id(bet_id).set(&bet);
             }
         }
     }
@@ -375,6 +377,10 @@ pub trait FundModule:
                 if score_home > 0 && score_away > 0 { 0 }
                 else { 1 }
             }
+            MarketType::Winner => {
+                if score_home > score_away { 0 }
+                else { 2 }
+            },
         };
         
         market.selections.get(winning_index).id
