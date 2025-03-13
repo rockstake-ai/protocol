@@ -13,6 +13,7 @@ pub type AttributesAsMultiValue<M> =
 pub trait NftModule:
     crate::storage::StorageModule
     + crate::events::EventsModule
+    + crate::utils::UtilsModule
 {
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Token Issuance --------------------------------------------//
@@ -88,7 +89,7 @@ pub trait NftModule:
         let big_one = BigUint::from(1u64);
 
         let mut token_name = ManagedBuffer::new_from_bytes(b"Betslip #");
-        let bet_id_buffer = self.u64_to_ascii(bet.nft_nonce);
+        let bet_id_buffer = self.u64_to_ascii(bet.bet_id);
         token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);
 
@@ -121,74 +122,6 @@ pub trait NftModule:
             &attributes,
             &uris,
         )
-    }
-
-    //--------------------------------------------------------------------------------------------//
-    //-------------------------------- Validation and Utilities ----------------------------------//
-    //--------------------------------------------------------------------------------------------//
-
-    /// Validates the ownership and authenticity of a bet NFT.
-    /// Parameters:
-    /// - bet_id: The ID of the bet to validate.
-    /// Returns: The Bet object if validation passes.
-    fn require_valid_bet_nft(&self, bet_id: u64) -> Bet<Self::Api> {
-        let caller = self.blockchain().get_caller();
-        let payments = self.call_value().all_esdt_transfers().clone_value();
-        let bet = self.get_bet(bet_id);
-
-        if payments.is_empty() {
-            require!(caller == bet.bettor, ERR_INVALID_ROLE);
-        } else {
-            require!(payments.len() == 1, ERR_INVALID_PAYMENT_COUNT);
-            let payment = payments.get(0);
-            require!(
-                self.bet_nft_token().get_token_id() == payment.token_identifier,
-                ERR_INVALID_NFT_TOKEN
-            );
-            require!(bet.nft_nonce == payment.token_nonce, ERR_INVALID_NFT_TOKEN_NONCE);
-        }
-        bet
-    }
-
-    /// Converts a u64 number to an ASCII string representation.
-    /// Parameters:
-    /// - number: The number to convert.
-    /// Returns: A ManagedBuffer containing the ASCII string.
-    fn u64_to_ascii(&self, number: u64) -> ManagedBuffer {
-        let mut reversed_digits = ManagedVec::<Self::Api, u8>::new();
-        let mut result = number;
-
-        while result > 0 {
-            let digit = result % 10;
-            result /= 10;
-
-            let digit_char = match digit {
-                0 => b'0',
-                1 => b'1',
-                2 => b'2',
-                3 => b'3',
-                4 => b'4',
-                5 => b'5',
-                6 => b'6',
-                7 => b'7',
-                8 => b'8',
-                9 => b'9',
-                _ => sc_panic!("Invalid digit"),
-            };
-
-            reversed_digits.push(digit_char);
-        }
-
-        if reversed_digits.is_empty() {
-            return ManagedBuffer::new_from_bytes(b"0");
-        }
-
-        let mut output = ManagedBuffer::new();
-        for digit in reversed_digits.iter().rev() {
-            output.append_bytes(&[digit]);
-        }
-
-        output
     }
 
     /// Retrieves a bet from storage by its ID.

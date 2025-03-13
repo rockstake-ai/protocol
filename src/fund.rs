@@ -8,6 +8,7 @@ pub trait FundModule:
     + crate::events::EventsModule
     + crate::nft::NftModule
     + crate::orderbook::OrderbookModule
+    + crate::utils::UtilsModule
 {
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Market Handling -------------------------------------------//

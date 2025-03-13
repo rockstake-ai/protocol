@@ -8,7 +8,8 @@ pub trait BetModule:
     crate::events::EventsModule +
     crate::nft::NftModule +
     crate::orderbook::OrderbookModule +
-    crate::validation::ValidationModule 
+    crate::validation::ValidationModule +
+    crate::utils::UtilsModule
 {
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Bet Placement ---------------------------------------------//
@@ -36,7 +37,7 @@ pub trait BetModule:
             .call_value()
             .egld_or_single_esdt()
             .into_tuple();
-
+        
         self.validate_bet_amount(&total_amount);
         self.validate_bet_odds(&odds);
         self.validate_market(market_id);
@@ -47,10 +48,21 @@ pub trait BetModule:
             &total_amount,
             &odds
         );
-
-        let bet_id = self.next_bet_id().get();
-        self.next_bet_id().set(bet_id + 1);
-
+        
+        let bet_hash = self.generate_unique_bet_hash(
+            &caller,
+            &sport,
+            &market_id,
+            &selection_id,
+            &odds,
+            &bet_type,
+            &token_identifier,
+            token_nonce,
+            &total_amount
+        );
+        
+        let bet_id = self.get_bet_id_hash(&bet_hash);
+        
         let bet = self.create_bet(
             sport,
             market_id,
@@ -58,26 +70,22 @@ pub trait BetModule:
             &caller,
             &final_stake,
             &final_liability,
-            &total_amount, 
+            &total_amount,
             &odds,
             bet_type,
             token_identifier.clone(),
             token_nonce,
-            bet_id 
+            bet_id
         );
-
-        let (updated_bet, matched_amount, remaining) = self.process_bet(bet);
-
-        self.bet_by_id(bet_id).set(&updated_bet);
-
-        let final_bet = self.update_bet_status(updated_bet, matched_amount.clone(), remaining.clone());
         
+        let (updated_bet, matched_amount, remaining) = self.process_bet(bet);
+        self.bet_by_id(bet_id).set(&updated_bet);
+        let final_bet = self.update_bet_status(updated_bet, matched_amount.clone(), remaining.clone());
         self.update_market_and_selection(
             market_id,
             selection_id,
             &matched_amount
         );
-
         self.handle_nft_and_locked_funds(
             &caller,
             &final_bet,
@@ -85,14 +93,13 @@ pub trait BetModule:
             &final_liability,
             bet_type
         );
-
         self.emit_bet_placed_event(
             &final_bet,
             &token_identifier,
             token_nonce,
             &matched_amount,
             &remaining,
-            bet_id 
+            bet_id
         );
     }
 
@@ -500,5 +507,12 @@ pub trait BetModule:
                 (stake, liability) 
             }
         }
+    }
+
+    fn get_bet_id_hash(&self, bet_hash: &ManagedBuffer<Self::Api>) -> u64 {
+        let bet_id = self.next_bet_id().get();
+        self.next_bet_id().set(bet_id + 1);
+        self.bet_hash_to_id().insert(bet_hash.clone(), bet_id);
+        bet_id
     }
 }

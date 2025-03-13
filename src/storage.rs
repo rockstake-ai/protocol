@@ -11,6 +11,9 @@ pub trait StorageModule {
     #[storage_mapper("next_bet_id")]
     fn next_bet_id(&self) -> SingleValueMapper<u64>;
 
+    #[storage_mapper("bet_hash_to_id")]
+    fn bet_hash_to_id(&self) -> MapMapper<ManagedBuffer<Self::Api>, u64>;
+
     #[storage_mapper("marketBetIds")]
     fn market_bet_ids(&self, market_id: u64) -> UnorderedSetMapper<u64>;
 

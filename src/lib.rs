@@ -11,6 +11,7 @@ pub mod market;
 pub mod orderbook;
 pub mod validation;
 pub mod types;
+pub mod utils;
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
@@ -23,12 +24,13 @@ storage::StorageModule
 + bet::BetModule
 + market::MarketModule
 + orderbook::OrderbookModule
-+ validation::ValidationModule{
++ validation::ValidationModule
++ utils::UtilsModule{
     #[upgrade]
     fn upgrade(&self) {}
 
     #[init]
     fn init(&self) {
-        self.next_bet_id().set(0)
+        self.next_bet_id().set(0u64);
     }
 }

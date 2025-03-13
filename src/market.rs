@@ -9,7 +9,8 @@ pub trait MarketModule:
     crate::fund::FundModule + 
     crate::nft::NftModule +
     crate::orderbook::OrderbookModule +
-    crate::validation::ValidationModule
+    crate::validation::ValidationModule +
+    crate::utils::UtilsModule
 {
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Markets Creation -------------------------------------------//
