@@ -4,5 +4,7 @@ pub mod constants {
     pub const NFT_AMOUNT: u32 = 1;
     pub const TOKEN_NAME: &[u8] = b"Betslip";
     pub const TOKEN_TICKER: &[u8] = b"BET";
+    pub const DOMAIN_STORAGE: &[u8] = "https://localhost:3001/bet/".as_bytes();
+
 }
 

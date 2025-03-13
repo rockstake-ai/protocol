@@ -31,6 +31,5 @@ storage::StorageModule
 
     #[init]
     fn init(&self) {
-        self.next_bet_id().set(0u64);
     }
 }

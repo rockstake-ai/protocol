@@ -1,5 +1,5 @@
 use crate::{
-    constants::constants::{NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER},
+    constants::constants::{DOMAIN_STORAGE, NFT_ROYALTIES, TOKEN_NAME, TOKEN_TICKER},
     errors::{ERR_INVALID_BET_ID, ERR_INVALID_NFT_TOKEN, ERR_INVALID_NFT_TOKEN_NONCE, ERR_INVALID_PAYMENT_COUNT, ERR_INVALID_ROLE, ERR_TOKEN_ALREADY_ISSUED, ERR_TOKEN_NOT_ISSUED},
     types::{Bet, BetAttributes, BetStatus, BetType}
 };
@@ -88,13 +88,14 @@ pub trait NftModule:
         require!(!self.bet_nft_token().is_empty(), ERR_TOKEN_NOT_ISSUED);
         let big_one = BigUint::from(1u64);
 
-        let mut token_name = ManagedBuffer::new_from_bytes(b"Betslip #");
+        let token_name = ManagedBuffer::new_from_bytes(b"Betslip");
         let bet_id_buffer = self.u64_to_ascii(bet.bet_id);
-        token_name.append(&bet_id_buffer);
         let royalties = BigUint::from(NFT_ROYALTIES);
 
         let mut uris = ManagedVec::new();
-        uris.push(bet_id_buffer);
+        let mut domain_uri = ManagedBuffer::new_from_bytes(DOMAIN_STORAGE);
+        domain_uri.append(&bet_id_buffer);
+        uris.push(domain_uri);
 
         let attributes = BetAttributes {
             event: bet.event,
@@ -129,7 +130,7 @@ pub trait NftModule:
     /// - bet_id: The ID of the bet to retrieve.
     /// Returns: The Bet object if it exists.
     fn get_bet(&self, bet_id: u64) -> Bet<Self::Api> {
-        let bet_mapper = self.bet_by_id(bet_id);
+    let bet_mapper = self.bet_by_id(bet_id);
         require!(!bet_mapper.is_empty(), ERR_INVALID_BET_ID);
         bet_mapper.get()
     }

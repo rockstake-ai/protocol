@@ -21,6 +21,7 @@ pub trait EventsModule {
         #[indexed] matched_parts: &ManagedVec<Self::Api, MatchedPart<Self::Api>>,
         #[indexed] bet_id: u64,
         #[indexed] potential_profit: &BigUint,
+        #[indexed] nft_nonce: u64,
     );
 
     #[event("cancelBet")]

@@ -99,5 +99,48 @@ crate::storage::StorageModule {
         
         output
     }
-    
+
+    fn get_bet_id_hash(&self, bet_hash: &ManagedBuffer<Self::Api>) -> u64 {
+        if self.bet_hash_to_id().contains_key(bet_hash) {
+            return self.bet_hash_to_id().get(bet_hash).unwrap_or_default();
+        }
+        
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        let current_nft_nonce = self.next_bet_id().get();
+        
+        let mut data = ManagedBuffer::new();
+        data.append(bet_hash);
+        data.append(&self.serialize_u64(&current_timestamp));
+        data.append(&self.serialize_u64(&current_nft_nonce));
+        
+        let hash_bytes = self.crypto().sha256(&data);
+        
+        let mut all_bytes = [0u8; 32];
+        hash_bytes.as_managed_buffer().load_to_byte_array(&mut all_bytes);
+        
+        let mut u64_bytes = [0u8; 8];
+        for i in 0..8 {
+            u64_bytes[i] = all_bytes[i];
+        }
+        
+        let raw_id = u64::from_be_bytes(u64_bytes);
+        
+       
+        let max_int64: u64 = 0x7FFFFFFFFFFFFFFF;
+        let final_id = if raw_id > max_int64 {
+            raw_id & max_int64 
+        } else if raw_id == 0 {
+            1 
+        } else {
+            raw_id
+        };
+        
+        self.next_bet_id().set(current_nft_nonce + 1);
+        
+        self.bet_hash_to_id().insert(bet_hash.clone(), final_id);
+        
+        final_id
+    }
+
+
 }

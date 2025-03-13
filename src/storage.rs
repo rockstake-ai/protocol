@@ -8,6 +8,9 @@ pub trait StorageModule {
     #[storage_mapper("betById")]
     fn bet_by_id(&self, bet_id: u64) -> SingleValueMapper<Bet<Self::Api>>;
 
+    #[storage_mapper("bet_nonce_to_id")]
+    fn bet_nonce_to_id(&self, nonce: u64) -> SingleValueMapper<u64>;
+
     #[storage_mapper("next_bet_id")]
     fn next_bet_id(&self) -> SingleValueMapper<u64>;
 

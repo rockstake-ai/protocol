@@ -86,19 +86,43 @@ pub trait BetModule:
             selection_id,
             &matched_amount
         );
-        self.handle_nft_and_locked_funds(
+        
+        let real_nft_nonce = self.mint_bet_nft(&final_bet);
+        
+        let mut final_bet_with_nonce = final_bet.clone();
+        final_bet_with_nonce.nft_nonce = real_nft_nonce;
+        self.bet_by_id(bet_id).set(&final_bet_with_nonce);
+        
+        self.bet_nonce_to_id(real_nft_nonce).set(bet_id);
+        
+        self.market_bet_ids(market_id).insert(bet_id);
+        
+        let amount_to_lock = match bet_type {
+            BetType::Back => remaining.clone(),
+            BetType::Lay => {
+                let ratio = &remaining.clone() * &BigUint::from(100u64) / &final_bet.stake_amount;
+                (&final_bet.total_amount * &ratio) / &BigUint::from(100u64)
+            }
+        };
+    
+        if amount_to_lock > BigUint::zero() {
+            self.locked_funds(&caller).update(|funds| *funds += &amount_to_lock);
+        }
+    
+        self.send().direct_esdt(
             &caller,
-            &final_bet,
-            &remaining,
-            &final_liability,
-            bet_type
+            self.bet_nft_token().get_token_id_ref(),
+            real_nft_nonce,
+            &BigUint::from(1u64)
         );
+        
         self.emit_bet_placed_event(
-            &final_bet,
+            &final_bet_with_nonce,
             &token_identifier,
             token_nonce,
             &matched_amount,
-            &remaining,
+            &remaining.clone(),  
+            real_nft_nonce,
             bet_id
         );
     }
@@ -376,45 +400,6 @@ pub trait BetModule:
         self.markets(market_id).set(&market);
     }
 
-    /// Handles NFT minting and locked funds for a bet.
-    /// Parameters:
-    /// - caller: The address of the bettor.
-    /// - bet: The bet object.
-    /// - remaining: The remaining unmatched amount.
-    /// - liability: The liability amount.
-    /// - bet_type: The type of bet (Back or Lay).
-    fn handle_nft_and_locked_funds(
-        &self,
-        caller: &ManagedAddress<Self::Api>,
-        bet: &Bet<Self::Api>,
-        remaining: &BigUint,
-        _liability: &BigUint,
-        bet_type: BetType
-    ) {
-        let bet_nft_nonce = self.mint_bet_nft(bet);
-        self.bet_by_id(bet.bet_id).set(bet); 
-        self.market_bet_ids(bet.event).insert(bet.bet_id);
-        
-        let amount_to_lock = match bet_type {
-            BetType::Back => remaining.clone(),
-            BetType::Lay => {
-                let ratio = remaining * &BigUint::from(100u64) / &bet.stake_amount;
-                (&bet.total_amount * &ratio) / &BigUint::from(100u64)
-            }
-        };
-
-        if amount_to_lock > BigUint::zero() {
-            self.locked_funds(&caller).update(|funds| *funds += &amount_to_lock);
-        }
-    
-        self.send().direct_esdt(
-            caller,
-            self.bet_nft_token().get_token_id_ref(),
-            bet_nft_nonce,
-            &BigUint::from(1u64)
-        );
-    }
-
     /// Emits an event when a bet is placed.
     /// Parameters:
     /// - bet: The bet object.
@@ -430,6 +415,7 @@ pub trait BetModule:
         _token_nonce: u64,
         _matched_amount: &BigUint,
         _unmatched_amount: &BigUint,
+        nft_nonce: u64, // Nonce-ul NFT real
         bet_id: u64,
     ) {
         let sport_index = match bet.sport {
@@ -475,6 +461,7 @@ pub trait BetModule:
             &bet.matched_parts, 
             bet_id,
             &potential_profit,
+            nft_nonce, 
         );
     }
 
@@ -507,12 +494,5 @@ pub trait BetModule:
                 (stake, liability) 
             }
         }
-    }
-
-    fn get_bet_id_hash(&self, bet_hash: &ManagedBuffer<Self::Api>) -> u64 {
-        let bet_id = self.next_bet_id().get();
-        self.next_bet_id().set(bet_id + 1);
-        self.bet_hash_to_id().insert(bet_hash.clone(), bet_id);
-        bet_id
     }
 }
