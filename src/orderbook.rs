@@ -325,7 +325,7 @@ pub trait OrderbookModule:
             amount: match_amount.clone(),
             odds: bet.odd.clone(),
             matched_at: timestamp,
-            counterparty_bet_id: matched_bet.nft_nonce,
+            counterparty_bet_id: matched_bet.bet_id,
             counterparty_payment_token: matched_bet.payment_token.clone(),
             counterparty_payment_nonce: matched_bet.payment_nonce,
         });
@@ -335,7 +335,7 @@ pub trait OrderbookModule:
             amount: match_amount.clone(),
             odds: matched_bet.odd.clone(),
             matched_at: timestamp,
-            counterparty_bet_id: bet.nft_nonce,
+            counterparty_bet_id: bet.bet_id,
             counterparty_payment_token: bet.payment_token.clone(),
             counterparty_payment_nonce: bet.payment_nonce,
         });

@@ -139,7 +139,7 @@ pub trait BetModule:
     fn cancel_bet(&self, bet_id: u64) { 
         let caller = self.blockchain().get_caller();
         let mut bet = self.bet_by_id(bet_id).get();
-    
+
         let (token_identifier, payment_nonce, amount) = self
             .call_value()
             .egld_or_single_esdt()
@@ -200,7 +200,7 @@ pub trait BetModule:
                 );
     
                 self.bet_by_id(bet_id).clear();
-                BetStatus::Unmatched as u8 // 1
+                BetStatus::Unmatched as u8 
             },
             BetStatus::PartiallyMatched => {
                 self.selection_partially_matched_count(bet.event, bet.selection.id)
@@ -236,7 +236,7 @@ pub trait BetModule:
                 );
     
                 self.bet_by_id(bet_id).set(&bet);
-                BetStatus::Matched as u8 // 0
+                BetStatus::Matched as u8 
             },
             _ => sc_panic!("Invalid bet status for cancellation"),
         };
@@ -249,6 +249,14 @@ pub trait BetModule:
             }
         });
         self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
+
+        let sport_index = match bet.sport {
+            Sport::Football => 1u8,
+            Sport::Basketball => 2u8,
+            Sport::CounterStrike => 3u8,
+            Sport::Dota => 4u8,
+            Sport::LeagueOfLegends => 5u8,
+        };
     
         self.cancel_bet_event(
             &caller,
@@ -258,7 +266,9 @@ pub trait BetModule:
             &bet.total_matched,
             &bet.total_amount,
             &bet.potential_profit,
-            &bet.liability // Adăugăm liability
+            &bet.liability,
+            sport_index,
+            bet.nft_nonce
         );
     }
     //--------------------------------------------------------------------------------------------//
@@ -415,7 +425,7 @@ pub trait BetModule:
         _token_nonce: u64,
         _matched_amount: &BigUint,
         _unmatched_amount: &BigUint,
-        nft_nonce: u64, // Nonce-ul NFT real
+        nft_nonce: u64, 
         bet_id: u64,
     ) {
         let sport_index = match bet.sport {
@@ -494,5 +504,10 @@ pub trait BetModule:
                 (stake, liability) 
             }
         }
+    }
+
+    #[view(betExists)]
+    fn bet_exists(&self, bet_id: u64) -> bool {
+        self.bet_by_id(bet_id).is_empty() == false
     }
 }

@@ -34,7 +34,9 @@ pub trait EventsModule {
         #[indexed] total_matched: &BigUint,
         #[indexed] total_amount: &BigUint,
         #[indexed] potential_profit: &BigUint,
-        #[indexed] liability: &BigUint, 
+        #[indexed] liability: &BigUint,
+        #[indexed] sport_index: u8,
+        #[indexed] nft_nonce: u64,
     );
 
     #[event("claimWin")]
