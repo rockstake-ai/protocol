@@ -46,6 +46,8 @@ pub trait EventsModule {
         #[indexed] bet_id: u64,
         #[indexed] status: u8,
         #[indexed] payout: &BigUint,
+        #[indexed] sport_index: u8,
+        #[indexed] nft_nonce: u64,
     );
 
     #[event("create_market")]

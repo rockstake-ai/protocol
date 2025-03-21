@@ -322,15 +322,25 @@ pub trait FundModule:
         self.send().direct_esdt(
             &caller,
             &token_identifier_wrap,
-            bet_id,
+            bet.nft_nonce,
             &BigUint::from(1u64)
         );
+
+        let sport_index = match bet.sport {
+            Sport::Football => 1u8,
+            Sport::Basketball => 2u8,
+            Sport::CounterStrike => 3u8,
+            Sport::Dota => 4u8,
+            Sport::LeagueOfLegends => 5u8,
+        };
 
         self.claim_win_event(
             &caller,
             bet_id,
             BetStatus::Claimed as u8,
             &payout,
+            sport_index,
+            bet.nft_nonce
         );
     }
 
