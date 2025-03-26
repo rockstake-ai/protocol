@@ -265,6 +265,23 @@ pub trait FundModule:
                     } else {
                         self.selection_lost_count(market_id, bet.selection.id)
                             .update(|count| *count += 1);
+    
+                        if bet.bet_type == BetType::Lay {
+                            self.locked_funds(&bet.bettor).update(|funds| {
+                                if *funds >= bet.stake_amount {
+                                    *funds -= &bet.stake_amount;
+                                } else {
+                                    *funds = BigUint::zero();
+                                }
+                            });
+                            self.send().direct(
+                                &bet.bettor,
+                                &bet.payment_token,
+                                bet.payment_nonce,
+                                &bet.stake_amount
+                            );
+
+                        }
                     }
                     
                     self.bet_by_id(bet_id).set(&bet);
