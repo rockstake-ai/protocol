@@ -114,29 +114,23 @@ crate::storage::StorageModule {
         data.append(&self.serialize_u64(&current_nft_nonce));
         
         let hash_bytes = self.crypto().sha256(&data);
-        
         let mut all_bytes = [0u8; 32];
         hash_bytes.as_managed_buffer().load_to_byte_array(&mut all_bytes);
         
-        let mut u64_bytes = [0u8; 8];
-        for i in 0..8 {
-            u64_bytes[i] = all_bytes[i];
+        let mut u32_bytes = [0u8; 4];
+        for i in 0..4 {
+            u32_bytes[i] = all_bytes[i];
         }
         
-        let raw_id = u64::from_be_bytes(u64_bytes);
+        let raw_id_part = u32::from_be_bytes(u32_bytes);
         
-       
-        let max_int64: u64 = 0x7FFFFFFFFFFFFFFF;
-        let final_id = if raw_id > max_int64 {
-            raw_id & max_int64 
-        } else if raw_id == 0 {
-            1 
-        } else {
-            raw_id
-        };
+        let max_id: u64 = 9_000_000_000; 
+        let id_part = (raw_id_part as u64 % max_id) + 1_000_000_000;
+        
+        let timestamp_part = current_timestamp % 1_000_000;
+        let final_id = id_part + timestamp_part; 
         
         self.next_bet_id().set(current_nft_nonce + 1);
-        
         self.bet_hash_to_id().insert(bet_hash.clone(), final_id);
         
         final_id
