@@ -136,5 +136,119 @@ crate::storage::StorageModule {
         final_id
     }
 
+    fn delete_bet(&self, bet_id: u64) {
+        // Verifică dacă bet-ul există
+        if self.bet_by_id(bet_id).is_empty() {
+            return;
+        }
+        
+        let bet = self.bet_by_id(bet_id).get();
+        
+        // 1. Șterge din market_bet_ids
+        self.market_bet_ids(bet.event).swap_remove(&bet_id);
+        
+        // 2. Șterge din bet_nonce_to_id
+        self.bet_nonce_to_id(bet.nft_nonce).clear();
+        
+        // 3. Curăță din selection_back_levels sau selection_lay_levels
+        // În funcție de tipul bet-ului
+        match bet.bet_type {
+            BetType::Back => {
+                let mut back_levels = self.selection_back_levels(bet.event, bet.selection.id).get();
+                let mut updated = false;
+                
+                for i in 0..back_levels.len() {
+                    let mut level = back_levels.get(i);
+                    let mut new_bet_ids = ManagedVec::new();
+                    
+                    for level_bet_id in level.bet_ids.iter() {
+                        if level_bet_id != bet_id {
+                            new_bet_ids.push(level_bet_id);
+                        } else {
+                            updated = true;
+                        }
+                    }
+                    
+                    if new_bet_ids.is_empty() {
+                        // Elimină nivelul complet dacă nu mai conține pariuri
+                        if i < back_levels.len() - 1 {
+                            let last = back_levels.get(back_levels.len() - 1);
+                            let _ = back_levels.set(i, last);
+                        }
+                        back_levels.remove(back_levels.len() - 1);
+                        updated = true;
+                    } else {
+                        level.bet_ids = new_bet_ids;
+                        let _ = back_levels.set(i, level);
+                    }
+                }
+                
+                if updated {
+                    self.selection_back_levels(bet.event, bet.selection.id).set(&back_levels);
+                    
+                    // Recalculează lichiditatea totală
+                    let mut total_liquidity = BigUint::zero();
+                    for level in back_levels.iter() {
+                        total_liquidity += &level.total_stake;
+                    }
+                    self.selection_back_liquidity(bet.event, bet.selection.id).set(&total_liquidity);
+                }
+            },
+            BetType::Lay => {
+                let mut lay_levels = self.selection_lay_levels(bet.event, bet.selection.id).get();
+                let mut updated = false;
+                
+                for i in 0..lay_levels.len() {
+                    let mut level = lay_levels.get(i);
+                    let mut new_bet_ids = ManagedVec::new();
+                    
+                    for level_bet_id in level.bet_ids.iter() {
+                        if level_bet_id != bet_id {
+                            new_bet_ids.push(level_bet_id);
+                        } else {
+                            updated = true;
+                        }
+                    }
+                    
+                    if new_bet_ids.is_empty() {
+                        // Elimină nivelul complet dacă nu mai conține pariuri
+                        if i < lay_levels.len() - 1 {
+                            let last = lay_levels.get(lay_levels.len() - 1);
+                            let _ = lay_levels.set(i, last);
+                        }
+                        lay_levels.remove(lay_levels.len() - 1);
+                        updated = true;
+                    } else {
+                        level.bet_ids = new_bet_ids;
+                        let _ = lay_levels.set(i, level);
+                    }
+                }
+                
+                if updated {
+                    self.selection_lay_levels(bet.event, bet.selection.id).set(&lay_levels);
+                    
+                    // Recalculează lichiditatea totală
+                    let mut total_liquidity = BigUint::zero();
+                    for level in lay_levels.iter() {
+                        total_liquidity += &level.total_stake;
+                    }
+                    self.selection_lay_liquidity(bet.event, bet.selection.id).set(&total_liquidity);
+                }
+            }
+        }
+        
+        // 4. Șterge din bet_hash_to_id - Acest pas ar putea fi costisitor, dar este necesar
+        for hash in self.bet_hash_to_id().keys() {
+            let id = self.bet_hash_to_id().get(&hash).unwrap_or_default();
+            if id == bet_id {
+                self.bet_hash_to_id().remove(&hash);
+                break;
+            }
+        }
+        
+        // 5. În final, șterge bet-ul
+        self.bet_by_id(bet_id).clear();
+    }
+
 
 }

@@ -177,7 +177,7 @@ pub struct MarketSelectionInfo<M: ManagedTypeApi> {
 pub struct PriceLevel<M: ManagedTypeApi> {
     pub odds: BigUint<M>,
     pub total_stake: BigUint<M>,
-    pub bet_nonces: ManagedVec<M, u64>,
+    pub bet_ids: ManagedVec<M, u64>,
 }
 
 #[type_abi]

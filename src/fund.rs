@@ -23,28 +23,23 @@ pub trait FundModule:
         let market_ids = self.markets_by_event_and_sport(sport, event_id).get();
         require!(
             market_ids.contains(&market_id),
-           ERR_INVALID_MARKET
+            ERR_INVALID_MARKET
         );
-
+    
         let mut market = self.markets(market_id).get();
         market.market_status = MarketStatus::Closed;
         self.markets(market_id).set(&market);
         
+        // Colectează toate bet_id-urile din market_bet_ids pentru a le procesa
+        let bet_ids = self.market_bet_ids(market_id).iter().collect::<ManagedVec<u64>>();
+        
+        // Procesează fiecare bet_id
+        for bet_id in bet_ids.iter() {
+            self.return_unmatched_amount(bet_id);
+        }
+        
+        // După procesare, curăță toate datele asociate pentru fiecare selecție
         for selection in market.selections.iter() {
-            let back_levels = self.selection_back_levels(market_id, selection.id).get();
-            for level in back_levels.iter() {
-                for bet_nonce in level.bet_nonces.iter() {
-                    self.return_unmatched_amount(bet_nonce);
-                }
-            }
-    
-            let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
-            for level in lay_levels.iter() {
-                for bet_nonce in level.bet_nonces.iter() {
-                    self.return_unmatched_amount(bet_nonce);
-                }
-            }
-    
             self.selection_back_levels(market_id, selection.id).set(&ManagedVec::new());
             self.selection_lay_levels(market_id, selection.id).set(&ManagedVec::new());
             self.selection_back_liquidity(market_id, selection.id).set(&BigUint::zero());
@@ -73,9 +68,13 @@ pub trait FundModule:
 
     /// Returns unmatched amounts to the bettor for a specific bet.
     /// Parameters:
-    /// - bet_nonce: The unique identifier (nonce) of the bet.
-    fn return_unmatched_amount(&self, bet_nonce: u64) {
-        let mut bet = self.bet_by_id(bet_nonce).get();
+    /// - bet_id: The unique identifier of the bet.
+    fn return_unmatched_amount(&self, bet_id: u64) {
+        if self.bet_by_id(bet_id).is_empty() {
+            return; // Skip if bet doesn't exist
+        }
+    
+        let mut bet = self.bet_by_id(bet_id).get();
         let unmatched = &bet.stake_amount - &bet.total_matched;
     
         if unmatched > BigUint::zero() {
@@ -107,9 +106,10 @@ pub trait FundModule:
                 };
                 bet.potential_profit = self.calculate_total_potential_profit(&bet);
                 bet.status = BetStatus::Matched;
-                self.bet_by_id(bet_nonce).set(&bet);
+                self.bet_by_id(bet_id).set(&bet);
             } else {
-                self.bet_by_id(bet_nonce).clear();
+                // Dacă nu există sumă matched, șterge complet bet-ul și toate referințele
+                self.delete_bet(bet_id);
             }
         }
     }
@@ -126,14 +126,14 @@ pub trait FundModule:
             for selection in market.selections.iter() {
                 let back_levels = self.selection_back_levels(market_id, selection.id).get();
                 for level in back_levels.iter() {
-                    for bet_nonce in level.bet_nonces.iter() {
+                    for bet_nonce in level.bet_ids.iter() {
                         self.process_unmatched_bet(bet_nonce);
                     }
                 }
 
                 let lay_levels = self.selection_lay_levels(market_id, selection.id).get();
                 for level in lay_levels.iter() {
-                    for bet_nonce in level.bet_nonces.iter() {
+                    for bet_nonce in level.bet_ids.iter() {
                         self.process_unmatched_bet(bet_nonce);
                     }
                 }
@@ -407,7 +407,7 @@ pub trait FundModule:
             }
             MarketType::Winner => {
                 if score_home > score_away { 0 }
-                else { 2 }
+                else { 1 } 
             },
         };
         

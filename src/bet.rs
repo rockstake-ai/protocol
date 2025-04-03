@@ -135,142 +135,148 @@ pub trait BetModule:
     /// Parameters:
     /// - bet_id: The ID of the bet to be canceled.
     #[payable("*")]
-    #[endpoint(cancelBet)]
-    fn cancel_bet(&self, bet_id: u64) { 
-        let caller = self.blockchain().get_caller();
-        let mut bet = self.bet_by_id(bet_id).get();
+#[endpoint(cancelBet)]
+fn cancel_bet(&self, bet_id: u64) { 
+    let caller = self.blockchain().get_caller();
+    
+    // Verifică dacă bet-ul există
+    require!(!self.bet_by_id(bet_id).is_empty(), "Bet does not exist");
+    
+    let mut bet = self.bet_by_id(bet_id).get();
 
-        let (token_identifier, payment_nonce, amount) = self
-            .call_value()
-            .egld_or_single_esdt()
-            .into_tuple();
-        let token_identifier_wrap = token_identifier.unwrap_esdt();
-    
-        require!(
-            token_identifier_wrap == self.bet_nft_token().get_token_id(),
-            "Must send the bet NFT to cancel"
-        );
-        require!(
-            payment_nonce == bet.nft_nonce,
-            "Invalid NFT nonce"
-        );
-        require!(
-            amount == BigUint::from(1u64),
-            "Must send exactly 1 NFT"
-        );
-    
-        require!(bet.bettor == caller, "Only the bet owner can cancel the bet");
-        require!(
-            bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
-            "Bet cannot be cancelled in this state"
-        );
-    
-        let unmatched = &bet.stake_amount - &bet.total_matched;
-        let refund_amount = match bet.bet_type {
-            BetType::Back => {
-                if bet.status == BetStatus::Unmatched {
-                    bet.stake_amount.clone()
-                } else {
-                    unmatched.clone()
-                }
-            },
-            BetType::Lay => {
-                let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &bet.stake_amount;
-                let refund = &bet.total_amount * &unmatched_ratio / &BigUint::from(100u64);
-                if bet.status == BetStatus::Unmatched {
-                    bet.total_amount.clone()
-                } else {
-                    refund
-                }
-            }
-        };
-    
-        let locked_funds = self.locked_funds(&caller).get();
-        require!(locked_funds >= refund_amount, "Insufficient locked funds to refund");
-    
-        let status_for_event: u8 = match &bet.status {
-            BetStatus::Unmatched => {
-                self.selection_unmatched_count(bet.event, bet.selection.id)
-                    .update(|val| *val -= 1);
-    
-                self.send().esdt_local_burn(
-                    &token_identifier_wrap,
-                    payment_nonce,
-                    &BigUint::from(1u64)
-                );
-    
-                self.bet_by_id(bet_id).clear();
-                BetStatus::Unmatched as u8 
-            },
-            BetStatus::PartiallyMatched => {
-                self.selection_partially_matched_count(bet.event, bet.selection.id)
-                    .update(|val| *val -= 1);
-                self.selection_matched_count(bet.event, bet.selection.id)
-                    .update(|val| *val += 1);
-    
-                bet.status = BetStatus::Matched;
-    
-                let original_stake_amount = bet.stake_amount.clone();
-                bet.stake_amount = bet.total_matched.clone();
-                let matched_liability = if bet.bet_type == BetType::Lay {
-                    (&bet.liability * &bet.total_matched) / &original_stake_amount
-                } else {
-                    BigUint::zero()
-                };
-                if bet.total_matched > BigUint::zero() {
-                    bet.total_amount = match bet.bet_type {
-                        BetType::Back => bet.total_matched.clone(),
-                        BetType::Lay => &bet.total_matched + &matched_liability,
-                    };
-                } else {
-                    bet.total_amount = BigUint::zero();
-                }
-                bet.liability = matched_liability.clone();
-                bet.potential_profit = self.calculate_total_potential_profit(&bet);
-    
-                self.send().direct_esdt(
-                    &caller,
-                    &token_identifier_wrap,
-                    bet.nft_nonce, 
-                    &BigUint::from(1u64)
-                );
-    
-                self.bet_by_id(bet_id).set(&bet);
-                BetStatus::Matched as u8 
-            },
-            _ => sc_panic!("Invalid bet status for cancellation"),
-        };
-    
-        self.locked_funds(&caller).update(|val| {
-            if *val >= refund_amount {
-                *val -= &refund_amount;
+    let (token_identifier, payment_nonce, amount) = self
+        .call_value()
+        .egld_or_single_esdt()
+        .into_tuple();
+    let token_identifier_wrap = token_identifier.unwrap_esdt();
+
+    require!(
+        token_identifier_wrap == self.bet_nft_token().get_token_id(),
+        "Must send the bet NFT to cancel"
+    );
+    require!(
+        payment_nonce == bet.nft_nonce,
+        "Invalid NFT nonce"
+    );
+    require!(
+        amount == BigUint::from(1u64),
+        "Must send exactly 1 NFT"
+    );
+
+    require!(bet.bettor == caller, "Only the bet owner can cancel the bet");
+    require!(
+        bet.status == BetStatus::Unmatched || bet.status == BetStatus::PartiallyMatched,
+        "Bet cannot be cancelled in this state"
+    );
+
+    let unmatched = &bet.stake_amount - &bet.total_matched;
+    let refund_amount = match bet.bet_type {
+        BetType::Back => {
+            if bet.status == BetStatus::Unmatched {
+                bet.stake_amount.clone()
             } else {
-                *val = BigUint::zero();
+                unmatched.clone()
             }
-        });
-        self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
+        },
+        BetType::Lay => {
+            let unmatched_ratio = (&unmatched * &BigUint::from(100u64)) / &bet.stake_amount;
+            let refund = &bet.total_amount * &unmatched_ratio / &BigUint::from(100u64);
+            if bet.status == BetStatus::Unmatched {
+                bet.total_amount.clone()
+            } else {
+                refund
+            }
+        }
+    };
 
-        let sport_index = match bet.sport {
-            Sport::Football => 1u8,
-            Sport::Basketball => 2u8,
-            Sport::CounterStrike => 3u8,
-            Sport::Dota => 4u8,
-            Sport::LeagueOfLegends => 5u8,
-        };
-    
-        self.cancel_bet_event(
-            &caller,
-            bet_id,
-            status_for_event,
-            &refund_amount,
-            &bet.total_matched,
-            &bet.total_amount,
-            &bet.potential_profit,
-            &bet.liability,
-            sport_index,
-            bet.nft_nonce
-        );
-    }
+    let locked_funds = self.locked_funds(&caller).get();
+    require!(locked_funds >= refund_amount, "Insufficient locked funds to refund");
+
+    let status_for_event: u8 = match &bet.status {
+        BetStatus::Unmatched => {
+            self.selection_unmatched_count(bet.event, bet.selection.id)
+                .update(|val| *val -= 1);
+
+            self.send().esdt_local_burn(
+                &token_identifier_wrap,
+                payment_nonce,
+                &BigUint::from(1u64)
+            );
+
+            // Utilizează noua funcție de ștergere
+            self.delete_bet(bet_id);
+            
+            BetStatus::Unmatched as u8 
+        },
+        BetStatus::PartiallyMatched => {
+            self.selection_partially_matched_count(bet.event, bet.selection.id)
+                .update(|val| *val -= 1);
+            self.selection_matched_count(bet.event, bet.selection.id)
+                .update(|val| *val += 1);
+
+            bet.status = BetStatus::Matched;
+
+            let original_stake_amount = bet.stake_amount.clone();
+            bet.stake_amount = bet.total_matched.clone();
+            let matched_liability = if bet.bet_type == BetType::Lay {
+                (&bet.liability * &bet.total_matched) / &original_stake_amount
+            } else {
+                BigUint::zero()
+            };
+            if bet.total_matched > BigUint::zero() {
+                bet.total_amount = match bet.bet_type {
+                    BetType::Back => bet.total_matched.clone(),
+                    BetType::Lay => &bet.total_matched + &matched_liability,
+                };
+            } else {
+                bet.total_amount = BigUint::zero();
+            }
+            bet.liability = matched_liability.clone();
+            bet.potential_profit = self.calculate_total_potential_profit(&bet);
+
+            self.send().direct_esdt(
+                &caller,
+                &token_identifier_wrap,
+                bet.nft_nonce, 
+                &BigUint::from(1u64)
+            );
+
+            self.bet_by_id(bet_id).set(&bet);
+            BetStatus::Matched as u8 
+        },
+        _ => sc_panic!("Invalid bet status for cancellation"),
+    };
+
+    self.locked_funds(&caller).update(|val| {
+        if *val >= refund_amount {
+            *val -= &refund_amount;
+        } else {
+            *val = BigUint::zero();
+        }
+    });
+    self.send().direct(&caller, &bet.payment_token, 0, &refund_amount);
+
+    let sport_index = match bet.sport {
+        Sport::Football => 1u8,
+        Sport::Basketball => 2u8,
+        Sport::CounterStrike => 3u8,
+        Sport::Dota => 4u8,
+        Sport::LeagueOfLegends => 5u8,
+    };
+
+    self.cancel_bet_event(
+        &caller,
+        bet_id,
+        status_for_event,
+        &refund_amount,
+        &bet.total_matched,
+        &bet.total_amount,
+        &bet.potential_profit,
+        &bet.liability,
+        sport_index,
+        bet.nft_nonce
+    );
+}
     //--------------------------------------------------------------------------------------------//
     //-------------------------------- Helper Functions ------------------------------------------//
     //--------------------------------------------------------------------------------------------//
